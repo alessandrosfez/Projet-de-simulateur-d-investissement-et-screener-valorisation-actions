@@ -1,0 +1,219 @@
+"""
+Constantes partagées : univers d'indices/ETF PEA, paniers d'actions par marché,
+taux de fiscalité. Aucune dépendance sur les autres modules du projet.
+"""
+
+TICKERS = {
+    "S&P 500": {"indice": "^GSPC", "etf": "PSP5.PA"},
+    "Euro Stoxx 600": {"indice": "^STOXX", "etf": "ETZ.PA"},
+    # Pas de flux TOPIX gratuit sur Yahoo Finance : le Nikkei 225 sert de proxy pour la source
+    # "indice" (même marché, corrélation historique élevée en JPY ; l'ETF PEA ci-dessous, lui,
+    # réplique bien le TOPIX et sert de source "etf").
+    "Japon (TOPIX)": {"indice": "^N225", "etf": "PTPXE.PA"},
+    "MSCI Emerging Markets": {"indice": "EEM", "etf": "PAEEM.PA"},
+}
+
+ETF_NAMES = {
+    "PSP5.PA": "Amundi PEA S&P 500 UCITS ETF Acc (TER 0.12%)",
+    "ETZ.PA": "BNP Paribas Easy Stoxx Europe 600 UCITS ETF (TER 0.19%)",
+    "PTPXE.PA": "Amundi PEA Japon (TOPIX) UCITS ETF EUR Acc",
+    "PAEEM.PA": "Amundi PEA Emergent (MSCI EM) ESG Transition UCITS ETF",
+}
+
+TICKER_KEYS = list(TICKERS.keys())
+
+# Composition approximative du CAC 40 (tickers Yahoo Finance, suffixe .PA/.AS).
+# Maintenue à la main : la composition officielle change de temps en temps,
+# ajuster ce dict si besoin (ajout/retrait d'une valeur, ticker erroné...).
+CAC40_TICKERS = {
+    "Air Liquide": "AI.PA",
+    "Airbus": "AIR.PA",
+    "ArcelorMittal": "MT.AS",
+    "Axa": "CS.PA",
+    "BNP Paribas": "BNP.PA",
+    "Bouygues": "EN.PA",
+    "Capgemini": "CAP.PA",
+    "Carrefour": "CA.PA",
+    "Crédit Agricole": "ACA.PA",
+    "Danone": "BN.PA",
+    "Dassault Systèmes": "DSY.PA",
+    "Edenred": "EDEN.PA",
+    "Engie": "ENGI.PA",
+    "EssilorLuxottica": "EL.PA",
+    "Eurofins Scientific": "ERF.PA",
+    "Hermès": "RMS.PA",
+    "Kering": "KER.PA",
+    "L'Oréal": "OR.PA",
+    "Legrand": "LR.PA",
+    "LVMH": "MC.PA",
+    "Michelin": "ML.PA",
+    "Orange": "ORA.PA",
+    "Pernod Ricard": "RI.PA",
+    "Publicis": "PUB.PA",
+    "Renault": "RNO.PA",
+    "Safran": "SAF.PA",
+    "Saint-Gobain": "SGO.PA",
+    "Sanofi": "SAN.PA",
+    "Schneider Electric": "SU.PA",
+    "Société Générale": "GLE.PA",
+    "Stellantis": "STLAP.PA",
+    "STMicroelectronics": "STMPA.PA",
+    "Teleperformance": "TEP.PA",
+    "Thales": "HO.PA",
+    "TotalEnergies": "TTE.PA",
+    "Unibail-Rodamco-Westfield": "URW.PA",
+    "Veolia": "VIE.PA",
+    "Vinci": "DG.PA",
+    "Vivendi": "VIV.PA",
+    "Worldline": "WLN.PA",
+}
+
+# Sélection de grandes capitalisations allemandes (DAX 40, tickers Xetra ".DE").
+DAX40_TICKERS = {
+    "Adidas": "ADS.DE",
+    "Airbus (Francfort)": "AIR.DE",
+    "Allianz": "ALV.DE",
+    "BASF": "BAS.DE",
+    "Bayer": "BAYN.DE",
+    "Beiersdorf": "BEI.DE",
+    "BMW": "BMW.DE",
+    "Brenntag": "BNR.DE",
+    "Commerzbank": "CBK.DE",
+    "Continental": "CON.DE",
+    "Covestro": "1COV.DE",
+    "Daimler Truck": "DTG.DE",
+    "Deutsche Bank": "DBK.DE",
+    "Deutsche Börse": "DB1.DE",
+    "DHL Group": "DHL.DE",
+    "Deutsche Telekom": "DTE.DE",
+    "E.ON": "EOAN.DE",
+    "Fresenius": "FRE.DE",
+    "Fresenius Medical Care": "FME.DE",
+    "Hannover Rück": "HNR1.DE",
+    "Heidelberg Materials": "HEI.DE",
+    "Henkel": "HEN3.DE",
+    "Infineon": "IFX.DE",
+    "Mercedes-Benz Group": "MBG.DE",
+    "Merck KGaA": "MRK.DE",
+    "MTU Aero Engines": "MTX.DE",
+    "Munich Re": "MUV2.DE",
+    "Porsche AG": "P911.DE",
+    "Porsche SE": "PAH3.DE",
+    "Qiagen": "QIA.DE",
+    "Rheinmetall": "RHM.DE",
+    "RWE": "RWE.DE",
+    "SAP": "SAP.DE",
+    "Sartorius": "SRT3.DE",
+    "Siemens": "SIE.DE",
+    "Siemens Energy": "ENR.DE",
+    "Siemens Healthineers": "SHL.DE",
+    "Symrise": "SY1.DE",
+    "Volkswagen": "VOW3.DE",
+    "Vonovia": "VNA.DE",
+}
+
+# Sélection de grandes capitalisations britanniques (proche du FTSE 100, tickers Londres ".L").
+FTSE100_TICKERS = {
+    "AstraZeneca": "AZN.L",
+    "Shell": "SHEL.L",
+    "HSBC Holdings": "HSBA.L",
+    "Unilever": "ULVR.L",
+    "BP": "BP.L",
+    "Rio Tinto": "RIO.L",
+    "Diageo": "DGE.L",
+    "GSK": "GSK.L",
+    "British American Tobacco": "BATS.L",
+    "Glencore": "GLEN.L",
+    "RELX": "REL.L",
+    "National Grid": "NG.L",
+    "Lloyds Banking Group": "LLOY.L",
+    "BAE Systems": "BA.L",
+    "Barclays": "BARC.L",
+    "Compass Group": "CPG.L",
+    "Rolls-Royce Holdings": "RR.L",
+    "Reckitt Benckiser": "RKT.L",
+    "Vodafone Group": "VOD.L",
+    "Prudential": "PRU.L",
+    "Anglo American": "AAL.L",
+    "Tesco": "TSCO.L",
+    "Aviva": "AV.L",
+    "Legal & General": "LGEN.L",
+    "Standard Chartered": "STAN.L",
+    "Next": "NXT.L",
+    "Sage Group": "SGE.L",
+    "Whitbread": "WTB.L",
+    "Persimmon": "PSN.L",
+    "Rentokil Initial": "RTO.L",
+    "InterContinental Hotels": "IHG.L",
+    "3i Group": "III.L",
+    "Antofagasta": "ANTO.L",
+    "Croda International": "CRDA.L",
+    "Imperial Brands": "IMB.L",
+    "Melrose Industries": "MRO.L",
+    "Pearson": "PSON.L",
+    "SSE": "SSE.L",
+    "Segro": "SGRO.L",
+    "Smith & Nephew": "SN.L",
+}
+
+# Sélection de grandes capitalisations américaines (pas le S&P 500 complet — 500
+# tickers rendraient le chargement beaucoup trop long — mais un échantillon large
+# et diversifié par secteur).
+US_TICKERS = {
+    "Apple": "AAPL",
+    "Microsoft": "MSFT",
+    "Alphabet (Google)": "GOOGL",
+    "Amazon": "AMZN",
+    "NVIDIA": "NVDA",
+    "Meta Platforms": "META",
+    "Tesla": "TSLA",
+    "Berkshire Hathaway": "BRK-B",
+    "JPMorgan Chase": "JPM",
+    "Visa": "V",
+    "Johnson & Johnson": "JNJ",
+    "Walmart": "WMT",
+    "Mastercard": "MA",
+    "Procter & Gamble": "PG",
+    "Exxon Mobil": "XOM",
+    "UnitedHealth Group": "UNH",
+    "Home Depot": "HD",
+    "Chevron": "CVX",
+    "Merck & Co": "MRK",
+    "Eli Lilly": "LLY",
+    "AbbVie": "ABBV",
+    "Coca-Cola": "KO",
+    "PepsiCo": "PEP",
+    "Costco": "COST",
+    "Bank of America": "BAC",
+    "McDonald's": "MCD",
+    "Adobe": "ADBE",
+    "Netflix": "NFLX",
+    "Broadcom": "AVGO",
+    "Salesforce": "CRM",
+    "Walt Disney": "DIS",
+    "Nike": "NKE",
+    "Intel": "INTC",
+    "Cisco Systems": "CSCO",
+    "Verizon": "VZ",
+    "AT&T": "T",
+    "Pfizer": "PFE",
+    "Comcast": "CMCSA",
+    "Oracle": "ORCL",
+    "IBM": "IBM",
+}
+
+UNIVERSE_CODES = ["cac40", "dax40", "ftse100", "us"]
+UNIVERSE_TICKERS = {
+    "cac40": CAC40_TICKERS,
+    "dax40": DAX40_TICKERS,
+    "ftse100": FTSE100_TICKERS,
+    "us": US_TICKERS,
+}
+
+N_PORTFOLIOS_MAX = 4
+
+# Fiscalité française. PEA : prélèvements sociaux uniquement après 5 ans. CTO (flat) : PFU
+# (12,8 % impôt + 17,2 % prélèvements sociaux) ; le barème progressif ajoute la TMI de
+# l'utilisateur aux 17,2 % de prélèvements sociaux (voir layout.compute_cto_tax_rate).
+PEA_TAX_RATE = 0.172
+CTO_FLAT_TAX_RATE = 0.30
