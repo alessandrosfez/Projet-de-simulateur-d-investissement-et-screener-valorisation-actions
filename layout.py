@@ -19,6 +19,22 @@ GRAPH_CONFIG = {
     ],
 }
 
+TABLE_BASE_CELL_STYLE = {"fontSize": "0.8rem", "textAlign": "left"}
+
+
+def table_style_overrides(dark: bool):
+    """(style_header, style_cell, style_data) pour un dash_table.DataTable.
+    dash_table applique ses propres couleurs par défaut (JS injecté à l'exécution,
+    non couvert par le thème Bootstrap) : passer explicitement ces props est le
+    seul moyen fiable de le rendre lisible en mode sombre."""
+    if not dark:
+        return {}, TABLE_BASE_CELL_STYLE, {}
+    return (
+        {"backgroundColor": "#2b2b2b", "color": "#e9ecef", "border": "1px solid #444"},
+        {**TABLE_BASE_CELL_STYLE, "backgroundColor": "#1e1e1e", "color": "#e9ecef", "border": "1px solid #444"},
+        {"backgroundColor": "#1e1e1e", "color": "#e9ecef"},
+    )
+
 CONFIG_FIELDS = [
     ("source_radio", "source-radio", "value"),
     ("lookback_years", "lookback-slider", "value"),

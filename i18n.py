@@ -27,6 +27,7 @@ TRANSLATIONS = {
                         "des prédictions : chaque graphique montre une bande de scénarios possibles, pas "
                         "un chiffre garanti.",
         "lang_label": "Langue",
+        "dark_mode_label": "Mode sombre",
         "palette_label": "Palette de couleurs",
         "tab_par_indice": "Par indice",
         "tab_portefeuille": "Portefeuille pondéré",
@@ -257,6 +258,7 @@ TRANSLATIONS = {
                         "British and American stocks. Projections are not predictions: every chart shows "
                         "a band of possible scenarios, not a guaranteed figure.",
         "lang_label": "Language",
+        "dark_mode_label": "Dark mode",
         "palette_label": "Color palette",
         "tab_par_indice": "By index",
         "tab_portefeuille": "Weighted portfolio",

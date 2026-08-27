@@ -118,11 +118,12 @@ def reroll_seed(n_clicks):
     Output("palette-dropdown", "options"),
     Output("palette-label", "children"),
     Output("lang-label", "children"),
+    Output("dark-mode-switch", "label"),
     Input("lang-radio", "value"),
 )
 def update_controls_language(lang):
     palette_options = [{"label": PALETTE_NAMES.get(lang, PALETTE_NAMES["fr"])[code], "value": code} for code in PALETTE_CODES]
-    return palette_options, L(lang, "palette_label"), L(lang, "lang_label")
+    return palette_options, L(lang, "palette_label"), L(lang, "lang_label"), L(lang, "dark_mode_label")
 
 
 @app.callback(
@@ -184,6 +185,9 @@ def upload_config(contents):
     Output("tab1-metric-cards", "children"),
     Output("tab1-metrics-table", "data"),
     Output("tab1-metrics-table", "columns"),
+    Output("tab1-metrics-table", "style_header"),
+    Output("tab1-metrics-table", "style_cell"),
+    Output("tab1-metrics-table", "style_data"),
     Output("tab1-csv-store", "data"),
     Output("tab1-warning", "children"),
     Output("tab1-envelope-compare-container", "style"),
@@ -219,6 +223,7 @@ def upload_config(contents):
     Input("seed-input", "value"),
     Input("lang-radio", "value"),
     Input("palette-dropdown", "value"),
+    Input("dark-mode-switch", "value"),
     Input("objective-checkbox", "value"),
     Input("objective-amount-input", "value"),
     Input("objective-percentile-radio", "value"),
@@ -228,13 +233,17 @@ def update_tab1(indices, source, lookback_years, horizon_years, decum_val, decum
                  withdrawal_monthly, method, block_size, crisis_val, shock_pct, shock_duration,
                  shock_timing, shock_year, apport_constant, apport_initial, apport_final,
                  annual_fee_pct, inflation_pct, display_mode, tax_val, envelope, cto_method, cto_tmi,
-                 compare_val, band_width, n_sims, seed, lang, palette_code,
+                 compare_val, band_width, n_sims, seed, lang, palette_code, dark_mode,
                  objective_val, objective_amount, objective_percentile, *mu_overrides):
     lang = lang or "fr"
     palette = PALETTES.get(palette_code, PALETTE)
+    dark = bool(dark_mode)
+    style_header, style_cell, style_data = layout.table_style_overrides(dark)
     empty_fig = go.Figure()
+    empty_fig.update_layout(template="plotly_dark" if dark else "plotly")
     if not indices:
-        return empty_fig, empty_fig, [], [], [], "", dbc.Alert(L(lang, "tab1_warning_select_index"), color="warning"), {"display": "none"}, empty_fig, ""
+        return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, "",
+                dbc.Alert(L(lang, "tab1_warning_select_index"), color="warning"), {"display": "none"}, empty_fig, "")
 
     enable_decumulation = bool(decum_val and "on" in decum_val)
     inject_crisis = bool(crisis_val and "on" in crisis_val)
@@ -272,11 +281,12 @@ def update_tab1(indices, source, lookback_years, horizon_years, decum_val, decum
 
     if not items:
         msg = " ".join(warnings) or L(lang, "tab1_no_data")
-        return empty_fig, empty_fig, [], [], [], "", dbc.Alert(msg, color="danger"), {"display": "none"}, empty_fig, ""
+        return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, "",
+                dbc.Alert(msg, color="danger"), {"display": "none"}, empty_fig, "")
 
     all_metrics, figs, series_by_strategy = compute_results(
         items, years_axis, schedules, annual_fee_pct, apply_tax, tax_rate, inflation_pct, display_real,
-        lower_pct, upper_pct, enable_decumulation, phase_boundary_years, lang=lang, palette=palette,
+        lower_pct, upper_pct, enable_decumulation, phase_boundary_years, lang=lang, palette=palette, dark=dark,
     )
     cards = build_metric_cards(all_metrics, series_by_strategy, apply_tax, tax_rate, lang=lang)
     table_data, table_columns, csv_data = build_metrics_outputs(all_metrics, lang, lower_pct, upper_pct)
@@ -292,14 +302,14 @@ def update_tab1(indices, source, lookback_years, horizon_years, decum_val, decum
         cto_rate_for_compare = layout.compute_cto_tax_rate(cto_method, cto_tmi)
         compare_fig = build_envelope_comparison_figure(
             items, schedules, annual_fee_pct, inflation_pct, display_real, years_axis, cto_rate_for_compare,
-            lang=lang, palette=palette,
+            lang=lang, palette=palette, dark=dark,
         )
         compare_style = {"display": "block"}
 
     return (
         figs.get("constant", empty_fig),
         figs.get("progressive", empty_fig),
-        cards, table_data, table_columns, csv_data, warning_alert,
+        cards, table_data, table_columns, style_header, style_cell, style_data, csv_data, warning_alert,
         compare_style, compare_fig, objective_result,
     )
 
@@ -332,10 +342,12 @@ def download_tab1(n_clicks, csv_data):
     Input("lookback-slider", "value"),
     Input("lang-radio", "value"),
     Input("shrinkage-slider", "value"),
+    Input("dark-mode-switch", "value"),
     *[Input(f"mu-override-t{i}", "value") for i in range(len(TICKER_KEYS))],
 )
-def update_correlation_and_suggestions(source, lookback_years, lang, shrinkage_pct, *mu_overrides):
+def update_correlation_and_suggestions(source, lookback_years, lang, shrinkage_pct, dark_mode, *mu_overrides):
     lang = lang or "fr"
+    dark = bool(dark_mode)
     universe = list(TICKERS.keys())
     source_key = "etf" if source == "etf" else "indice"
     try:
@@ -347,7 +359,7 @@ def update_correlation_and_suggestions(source, lookback_years, lang, shrinkage_p
         return go.Figure(), {}, {}, {}, "", "", ""
 
     shrinkage = (shrinkage_pct if shrinkage_pct is not None else 50) / 100
-    heatmap = make_correlation_heatmap(aligned.corr(), lang=lang)
+    heatmap = make_correlation_heatmap(aligned.corr(), lang=lang, dark=dark)
     sharpe_w, vol_w, rp_w = suggest_optimal_weights(
         aligned, step_pct=5, shrinkage=shrinkage, mu_override_pct=list(mu_overrides),
     )
@@ -427,6 +439,9 @@ _tab2_name_inputs = [Input(f"name-p{p}", "value") for p in range(N_PORTFOLIOS_MA
     Output("tab2-metric-cards", "children"),
     Output("tab2-metrics-table", "data"),
     Output("tab2-metrics-table", "columns"),
+    Output("tab2-metrics-table", "style_header"),
+    Output("tab2-metrics-table", "style_cell"),
+    Output("tab2-metrics-table", "style_data"),
     Output("tab2-csv-store", "data"),
     Output("tab2-warning", "children"),
     Output("tab2-envelope-compare-container", "style"),
@@ -464,6 +479,7 @@ _tab2_name_inputs = [Input(f"name-p{p}", "value") for p in range(N_PORTFOLIOS_MA
     Input("seed-input", "value"),
     Input("lang-radio", "value"),
     Input("palette-dropdown", "value"),
+    Input("dark-mode-switch", "value"),
     Input("objective-checkbox", "value"),
     Input("objective-amount-input", "value"),
     Input("objective-percentile-radio", "value"),
@@ -479,17 +495,22 @@ def update_tab2(n_portfolios, *args):
     rest = rest[:-len(TICKER_KEYS)]
     objective_val, objective_amount, objective_percentile = rest[-3:]
     rest = rest[:-3]
+    dark_mode = rest[-1]
+    rest = rest[:-1]
     (source, lookback_years, horizon_years, decum_val, decumulation_years, withdrawal_monthly,
      method, block_size, crisis_val, shock_pct, shock_duration, shock_timing, shock_year,
      apport_constant, apport_initial, apport_final, annual_fee_pct, inflation_pct, display_mode,
      tax_val, envelope, cto_method, cto_tmi, compare_val, band_width, n_sims, seed, lang, palette_code) = rest
     lang = lang or "fr"
     palette = PALETTES.get(palette_code, PALETTE)
+    dark = bool(dark_mode)
+    style_header, style_cell, style_data = layout.table_style_overrides(dark)
 
     k = len(TICKER_KEYS)
     weights_raw = [flat_weights[p * k:(p + 1) * k] for p in range(N_PORTFOLIOS_MAX)]
 
     empty_fig = go.Figure()
+    empty_fig.update_layout(template="plotly_dark" if dark else "plotly")
     n_portfolios = int(n_portfolios or 1)
 
     universe = list(TICKERS.keys())
@@ -503,7 +524,7 @@ def update_tab2(n_portfolios, *args):
         portfolios.append((names[i] or L(lang, "portfolio_default_name", n=i + 1), normalized))
 
     if not portfolios:
-        return (empty_fig, empty_fig, [], [], [], "",
+        return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, "",
                 dbc.Alert(L(lang, "portfolio_warning_zero"), color="warning"),
                 {"display": "none"}, empty_fig, "")
 
@@ -511,9 +532,11 @@ def update_tab2(n_portfolios, *args):
     try:
         aligned = get_aligned_returns(universe, lookback_years, source_key)
     except ValueError as exc:
-        return empty_fig, empty_fig, [], [], [], "", dbc.Alert(str(exc), color="danger"), {"display": "none"}, empty_fig, ""
+        return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, "",
+                dbc.Alert(str(exc), color="danger"), {"display": "none"}, empty_fig, "")
     if aligned.empty:
-        return empty_fig, empty_fig, [], [], [], "", dbc.Alert(L(lang, "no_aligned_data"), color="danger"), {"display": "none"}, empty_fig, ""
+        return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, "",
+                dbc.Alert(L(lang, "no_aligned_data"), color="danger"), {"display": "none"}, empty_fig, "")
 
     enable_decumulation = bool(decum_val and "on" in decum_val)
     inject_crisis = bool(crisis_val and "on" in crisis_val)
@@ -547,7 +570,7 @@ def update_tab2(n_portfolios, *args):
 
     all_metrics, figs, series_by_strategy = compute_results(
         items, years_axis, schedules, annual_fee_pct, apply_tax, tax_rate, inflation_pct, display_real,
-        lower_pct, upper_pct, enable_decumulation, phase_boundary_years, lang=lang, palette=palette,
+        lower_pct, upper_pct, enable_decumulation, phase_boundary_years, lang=lang, palette=palette, dark=dark,
     )
     cards = build_metric_cards(all_metrics, series_by_strategy, apply_tax, tax_rate, lang=lang)
     table_data, table_columns, csv_data = build_metrics_outputs(all_metrics, lang, lower_pct, upper_pct)
@@ -562,14 +585,14 @@ def update_tab2(n_portfolios, *args):
         cto_rate_for_compare = layout.compute_cto_tax_rate(cto_method, cto_tmi)
         compare_fig = build_envelope_comparison_figure(
             items, schedules, annual_fee_pct, inflation_pct, display_real, years_axis, cto_rate_for_compare,
-            lang=lang, palette=palette,
+            lang=lang, palette=palette, dark=dark,
         )
         compare_style = {"display": "block"}
 
     return (
         figs.get("constant", empty_fig),
         figs.get("progressive", empty_fig),
-        cards, table_data, table_columns, csv_data, "",
+        cards, table_data, table_columns, style_header, style_cell, style_data, csv_data, "",
         compare_style, compare_fig, objective_result,
     )
 
@@ -661,18 +684,24 @@ def update_sector_filter_options(rows, lang):
     Output("stocks-pe-chart", "figure"),
     Output("stocks-table", "data"),
     Output("stocks-table", "columns"),
+    Output("stocks-table", "style_header"),
+    Output("stocks-table", "style_cell"),
+    Output("stocks-table", "style_data"),
     Output("stocks-csv-store", "data"),
     Input("stocks-raw-store", "data"),
     Input("sector-filter", "value"),
     Input("lang-radio", "value"),
     Input("palette-dropdown", "value"),
+    Input("dark-mode-switch", "value"),
 )
-def render_stock_views(rows, sector_value, lang, palette_code):
+def render_stock_views(rows, sector_value, lang, palette_code, dark_mode):
     lang = lang or "fr"
     palette = PALETTES.get(palette_code, PALETTE)
+    dark = bool(dark_mode)
+    style_header, style_cell, style_data = layout.table_style_overrides(dark)
     if not rows:
-        placeholder = empty_figure_with_message(L(lang, "load_hint_placeholder"))
-        return placeholder, placeholder, "", placeholder, [], [], ""
+        placeholder = empty_figure_with_message(L(lang, "load_hint_placeholder"), dark=dark)
+        return placeholder, placeholder, "", placeholder, [], [], style_header, style_cell, style_data, ""
 
     # Noms de colonnes internes gardés stables (français) : ce sont des clés de travail, pas du
     # texte affiché — seul le libellé de colonne du tableau final ("name") est traduit plus bas.
@@ -696,6 +725,7 @@ def render_stock_views(rows, sector_value, lang, palette_code):
             x=sector_means.index, y=sector_means.values, marker_color=palette[1 % len(palette)],
         ))
         sector_bar.update_layout(
+            template="plotly_dark" if dark else "plotly",
             title=L(lang, "sector_avg_pe_title"), xaxis_title="", yaxis_title=L(lang, "axis_pe_avg"),
             margin=dict(t=60, b=100), xaxis=dict(tickangle=-45),
         )
@@ -703,6 +733,7 @@ def render_stock_views(rows, sector_value, lang, palette_code):
             values = priced_all.loc[priced_all["Secteur"] == sector, "P/E (trailing)"]
             sector_box.add_trace(go.Box(y=values, name=sector, marker_color=palette[i % len(palette)]))
         sector_box.update_layout(
+            template="plotly_dark" if dark else "plotly",
             title=L(lang, "sector_dist_pe_title"), showlegend=False, yaxis_title="P/E",
             margin=dict(t=60, b=100), xaxis=dict(tickangle=-45),
         )
@@ -766,6 +797,7 @@ def render_stock_views(rows, sector_value, lang, palette_code):
             annotation_text=L(lang, "basket_avg_annotation"), annotation_position="top left",
         )
     fig.update_layout(
+        template="plotly_dark" if dark else "plotly",
         title=L(lang, "pe_by_stock_chart_title"),
         xaxis_title="", yaxis_title="P/E",
         margin=dict(t=60, b=120), xaxis=dict(tickangle=-60),
@@ -794,7 +826,8 @@ def render_stock_views(rows, sector_value, lang, palette_code):
     # NaN -> None : sinon un JSON NaN (invalide) part vers le DataTable et s'affiche mal.
     table_df = table_df.astype(object).where(pd.notnull(table_df), None)
 
-    return sector_bar, sector_box, cards_row, fig, table_df.to_dict("records"), columns, csv_data
+    return (sector_bar, sector_box, cards_row, fig, table_df.to_dict("records"), columns,
+            style_header, style_cell, style_data, csv_data)
 
 
 @app.callback(
@@ -803,20 +836,22 @@ def render_stock_views(rows, sector_value, lang, palette_code):
     Input("stocks-table", "derived_virtual_selected_rows"),
     Input("lang-radio", "value"),
     Input("palette-dropdown", "value"),
+    Input("dark-mode-switch", "value"),
     State("stocks-table", "derived_virtual_data"),
 )
-def update_pe_history_chart(selected_rows, lang, palette_code, virtual_data):
+def update_pe_history_chart(selected_rows, lang, palette_code, dark_mode, virtual_data):
     lang = lang or "fr"
     palette = PALETTES.get(palette_code, PALETTE)
+    dark = bool(dark_mode)
     if not selected_rows or not virtual_data:
-        return empty_figure_with_message(L(lang, "history_hint_default")), ""
+        return empty_figure_with_message(L(lang, "history_hint_default"), dark=dark), ""
 
     row = virtual_data[selected_rows[0]]
     ticker, name = row["Ticker"], row["Entreprise"]
     pe_series = get_stock_pe_history(ticker)
     if pe_series.empty:
         return (
-            empty_figure_with_message(L(lang, "history_unavailable", name=name)),
+            empty_figure_with_message(L(lang, "history_unavailable", name=name), dark=dark),
             L(lang, "history_unavailable_full", name=name),
         )
 
@@ -836,6 +871,7 @@ def update_pe_history_chart(selected_rows, lang, palette_code, virtual_data):
             annotation_text=L(lang, "history_current_annotation"), annotation_position="bottom left",
         )
     fig.update_layout(
+        template="plotly_dark" if dark else "plotly",
         title=L(lang, "history_chart_title", name=name),
         xaxis_title="", yaxis_title="P/E", margin=dict(t=60),
     )

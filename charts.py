@@ -14,11 +14,12 @@ def hex_to_rgba(hex_color: str, alpha: float) -> str:
     return f"rgba({r},{g},{b},{alpha})"
 
 
-def empty_figure_with_message(message: str) -> go.Figure:
+def empty_figure_with_message(message: str, dark: bool = False) -> go.Figure:
     """Graphique vide avec un message centré, pour un état 'pas encore de données' propre
     plutôt qu'une grille vide qui ressemble à une erreur."""
     fig = go.Figure()
     fig.update_layout(
+        template="plotly_dark" if dark else "plotly",
         xaxis=dict(visible=False), yaxis=dict(visible=False),
         annotations=[dict(
             text=message, xref="paper", yref="paper", x=0.5, y=0.5,
@@ -29,19 +30,22 @@ def empty_figure_with_message(message: str) -> go.Figure:
     return fig
 
 
-def make_correlation_heatmap(corr: pd.DataFrame, lang="fr"):
+def make_correlation_heatmap(corr: pd.DataFrame, lang="fr", dark: bool = False):
     z = corr.values
     fig = go.Figure(data=go.Heatmap(
         z=z, x=list(corr.columns), y=list(corr.columns),
         colorscale="RdBu", zmid=0, zmin=-1, zmax=1,
         text=np.round(z, 2), texttemplate="%{text}",
     ))
-    fig.update_layout(title=L(lang, "corr_chart_title"), margin=dict(t=40, l=10, r=10))
+    fig.update_layout(
+        template="plotly_dark" if dark else "plotly",
+        title=L(lang, "corr_chart_title"), margin=dict(t=40, l=10, r=10),
+    )
     return fig
 
 
 def make_band_figure(series, years_axis, title, lang="fr", palette=None, invested_capital=None,
-                      phase_boundary_years=None):
+                      phase_boundary_years=None, dark: bool = False):
     """series: liste de (label, median, p_low, p_high)."""
     palette = palette or PALETTE
     fig = go.Figure()
@@ -62,6 +66,7 @@ def make_band_figure(series, years_axis, title, lang="fr", palette=None, investe
         fig.add_vline(x=phase_boundary_years, line_dash="dot", line_color="gray",
                       annotation_text=L(lang, "withdrawal_start_annotation"), annotation_position="top")
     fig.update_layout(
+        template="plotly_dark" if dark else "plotly",
         title=dict(text=title, font=dict(size=14)),
         xaxis_title=L(lang, "years_axis"),
         yaxis_title=L(lang, "value_axis"),

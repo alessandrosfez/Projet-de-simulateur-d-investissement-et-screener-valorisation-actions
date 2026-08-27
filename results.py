@@ -38,7 +38,7 @@ def build_schedules(horizon_years, enable_decumulation, decumulation_years, with
 
 def compute_results(items, years_axis, schedules, annual_fee_pct, apply_tax, tax_rate, inflation_pct,
                      display_real, lower_pct, upper_pct, enable_decumulation, phase_boundary_years,
-                     lang="fr", palette=None):
+                     lang="fr", palette=None, dark=False):
     """items: liste de (label, monthly_returns (n_sims, n_months)). all_metrics est indexé par le
     tuple (label, strat_name) — strat_name est une clé stable ("constant"/"progressive"), traduite
     uniquement à l'affichage."""
@@ -73,6 +73,7 @@ def compute_results(items, years_axis, schedules, annual_fee_pct, apply_tax, tax
             lang=lang, palette=palette,
             invested_capital=invested_by_strategy.get(strat_name),
             phase_boundary_years=phase_boundary_years,
+            dark=dark,
         )
     return all_metrics, figs, series_by_strategy
 
@@ -102,7 +103,7 @@ def build_metric_cards(all_metrics, series_by_strategy, apply_tax, tax_rate, lan
 
 
 def build_envelope_comparison_figure(items, schedules, annual_fee_pct, inflation_pct, display_real,
-                                      years_axis, cto_tax_rate, lang="fr", palette=None):
+                                      years_axis, cto_tax_rate, lang="fr", palette=None, dark=False):
     """Compare, pour chaque item/stratégie déjà simulé, la valeur finale médiane nette sous PEA
     (17,2 %) et sous CTO (taux fourni, flat tax ou barème + prélèvements sociaux). Réutilise les
     rendements déjà simulés : pas de nouvelle simulation Monte Carlo, juste deux fiscalités appliquées
@@ -125,6 +126,7 @@ def build_envelope_comparison_figure(items, schedules, annual_fee_pct, inflation
     fig.add_trace(go.Bar(name=L(lang, "pea_trace_label", rate=PEA_TAX_RATE * 100), x=labels, y=pea_values, marker_color=palette[0]))
     fig.add_trace(go.Bar(name=L(lang, "cto_trace_label", rate=cto_tax_rate * 100), x=labels, y=cto_values, marker_color=palette[1 % len(palette)]))
     fig.update_layout(
+        template="plotly_dark" if dark else "plotly",
         title=L(lang, "envelope_compare_title"),
         barmode="group", xaxis_title="", yaxis_title=L(lang, "value_axis"),
         margin=dict(t=60, b=120), xaxis=dict(tickangle=-30),
