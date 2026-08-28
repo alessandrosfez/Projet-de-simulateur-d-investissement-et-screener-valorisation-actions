@@ -1,11 +1,15 @@
-# Projection PEA : simulation Monte Carlo (Dash)
+# Outils PEA & Compte-Titres : Projection & Valorisation (Dash)
 
-Application web interactive (Plotly Dash) pour projeter l'évolution future d'un
-portefeuille PEA/CTO par simulation Monte Carlo, calibrée sur l'historique
-d'indices ou d'ETF réellement disponibles en PEA.
+Application web interactive (Plotly Dash) articulée autour de deux volets :
+la **projection** de l'évolution future d'un portefeuille PEA/CTO par
+simulation Monte Carlo (calibrée sur l'historique d'indices ou d'ETF
+réellement disponibles en PEA), et la **valorisation** d'actions
+individuelles (P/E sectoriel, DCF, comparables) pour éclairer le choix des
+titres qui composent ce portefeuille.
 
-Ce n'est pas un outil de prédiction : chaque graphique montre une bande de
-scénarios possibles (percentiles), pas un chiffre garanti.
+Ce n'est pas un outil de prédiction : chaque graphique de projection montre
+une bande de scénarios possibles (percentiles), pas un chiffre garanti ; et
+chaque estimation de valorisation dépend fortement des hypothèses choisies.
 
 ## Fonctionnalités
 
