@@ -160,7 +160,12 @@ def update_shock_year_bounds(horizon_years, decum_val, decumulation_years, curre
 
 
 def toggle_portfolio_blocks(n_portfolios):
-    n_portfolios = int(n_portfolios or 1)
+    """Le champ "Nombre de portefeuilles" (min=1, max=N_PORTFOLIOS_MAX côté UI) n'empêche pas
+    une valeur hors bornes d'arriver ici (saisie clavier au-delà du max, valeur restaurée d'une
+    config JSON...) : sans ce clamp, une valeur trop grande retombe sur le "or 1" ci-dessous et
+    masque silencieusement tous les portefeuilles sauf le premier, l'inverse de ce que l'utilisateur
+    demande."""
+    n_portfolios = max(1, min(int(n_portfolios or 1), N_PORTFOLIOS_MAX))
     return [{"display": "block"} if p < n_portfolios else {"display": "none"} for p in range(N_PORTFOLIOS_MAX)]
 
 

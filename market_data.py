@@ -193,30 +193,41 @@ def get_dcf_inputs(ticker: str) -> dict:
     si l'action a déjà été chargée) : aucun appel réseau supplémentaire dans ce cas pour les champs
     autres que le FCF. `fcf`/`shares_outstanding` valent None si Yahoo Finance ne les fournit pas
     du tout pour ce titre (fréquent pour certaines actions non américaines), à l'appelant de gérer
-    ce cas comme "DCF indisponible"."""
+    ce cas comme "DCF indisponible".
+
+    FCF/dette/trésorerie sont remis à l'échelle du prix courant via _price_scale_factor : certaines
+    places (Londres notamment) cotent le prix en pence (GBp) alors que les états financiers (FCF,
+    dette, trésorerie, BPA) sont en livres, voire dans une autre devise de reporting pour les valeurs
+    à double cotation (ex : AstraZeneca, Shell facturent en USD) — sans cette correction, le DCF
+    ressortirait ~100x trop bas par rapport au prix affiché (le facteur est déduit empiriquement du
+    P/E déjà correct fourni par Yahoo, donc fonctionne quelle que soit la devise de reporting)."""
     info = _get_ticker_info(ticker)
+    price = info.get("currentPrice") or info.get("regularMarketPrice")
+    price_scale = _price_scale_factor(info.get("trailingPE"), info.get("trailingEps"), price)
+
     fcf_history = _get_annual_fcf_history(ticker)
     fcf_history_records = []
     if not fcf_history.empty:
         recent = fcf_history.iloc[:DCF_FCF_AVERAGING_YEARS]
-        fcf = float(recent["Free Cash Flow"].mean())
+        fcf = float(recent["Free Cash Flow"].mean()) * price_scale
         for fiscal_year_end, row in recent.iterrows():
             fcf_history_records.append({
                 "year": fiscal_year_end.year,
-                "fcf": float(row["Free Cash Flow"]),
-                "operating_cash_flow": float(row["Operating Cash Flow"])
+                "fcf": float(row["Free Cash Flow"]) * price_scale,
+                "operating_cash_flow": float(row["Operating Cash Flow"]) * price_scale
                     if "Operating Cash Flow" in row and pd.notna(row["Operating Cash Flow"]) else None,
-                "capex": float(row["Capital Expenditure"])
+                "capex": float(row["Capital Expenditure"]) * price_scale
                     if "Capital Expenditure" in row and pd.notna(row["Capital Expenditure"]) else None,
             })
     else:
-        fcf = info.get("freeCashflow")
+        raw_fcf = info.get("freeCashflow")
+        fcf = raw_fcf * price_scale if raw_fcf else raw_fcf
     return {
         "fcf": fcf,
         "fcf_history": fcf_history_records,
-        "total_debt": info.get("totalDebt") or 0,
-        "total_cash": info.get("totalCash") or 0,
+        "total_debt": (info.get("totalDebt") or 0) * price_scale,
+        "total_cash": (info.get("totalCash") or 0) * price_scale,
         "shares_outstanding": info.get("sharesOutstanding"),
-        "price": info.get("currentPrice") or info.get("regularMarketPrice"),
+        "price": price,
         "currency": info.get("currency") or "N/A",
     }
