@@ -159,16 +159,61 @@ def get_stock_valuation(ticker: str) -> dict:
     }
 
 
+DCF_FCF_AVERAGING_YEARS = 3
+
+
+@cached_ttl(3600)
+def _get_annual_fcf_history(ticker: str) -> pd.DataFrame:
+    """FCF annuel et ses deux composantes (flux de trésorerie d'exploitation, capex) quand Yahoo
+    Finance les fournit, un exercice clos par ligne, le plus récent en premier. DataFrame vide si
+    la ligne "Free Cash Flow" n'est pas disponible pour ce titre. Les composantes (colonnes
+    "Operating Cash Flow"/"Capital Expenditure") servent uniquement à l'affichage pédagogique du
+    calcul dans l'UI : c'est bien la seule colonne "Free Cash Flow" qui sert de base au DCF."""
+    try:
+        cf = yf.Ticker(ticker).cashflow
+    except Exception:
+        return pd.DataFrame()
+    if cf is None or cf.empty or "Free Cash Flow" not in cf.index:
+        return pd.DataFrame()
+    rows = [r for r in ["Free Cash Flow", "Operating Cash Flow", "Capital Expenditure"] if r in cf.index]
+    return cf.loc[rows].T.dropna(subset=["Free Cash Flow"])
+
+
 def get_dcf_inputs(ticker: str) -> dict:
-    """Intrants DCF les plus récents pour une action : FCF déjà calculé par Yahoo Finance
-    (freeCashflow, TTM), dette totale, trésorerie, nombre d'actions, prix courant. Réutilise
-    _get_ticker_info (déjà mis en cache par get_stock_valuation si l'action a déjà été chargée) :
-    aucun appel réseau supplémentaire dans ce cas. `fcf`/`shares_outstanding` valent None si
-    Yahoo Finance ne les fournit pas pour ce titre (fréquent pour certaines actions non
-    américaines), à l'appelant de gérer ce cas comme "DCF indisponible"."""
+    """Intrants DCF les plus récents pour une action : FCF, dette totale, trésorerie, nombre
+    d'actions, prix courant. Le FCF est la moyenne des DCF_FCF_AVERAGING_YEARS derniers exercices
+    clos (via le tableau de flux de trésorerie) plutôt que le seul FCF glissant sur 12 mois
+    (freeCashflow) : ça lisse les à-coups de capex ponctuels qui rendraient un DCF basé sur un
+    seul point trompeur (ex : les hyperscalers en pleine construction de data centers IA ont un
+    FCF TTM ponctuellement très déprimé alors que leur FCF "normal" reste élevé). `fcf_history`
+    donne le détail (exercice, FCF, flux d'exploitation, capex) des exercices utilisés dans cette
+    moyenne, pour que l'UI puisse montrer d'où vient le chiffre plutôt que l'afficher tel quel.
+    Repli sur le FCF TTM de Yahoo Finance (et fcf_history vide) si l'historique annuel n'est pas
+    disponible pour ce titre. Réutilise _get_ticker_info (déjà mis en cache par get_stock_valuation
+    si l'action a déjà été chargée) : aucun appel réseau supplémentaire dans ce cas pour les champs
+    autres que le FCF. `fcf`/`shares_outstanding` valent None si Yahoo Finance ne les fournit pas
+    du tout pour ce titre (fréquent pour certaines actions non américaines), à l'appelant de gérer
+    ce cas comme "DCF indisponible"."""
     info = _get_ticker_info(ticker)
+    fcf_history = _get_annual_fcf_history(ticker)
+    fcf_history_records = []
+    if not fcf_history.empty:
+        recent = fcf_history.iloc[:DCF_FCF_AVERAGING_YEARS]
+        fcf = float(recent["Free Cash Flow"].mean())
+        for fiscal_year_end, row in recent.iterrows():
+            fcf_history_records.append({
+                "year": fiscal_year_end.year,
+                "fcf": float(row["Free Cash Flow"]),
+                "operating_cash_flow": float(row["Operating Cash Flow"])
+                    if "Operating Cash Flow" in row and pd.notna(row["Operating Cash Flow"]) else None,
+                "capex": float(row["Capital Expenditure"])
+                    if "Capital Expenditure" in row and pd.notna(row["Capital Expenditure"]) else None,
+            })
+    else:
+        fcf = info.get("freeCashflow")
     return {
-        "fcf": info.get("freeCashflow"),
+        "fcf": fcf,
+        "fcf_history": fcf_history_records,
         "total_debt": info.get("totalDebt") or 0,
         "total_cash": info.get("totalCash") or 0,
         "shares_outstanding": info.get("sharesOutstanding"),

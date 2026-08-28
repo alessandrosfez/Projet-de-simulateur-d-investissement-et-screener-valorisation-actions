@@ -285,10 +285,12 @@ TRANSLATIONS = {
         "col_market_cap": "Capitalisation",
         "dcf_title": "Estimation DCF (flux de trésorerie actualisés)",
         "dcf_intro": "Valorisation intrinsèque de l'action sélectionnée ci-dessus, à partir de son "
-                     "free cash flow actuel (fourni par Yahoo Finance) projeté selon les hypothèses "
-                     "ci-dessous. Comme pour les projections Monte Carlo, ce n'est pas une prédiction : "
-                     "le résultat est très sensible aux hypothèses de croissance et de taux "
-                     "d'actualisation : à ajuster selon ta propre analyse, pas à prendre tel quel.",
+                     "free cash flow récent (moyenne des 3 derniers exercices clos quand "
+                     "disponible, sinon les 12 derniers mois glissants ; données Yahoo Finance) "
+                     "projeté selon les hypothèses ci-dessous. Comme pour les projections Monte "
+                     "Carlo, ce n'est pas une prédiction : le résultat est très sensible aux "
+                     "hypothèses de croissance et de taux d'actualisation : à ajuster selon ta "
+                     "propre analyse, pas à prendre tel quel.",
         "dcf_growth_label": "Croissance du FCF (%/an)",
         "dcf_discount_label": "Taux d'actualisation, WACC (%)",
         "dcf_terminal_growth_label": "Croissance terminale (%)",
@@ -299,11 +301,29 @@ TRANSLATIONS = {
         "dcf_horizon_help": "Nombre d'années sur lesquelles le FCF est projeté explicitement avant de basculer sur la valeur terminale.",
         "dcf_hint_default": "Sélectionne une ligne du tableau ci-dessus pour estimer sa valeur intrinsèque.",
         "dcf_unavailable": "DCF indisponible pour {name} (free cash flow ou nombre d'actions non fournis par Yahoo Finance).",
+        "dcf_negative_fcf": "DCF non pertinent pour {name} : son free cash flow récent (moyenne des derniers exercices disponibles, ou à défaut les 12 derniers mois glissants) est négatif. Projeter puis actualiser un flux négatif donne un résultat trompeur (souvent le signe d'une phase d'investissement importante, pas nécessairement une difficulté) — la valorisation par comparables ci-dessous reste utilisable.",
         "dcf_invalid_assumptions": "La croissance terminale doit être strictement inférieure au taux d'actualisation.",
         "dcf_fair_value_label": "Valeur intrinsèque estimée",
         "dcf_current_price_label": "Prix actuel",
         "dcf_upside_label": "Potentiel",
         "dcf_chart_title": "Valeur intrinsèque (DCF) vs prix actuel : {name}",
+        "comp_fair_value_label": "Valeur implicite (comparables)",
+        "comp_hint": "Prix si l'action se traitait au P/E médian de {n} pairs du secteur \"{sector}\" ({peer_pe:.1f}x) plutôt qu'à son P/E actuel ({own_pe:.1f}x).",
+        "comp_insufficient_peers": "Pas assez de pairs valorisés (P/E positif) dans ce secteur pour calculer une valeur comparables (minimum 3).",
+        "dcf_detail_summary": "Voir le détail du calcul",
+        "dcf_detail_starting_fcf": "FCF de départ = moyenne des exercices ci-dessous : {fcf}",
+        "dcf_detail_starting_fcf_ttm": "FCF de départ (12 derniers mois glissants ; historique annuel indisponible pour ce titre) : {fcf}",
+        "dcf_detail_table_ocf": "Flux d'exploitation",
+        "dcf_detail_table_capex": "Capex",
+        "dcf_detail_table_year": "Année",
+        "dcf_detail_table_fcf": "FCF projeté",
+        "dcf_detail_table_pv": "Valeur actualisée",
+        "dcf_detail_terminal": "Valeur terminale (Gordon-Shapiro) à l'année {n} : {terminal_value} → actualisée à aujourd'hui : {pv_terminal_value}",
+        "dcf_detail_ev": "Valeur d'entreprise = somme des flux actualisés + valeur terminale actualisée = {enterprise_value}",
+        "dcf_detail_net_debt": "Dette nette = dette totale − trésorerie = {net_debt}",
+        "dcf_detail_equity": "Valeur des capitaux propres = valeur d'entreprise − dette nette = {equity_value}",
+        "dcf_detail_per_share": "Valeur intrinsèque par action = capitaux propres ÷ actions en circulation ({shares}) = {fair_value}",
+        "comp_detail_formula": "Valeur implicite = prix actuel × (P/E médian des {n} pairs ÷ P/E actuel) = {price} × ({peer_pe} ÷ {own_pe}) = {comp_fair_value}",
     },
     "en": {
         "app_title": "PEA & Brokerage Account Tools: Projection & Valuation",
@@ -561,11 +581,13 @@ TRANSLATIONS = {
         "col_pe_5y_pct": "Position vs 5-year history (percentile)",
         "col_market_cap": "Market cap",
         "dcf_title": "DCF estimate (discounted cash flow)",
-        "dcf_intro": "Intrinsic valuation of the stock selected above, based on its current free "
-                     "cash flow (provided by Yahoo Finance) projected under the assumptions below. "
-                     "As with the Monte Carlo projections, this is not a prediction: the result is "
-                     "very sensitive to the growth and discount-rate assumptions: adjust them to "
-                     "your own analysis rather than taking the output at face value.",
+        "dcf_intro": "Intrinsic valuation of the stock selected above, based on its recent free "
+                     "cash flow (averaged over the last 3 closed fiscal years when available, "
+                     "otherwise trailing twelve months; Yahoo Finance data) projected under the "
+                     "assumptions below. As with the Monte Carlo projections, this is not a "
+                     "prediction: the result is very sensitive to the growth and discount-rate "
+                     "assumptions: adjust them to your own analysis rather than taking the "
+                     "output at face value.",
         "dcf_growth_label": "FCF growth (%/year)",
         "dcf_discount_label": "Discount rate, WACC (%)",
         "dcf_terminal_growth_label": "Terminal growth (%)",
@@ -576,11 +598,29 @@ TRANSLATIONS = {
         "dcf_horizon_help": "Number of years over which FCF is explicitly projected before switching to the terminal value.",
         "dcf_hint_default": "Select a row in the table above to estimate its intrinsic value.",
         "dcf_unavailable": "DCF unavailable for {name} (free cash flow or share count not provided by Yahoo Finance).",
+        "dcf_negative_fcf": "DCF not meaningful for {name}: its recent free cash flow (averaged over the available fiscal years, or trailing twelve months otherwise) is negative. Projecting and discounting a negative flow gives a misleading result (often a sign of a heavy investment phase, not necessarily distress) — the comparables valuation below still holds.",
         "dcf_invalid_assumptions": "Terminal growth must be strictly lower than the discount rate.",
         "dcf_fair_value_label": "Estimated intrinsic value",
         "dcf_current_price_label": "Current price",
         "dcf_upside_label": "Upside",
         "dcf_chart_title": "Intrinsic value (DCF) vs current price: {name}",
+        "comp_fair_value_label": "Implied value (comparables)",
+        "comp_hint": "Price if the stock traded at the median P/E of {n} peers in the \"{sector}\" sector ({peer_pe:.1f}x) instead of its current P/E ({own_pe:.1f}x).",
+        "comp_insufficient_peers": "Not enough valued peers (positive P/E) in this sector to compute a comparables value (minimum 3).",
+        "dcf_detail_summary": "Show calculation detail",
+        "dcf_detail_starting_fcf": "Starting FCF = average of the fiscal years below: {fcf}",
+        "dcf_detail_starting_fcf_ttm": "Starting FCF (trailing twelve months; annual history unavailable for this stock): {fcf}",
+        "dcf_detail_table_ocf": "Operating cash flow",
+        "dcf_detail_table_capex": "Capex",
+        "dcf_detail_table_year": "Year",
+        "dcf_detail_table_fcf": "Projected FCF",
+        "dcf_detail_table_pv": "Present value",
+        "dcf_detail_terminal": "Terminal value (Gordon-Shapiro) at year {n}: {terminal_value} → discounted to today: {pv_terminal_value}",
+        "dcf_detail_ev": "Enterprise value = sum of discounted flows + discounted terminal value = {enterprise_value}",
+        "dcf_detail_net_debt": "Net debt = total debt − cash = {net_debt}",
+        "dcf_detail_equity": "Equity value = enterprise value − net debt = {equity_value}",
+        "dcf_detail_per_share": "Intrinsic value per share = equity value ÷ shares outstanding ({shares}) = {fair_value}",
+        "comp_detail_formula": "Implied value = current price × (peer median P/E ÷ own P/E) = {price} × ({peer_pe} ÷ {own_pe}) = {comp_fair_value}",
     },
 }
 

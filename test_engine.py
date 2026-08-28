@@ -217,3 +217,19 @@ def test_compute_dcf_fair_value_net_cash_increases_equity_value():
     capitaux propres par rapport à la valeur d'entreprise, pas la diminuer."""
     result = m.compute_dcf_fair_value(100.0, 5.0, 8.0, 2.0, 5, net_debt=-50.0, shares_outstanding=100.0)
     assert result["equity_value"] > result["enterprise_value"]
+
+
+# ---------- Comparables ----------
+
+def test_compute_comparables_fair_value_scales_price_by_multiple_ratio():
+    result = m.compute_comparables_fair_value(price=100.0, own_pe=10.0, peer_median_pe=15.0)
+    assert result == pytest.approx(150.0)
+
+
+def test_compute_comparables_fair_value_none_when_own_pe_missing_or_zero():
+    assert m.compute_comparables_fair_value(price=100.0, own_pe=None, peer_median_pe=15.0) is None
+    assert m.compute_comparables_fair_value(price=100.0, own_pe=0.0, peer_median_pe=15.0) is None
+
+
+def test_compute_comparables_fair_value_none_when_peer_median_missing():
+    assert m.compute_comparables_fair_value(price=100.0, own_pe=10.0, peer_median_pe=None) is None

@@ -320,4 +320,25 @@ def compute_dcf_fair_value(last_fcf: float, growth_rate_pct: float, discount_rat
         "enterprise_value": enterprise_value,
         "equity_value": equity_value,
         "fair_value_per_share": equity_value / shares_outstanding,
+        # Détail intermédiaire (année par année) : exposé pour l'affichage pédagogique du calcul
+        # dans l'UI, pas utilisé par la formule elle-même.
+        "projected_fcf": projected,
+        "pv_flows": pv_flows,
+        "terminal_value": float(terminal_value),
+        "pv_terminal_value": float(pv_terminal_value),
     }
+
+
+# ============================================================
+# Comparables : valorisation relative par les multiples des pairs
+# ============================================================
+
+def compute_comparables_fair_value(price: float, own_pe: float, peer_median_pe: float):
+    """Valeur implicite d'une action si elle se traitait au P/E médian de ses pairs plutôt
+    qu'à son P/E actuel : price * (peer_median_pe / own_pe). Travailler par ratio au prix
+    courant (plutôt que peer_median_pe * BPA) évite d'avoir besoin du BPA en unité correcte
+    (certaines places, Londres notamment, cotent le prix et le BPA dans des unités différentes,
+    cf. market_data._price_scale_factor). Renvoie None si une donnée manque ou est invalide."""
+    if not price or not own_pe or own_pe <= 0 or not peer_median_pe or peer_median_pe <= 0:
+        return None
+    return price * (peer_median_pe / own_pe)
