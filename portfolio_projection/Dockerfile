@@ -12,6 +12,6 @@ EXPOSE 8050
 ENV HOST=0.0.0.0
 
 # Le cache disque (.pea_forecast_cache.pkl, à côté des scripts) évite de retélécharger via yfinance
-# à chaque redémarrage tant que les données ont moins d'1h. Pour le faire persister entre deux
-# lancements du conteneur : docker run -v pea-cache:/app -p 8050:8050 pea-forecast-dash
+# à chaque relancement tant que les données ont moins d'1h. Pour le faire persister entre deux
+# lancements du conteneur : docker run -v pea-projection-cache:/app -p 8050:8050 pea-portfolio-projection
 CMD ["python", "app.py"]

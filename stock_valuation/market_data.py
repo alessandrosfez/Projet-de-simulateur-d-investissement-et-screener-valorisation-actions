@@ -7,13 +7,10 @@ import functools
 import pickle
 import threading
 import time
-from datetime import datetime, timedelta
 from pathlib import Path
 
 import pandas as pd
 import yfinance as yf
-
-from constants import TICKERS
 
 # ============================================================
 # CACHE (mémoire + disque)
@@ -65,27 +62,6 @@ def cached_ttl(ttl_seconds: int):
             return value
         return wrapper
     return decorator
-
-
-# ============================================================
-# CALIBRATION (historique -> rendements mensuels / corrélations)
-# ============================================================
-
-@cached_ttl(3600)
-def get_monthly_returns(ticker: str, lookback_years: int) -> pd.Series:
-    """Rendements mensuels historiques d'un indice, sur les N dernières années."""
-    start = (datetime.today() - timedelta(days=365 * lookback_years)).strftime("%Y-%m-%d")
-    data = yf.download(ticker, start=start, progress=False, auto_adjust=True)
-    if data.empty:
-        raise ValueError(f"Pas de données pour {ticker}")
-    monthly_prices = data["Close"].squeeze().resample("MS").first().dropna()
-    return monthly_prices.pct_change().dropna()
-
-
-def get_aligned_returns(names: list, lookback_years: int, source_key: str) -> pd.DataFrame:
-    """Rendements mensuels alignés (dates communes) pour plusieurs indices."""
-    series = {name: get_monthly_returns(TICKERS[name][source_key], lookback_years) for name in names}
-    return pd.concat(series, axis=1).dropna()
 
 
 @cached_ttl(3600)

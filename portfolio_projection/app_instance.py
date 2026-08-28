@@ -9,4 +9,4 @@ dark-mode-switch), pour permettre le changement de thème sans rechargement.
 from dash import Dash
 
 app = Dash(__name__, suppress_callback_exceptions=True)
-app.title = "Outils PEA & CTO"
+app.title = "Projection PEA & CTO"

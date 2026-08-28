@@ -8,7 +8,7 @@ callbacks Dash. Ce module ne dépend jamais de callbacks.py ni de l'instance
 import dash_bootstrap_components as dbc
 from dash import dash_table, dcc, html
 
-from constants import CTO_FLAT_TAX_RATE, N_PORTFOLIOS_MAX, PEA_TAX_RATE, TICKER_KEYS, TICKERS, ETF_NAMES, UNIVERSE_CODES
+from constants import CTO_FLAT_TAX_RATE, N_PORTFOLIOS_MAX, PEA_TAX_RATE, TICKER_KEYS, TICKERS, ETF_NAMES
 from i18n import L
 
 GRAPH_CONFIG = {
@@ -74,9 +74,7 @@ TAB_STATE_FIELDS = (
     [("indices-checklist", "value"), ("n-portfolios-input", "value")]
     + [(f"name-p{p}", "value") for p in range(N_PORTFOLIOS_MAX)]
     + [(f"weight-p{p}-t{i}", "value") for p in range(N_PORTFOLIOS_MAX) for i in range(len(TICKER_KEYS))]
-    + [("universe-checklist", "value"), ("sector-filter", "value"), ("shrinkage-slider", "value")]
-    + [("dcf-growth-slider", "value"), ("dcf-discount-slider", "value"),
-       ("dcf-terminal-growth-slider", "value"), ("dcf-horizon-slider", "value")]
+    + [("shrinkage-slider", "value")]
 )
 
 
@@ -124,12 +122,6 @@ def update_tax_label(envelope, cto_method, cto_tmi, lang="fr"):
             L(lang, "tax_help_cto_flat"),
         )
     return (L(lang, "tax_label_pea"), L(lang, "tax_help_pea"))
-
-
-def toggle_sidebar(active_tab):
-    if active_tab == "tab-actions":
-        return {"display": "none"}, 0, 12
-    return {"height": "100vh", "overflowY": "auto"}, 3, 9
 
 
 def toggle_decumulation(v):
@@ -548,77 +540,6 @@ def build_tab2(lang, v=None):
     ], className="p-3")
 
 
-# ---------- Onglet 3 : valorisation d'actions individuelles (P/E) ----------
-def build_tab3(lang, v=None):
-    v = v or {}
-    return html.Div([
-        html.P(L(lang, "intro1"), className="text-muted"),
-        html.P(L(lang, "intro2"), className="text-muted", style={"fontSize": "0.85rem"}),
-        html.P(L(lang, "intro3"), className="text-muted", style={"fontSize": "0.85rem"}),
-        html.P(L(lang, "intro4"), className="text-muted", style={"fontSize": "0.85rem"}),
-
-        dbc.Label(L(lang, "markets_label"), className="mb-0"),
-        dcc.Checklist(
-            id="universe-checklist",
-            options=[{"label": f" {L(lang, f'universe_{code}')}", "value": code} for code in UNIVERSE_CODES],
-            value=gv(v, "universe-checklist", ["cac40"]), labelStyle={"display": "block"}, className="mb-2",
-        ),
-        dbc.Button(L(lang, "load_btn"), id="btn-load-stocks", color="primary", className="mb-3"),
-        html.Div(id="stocks-warning"),
-        dcc.Store(id="stocks-raw-store"),
-
-        dcc.Loading(type="circle", children=[
-            html.H5(L(lang, "sector_compare_title")),
-            dbc.Row([
-                dbc.Col(dcc.Graph(id="stocks-sector-bar", config=GRAPH_CONFIG), width=6),
-                dbc.Col(dcc.Graph(id="stocks-sector-box", config=GRAPH_CONFIG), width=6),
-            ]),
-        ]),
-
-        html.Hr(),
-        dbc.Label(L(lang, "sector_filter_label"), className="mb-0"),
-        dcc.Dropdown(
-            id="sector-filter",
-            options=[{"label": L(lang, "sector_all"), "value": "all"}], value=gv(v, "sector-filter", "all"), clearable=False,
-            className="mb-3", style={"maxWidth": "420px"},
-        ),
-
-        dcc.Loading(type="circle", children=[
-            html.Div(id="stocks-top-cards"),
-            html.H5(L(lang, "pe_ratio_by_stock_title"), className="mt-3"),
-            dcc.Graph(id="stocks-pe-chart", config=GRAPH_CONFIG),
-            html.H5(L(lang, "detail_title"), className="mt-3"),
-            html.P(L(lang, "detail_hint"), className="text-muted", style={"fontSize": "0.8rem"}),
-            dash_table.DataTable(
-                id="stocks-table",
-                sort_action="native",
-                row_selectable="single",
-                selected_rows=[],
-                style_table={"overflowX": "auto"},
-                style_cell={"fontSize": "0.8rem", "textAlign": "left"},
-            ),
-            html.H5(L(lang, "history_title"), className="mt-3"),
-            html.Div(id="stocks-pe-history-title", className="text-muted", style={"fontSize": "0.85rem"}),
-            dcc.Graph(id="stocks-pe-history-chart", config=GRAPH_CONFIG),
-
-            html.Hr(),
-            html.H5(L(lang, "dcf_title"), className="mt-3"),
-            html.P(L(lang, "dcf_intro"), className="text-muted", style={"fontSize": "0.85rem"}),
-            dbc.Row([
-                dbc.Col(slider_block(L(lang, "dcf_growth_label"), "dcf-growth-slider", -10, 30, gv(v, "dcf-growth-slider", 5), step=1, tooltip_text=L(lang, "dcf_growth_help")), width=3),
-                dbc.Col(slider_block(L(lang, "dcf_discount_label"), "dcf-discount-slider", 4, 20, gv(v, "dcf-discount-slider", 8), step=0.5, tooltip_text=L(lang, "dcf_discount_help")), width=3),
-                dbc.Col(slider_block(L(lang, "dcf_terminal_growth_label"), "dcf-terminal-growth-slider", 0, 5, gv(v, "dcf-terminal-growth-slider", 2), step=0.25, tooltip_text=L(lang, "dcf_terminal_growth_help")), width=3),
-                dbc.Col(slider_block(L(lang, "dcf_horizon_label"), "dcf-horizon-slider", 3, 10, gv(v, "dcf-horizon-slider", 5), step=1, tooltip_text=L(lang, "dcf_horizon_help")), width=3),
-            ]),
-            html.Div(id="dcf-result", children=L(lang, "dcf_hint_default"), className="text-muted mb-2"),
-            dcc.Graph(id="dcf-chart", config=GRAPH_CONFIG),
-        ]),
-        dbc.Button(L(lang, "download_btn"), id="btn-download-stocks", color="secondary", size="sm", className="mt-2"),
-        dcc.Download(id="download-stocks"),
-        dcc.Store(id="stocks-csv-store"),
-    ], className="p-3")
-
-
 def build_header_text(lang):
     return [
         html.H2(L(lang, "app_title")),
@@ -635,5 +556,4 @@ def build_tabs(lang, v=None, active_tab="tab-par-indice"):
     return dbc.Tabs([
         dbc.Tab(build_tab1(lang, v), label=L(lang, "tab_par_indice"), tab_id="tab-par-indice"),
         dbc.Tab(build_tab2(lang, v), label=L(lang, "tab_portefeuille"), tab_id="tab-portefeuille"),
-        dbc.Tab(build_tab3(lang, v), label=L(lang, "tab_valorisation"), tab_id="tab-actions"),
     ], id="main-tabs", active_tab=active_tab or "tab-par-indice")

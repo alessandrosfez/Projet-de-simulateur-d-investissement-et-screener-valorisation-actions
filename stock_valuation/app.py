@@ -1,6 +1,9 @@
 """
-Projection PEA : simulation Monte Carlo interactive (version Dash)
+Valorisation d'actions : P/E sectoriel, DCF, comparables (version Dash)
 ====================================================================
+Projet autonome (aucune dépendance vers ../portfolio_projection) : quoi
+acheter et à quel prix, pas combien épargner (voir le projet frère pour ça).
+
 Point d'entrée : assemble l'instance Dash (app_instance.py), le layout
 (layout.py) et les callbacks (callbacks.py, importé pour son effet de bord :
 l'enregistrement des callbacks sur `app`).
@@ -44,23 +47,10 @@ app.clientside_callback(
     Input("dark-mode-switch", "value"),
 )
 
-app.clientside_callback(
-    """
-    function(active_tab) {
-        [50, 200, 500].forEach(function(delay) {
-            setTimeout(function(){ window.dispatchEvent(new Event('resize')); }, delay);
-        });
-        return window.dash_clientside.no_update;
-    }
-    """,
-    Output("resize-kick-dummy", "children", allow_duplicate=True),
-    Input("main-tabs", "active_tab"),
-    prevent_initial_call=True,
-)
 
-
-# Construit après l'import de callbacks : build_sidebar()/build_tabs() appellent des helpers
-# (update_tax_label(), toggle_etf_info()...) qui doivent déjà être enregistrés comme callbacks.
+# Construit après l'import de callbacks : build_tab3() appelle des helpers qui doivent déjà
+# être enregistrés comme callbacks. Pas de sidebar (contrairement à portfolio_projection) :
+# un seul outil, tous ses contrôles sont dans le corps de la page ; pleine largeur.
 app.layout = dbc.Container([
     html.Link(id="theme-stylesheet", rel="stylesheet", href=dbc.themes.BOOTSTRAP),
     dbc.Row([
@@ -86,10 +76,7 @@ app.layout = dbc.Container([
             ),
         ], width=3),
     ], className="mt-2 align-items-start"),
-    dbc.Row([
-        dbc.Col(html.Div(layout.build_sidebar("fr", {}), id="sidebar-container"), width=3, id="sidebar-col", className="border-end"),
-        dbc.Col(html.Div(layout.build_tabs("fr", {}), id="tabs-container"), width=9, id="main-col"),
-    ]),
+    html.Div(layout.build_tab3("fr", {}), id="main-content-container"),
     html.Hr(className="mt-4"),
     html.Div(layout.build_footer("fr"), id="footer-container", className="text-center mb-2"),
     dcc.Interval(id="resize-kick", interval=300, n_intervals=0, max_intervals=8),
@@ -101,8 +88,8 @@ if __name__ == "__main__":
     # 127.0.0.1 par défaut : le lien affiché dans le terminal est alors cliquable. En conteneur
     # Docker, la variable HOST=0.0.0.0 (voir Dockerfile) est nécessaire pour rester joignable
     # depuis l'extérieur du conteneur.
-    # threaded=True : sans ça, le serveur de dev traite une requête à la fois. Plusieurs
-    # sections (indices, corrélations, DCF...) déclenchent des téléchargements yfinance non mis
-    # en cache au premier chargement ; sans multi-threading, un clic (ex: "Charger les données")
-    # reste bloqué en attente derrière ces requêtes lentes au lieu d'être traité en parallèle.
-    app.run(debug=True, host=os.environ.get("HOST", "127.0.0.1"), threaded=True)
+    # threaded=True : sans ça, le serveur de dev traite une requête à la fois. Le chargement
+    # d'un panier d'actions déclenche des dizaines de téléchargements yfinance non mis en cache
+    # au premier chargement ; sans multi-threading, ça reste bloqué en attente derrière ces
+    # requêtes lentes au lieu d'être traité en parallèle.
+    app.run(debug=True, host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ.get("PORT", 8051)), threaded=True)
