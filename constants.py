@@ -156,8 +156,8 @@ FTSE100_TICKERS = {
     "Smith & Nephew": "SN.L",
 }
 
-# Sélection de grandes capitalisations américaines (pas le S&P 500 complet — 500
-# tickers rendraient le chargement beaucoup trop long — mais un échantillon large
+# Sélection de grandes capitalisations américaines (pas le S&P 500 complet, 500
+# tickers rendraient le chargement beaucoup trop long, mais un échantillon large
 # et diversifié par secteur).
 US_TICKERS = {
     "Apple": "AAPL",

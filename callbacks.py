@@ -1,6 +1,6 @@
 """
 Enregistrement de tous les callbacks Dash. Importer ce module (voir app.py)
-suffit à les enregistrer sur l'instance `app` partagée (app_instance.py) — les
+suffit à les enregistrer sur l'instance `app` partagée (app_instance.py) : les
 fonctions ci-dessous ne sont pas appelées directement ailleurs, sauf les
 helpers d'affichage conditionnel réutilisés par layout.py lui-même.
 """
@@ -17,18 +17,21 @@ from dash import Input, Output, State, dcc, html
 
 import layout
 from app_instance import app
-from charts import empty_figure_with_message, make_correlation_heatmap
+from charts import empty_figure_with_message, make_correlation_heatmap, make_sequence_risk_figure
 from constants import N_PORTFOLIOS_MAX, TICKER_KEYS, TICKERS, UNIVERSE_TICKERS
-from engine import inject_shock, simulate_index_returns, simulate_portfolio_asset_returns, suggest_optimal_weights
+from engine import (
+    compute_dcf_fair_value, inject_shock, simulate_index_returns, simulate_portfolio_asset_returns,
+    suggest_optimal_weights,
+)
 from i18n import L, PALETTE, PALETTE_CODES, PALETTE_NAMES, PALETTES
-from market_data import get_aligned_returns, get_monthly_returns, get_stock_pe_history, get_stock_valuation
+from market_data import get_aligned_returns, get_dcf_inputs, get_monthly_returns, get_stock_pe_history, get_stock_valuation
 from results import (
     build_envelope_comparison_figure, build_metric_cards, build_metrics_outputs, build_schedules,
-    compute_results, render_objective_result,
+    build_sequence_risk_series, compute_results, render_objective_result,
 )
 
 # ============================================================
-# 6. CALLBACKS — affichage conditionnel
+# 6. CALLBACKS :affichage conditionnel
 # ============================================================
 # Chaque callback délègue à la fonction pure correspondante de layout.py, qui
 # sert aussi à calculer l'état initial des composants au moment du build.
@@ -130,6 +133,7 @@ def update_controls_language(lang):
     Output("header-text-container", "children"),
     Output("sidebar-container", "children"),
     Output("tabs-container", "children"),
+    Output("footer-container", "children"),
     Input("lang-radio", "value"),
     [State(cid, prop) for _, cid, prop in layout.CONFIG_FIELDS],
     [State(cid, prop) for cid, prop in layout.TAB_STATE_FIELDS],
@@ -143,11 +147,14 @@ def rebuild_on_language_change(lang, *state_values):
     tab_values = dict(zip([cid for cid, _ in layout.TAB_STATE_FIELDS], state_values[n_sidebar:n_sidebar + n_tabs]))
     active_tab = state_values[n_sidebar + n_tabs]
     v = {**sidebar_values, **tab_values}
-    return layout.build_header_text(lang), layout.build_sidebar(lang, v), layout.build_tabs(lang, v, active_tab)
+    return (
+        layout.build_header_text(lang), layout.build_sidebar(lang, v), layout.build_tabs(lang, v, active_tab),
+        layout.build_footer(lang),
+    )
 
 
 # ============================================================
-# 7. CALLBACKS — configuration (export / import JSON)
+# 7. CALLBACKS :configuration (export / import JSON)
 # ============================================================
 
 @app.callback(
@@ -176,7 +183,7 @@ def upload_config(contents):
 
 
 # ============================================================
-# 8. CALLBACKS — onglet 1 (par indice)
+# 8. CALLBACKS :onglet 1 (par indice)
 # ============================================================
 
 @app.callback(
@@ -188,10 +195,13 @@ def upload_config(contents):
     Output("tab1-metrics-table", "style_header"),
     Output("tab1-metrics-table", "style_cell"),
     Output("tab1-metrics-table", "style_data"),
+    Output("tab1-metrics-table", "tooltip_header"),
     Output("tab1-csv-store", "data"),
     Output("tab1-warning", "children"),
     Output("tab1-envelope-compare-container", "style"),
     Output("tab1-envelope-compare-chart", "figure"),
+    Output("tab1-sequence-risk-container", "style"),
+    Output("tab1-sequence-risk-chart", "figure"),
     Output("tab1-objective-result", "children"),
     Input("indices-checklist", "value"),
     Input("source-radio", "value"),
@@ -242,8 +252,9 @@ def update_tab1(indices, source, lookback_years, horizon_years, decum_val, decum
     empty_fig = go.Figure()
     empty_fig.update_layout(template="plotly_dark" if dark else "plotly")
     if not indices:
-        return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, "",
-                dbc.Alert(L(lang, "tab1_warning_select_index"), color="warning"), {"display": "none"}, empty_fig, "")
+        return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, {}, "",
+                dbc.Alert(L(lang, "tab1_warning_select_index"), color="warning"), {"display": "none"}, empty_fig,
+                {"display": "none"}, empty_fig, "")
 
     enable_decumulation = bool(decum_val and "on" in decum_val)
     inject_crisis = bool(crisis_val and "on" in crisis_val)
@@ -263,7 +274,8 @@ def update_tab1(indices, source, lookback_years, horizon_years, decum_val, decum
     rng_shock = np.random.default_rng(seed + 1)
     shock_start_month = shock_year * 12 if (inject_crisis and shock_timing == "fixed") else None
 
-    items, warnings = [], []
+    items, backtest_items, warnings = [], [], []
+    first_shock_months = None
     for name in indices:
         ticker = TICKERS[name]["etf" if source == "etf" else "indice"]
         try:
@@ -276,20 +288,25 @@ def update_tab1(indices, source, lookback_years, horizon_years, decum_val, decum
             returns, n_months, n_sims, seed, method, block_size=block_size, mu_override_pct=mu_override,
         )
         if inject_crisis:
-            monthly_returns = inject_shock(monthly_returns, shock_pct, shock_duration, shock_start_month, rng_shock)
+            monthly_returns, shock_months = inject_shock(monthly_returns, shock_pct, shock_duration, shock_start_month, rng_shock)
+            if first_shock_months is None:
+                first_shock_months = shock_months
         items.append((name, monthly_returns))
+        backtest_items.append((name, returns.values))
 
     if not items:
         msg = " ".join(warnings) or L(lang, "tab1_no_data")
-        return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, "",
-                dbc.Alert(msg, color="danger"), {"display": "none"}, empty_fig, "")
+        return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, {}, "",
+                dbc.Alert(msg, color="danger"), {"display": "none"}, empty_fig,
+                {"display": "none"}, empty_fig, "")
 
     all_metrics, figs, series_by_strategy = compute_results(
         items, years_axis, schedules, annual_fee_pct, apply_tax, tax_rate, inflation_pct, display_real,
         lower_pct, upper_pct, enable_decumulation, phase_boundary_years, lang=lang, palette=palette, dark=dark,
+        backtest_items=backtest_items,
     )
     cards = build_metric_cards(all_metrics, series_by_strategy, apply_tax, tax_rate, lang=lang)
-    table_data, table_columns, csv_data = build_metrics_outputs(all_metrics, lang, lower_pct, upper_pct)
+    table_data, table_columns, csv_data, table_tooltip_header = build_metrics_outputs(all_metrics, lang, lower_pct, upper_pct)
     warning_alert = dbc.Alert(" ".join(warnings), color="warning") if warnings else ""
     objective_result = render_objective_result(
         all_metrics, schedules, items, objective_val, objective_amount, objective_percentile,
@@ -306,11 +323,23 @@ def update_tab1(indices, source, lookback_years, horizon_years, decum_val, decum
         )
         compare_style = {"display": "block"}
 
+    sequence_risk_style = {"display": "none"}
+    sequence_risk_fig = empty_fig
+    if inject_crisis and shock_timing == "random" and first_shock_months is not None:
+        first_label, first_returns = items[0]
+        shock_years, final_values, invested_final = build_sequence_risk_series(
+            first_returns, schedules["constant"], annual_fee_pct, apply_tax, tax_rate, first_shock_months,
+        )
+        sequence_risk_fig = make_sequence_risk_figure(
+            shock_years, final_values, invested_final, lang=lang, palette=palette, dark=dark,
+        )
+        sequence_risk_style = {"display": "block"}
+
     return (
         figs.get("constant", empty_fig),
         figs.get("progressive", empty_fig),
-        cards, table_data, table_columns, style_header, style_cell, style_data, csv_data, warning_alert,
-        compare_style, compare_fig, objective_result,
+        cards, table_data, table_columns, style_header, style_cell, style_data, table_tooltip_header, csv_data,
+        warning_alert, compare_style, compare_fig, sequence_risk_style, sequence_risk_fig, objective_result,
     )
 
 
@@ -327,7 +356,7 @@ def download_tab1(n_clicks, csv_data):
 
 
 # ============================================================
-# 9. CALLBACKS — onglet 2 (portefeuille pondéré)
+# 9. CALLBACKS :onglet 2 (portefeuille pondéré)
 # ============================================================
 
 @app.callback(
@@ -442,10 +471,13 @@ _tab2_name_inputs = [Input(f"name-p{p}", "value") for p in range(N_PORTFOLIOS_MA
     Output("tab2-metrics-table", "style_header"),
     Output("tab2-metrics-table", "style_cell"),
     Output("tab2-metrics-table", "style_data"),
+    Output("tab2-metrics-table", "tooltip_header"),
     Output("tab2-csv-store", "data"),
     Output("tab2-warning", "children"),
     Output("tab2-envelope-compare-container", "style"),
     Output("tab2-envelope-compare-chart", "figure"),
+    Output("tab2-sequence-risk-container", "style"),
+    Output("tab2-sequence-risk-chart", "figure"),
     Output("tab2-objective-result", "children"),
     Input("n-portfolios-input", "value"),
     *_tab2_name_inputs,
@@ -524,19 +556,21 @@ def update_tab2(n_portfolios, *args):
         portfolios.append((names[i] or L(lang, "portfolio_default_name", n=i + 1), normalized))
 
     if not portfolios:
-        return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, "",
+        return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, {}, "",
                 dbc.Alert(L(lang, "portfolio_warning_zero"), color="warning"),
-                {"display": "none"}, empty_fig, "")
+                {"display": "none"}, empty_fig, {"display": "none"}, empty_fig, "")
 
     source_key = "etf" if source == "etf" else "indice"
     try:
         aligned = get_aligned_returns(universe, lookback_years, source_key)
     except ValueError as exc:
-        return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, "",
-                dbc.Alert(str(exc), color="danger"), {"display": "none"}, empty_fig, "")
+        return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, {}, "",
+                dbc.Alert(str(exc), color="danger"), {"display": "none"}, empty_fig,
+                {"display": "none"}, empty_fig, "")
     if aligned.empty:
-        return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, "",
-                dbc.Alert(L(lang, "no_aligned_data"), color="danger"), {"display": "none"}, empty_fig, "")
+        return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, {}, "",
+                dbc.Alert(L(lang, "no_aligned_data"), color="danger"), {"display": "none"}, empty_fig,
+                {"display": "none"}, empty_fig, "")
 
     enable_decumulation = bool(decum_val and "on" in decum_val)
     inject_crisis = bool(crisis_val and "on" in crisis_val)
@@ -559,21 +593,24 @@ def update_tab2(n_portfolios, *args):
     asset_returns = simulate_portfolio_asset_returns(
         aligned, n_months, n_sims, seed, method, block_size=block_size, mu_override_pct=mu_overrides,
     )
+    shock_months = None
     if inject_crisis:
-        asset_returns = inject_shock(asset_returns, shock_pct, shock_duration, shock_start_month, rng_shock)
+        asset_returns, shock_months = inject_shock(asset_returns, shock_pct, shock_duration, shock_start_month, rng_shock)
 
-    items = []
+    items, backtest_items = [], []
     for portfolio_name, normalized in portfolios:
         weights_vec = np.array([normalized.get(name, 0.0) for name in aligned.columns])
         portfolio_returns = asset_returns @ weights_vec
         items.append((portfolio_name, portfolio_returns))
+        backtest_items.append((portfolio_name, aligned.values @ weights_vec))
 
     all_metrics, figs, series_by_strategy = compute_results(
         items, years_axis, schedules, annual_fee_pct, apply_tax, tax_rate, inflation_pct, display_real,
         lower_pct, upper_pct, enable_decumulation, phase_boundary_years, lang=lang, palette=palette, dark=dark,
+        backtest_items=backtest_items,
     )
     cards = build_metric_cards(all_metrics, series_by_strategy, apply_tax, tax_rate, lang=lang)
-    table_data, table_columns, csv_data = build_metrics_outputs(all_metrics, lang, lower_pct, upper_pct)
+    table_data, table_columns, csv_data, table_tooltip_header = build_metrics_outputs(all_metrics, lang, lower_pct, upper_pct)
     objective_result = render_objective_result(
         all_metrics, schedules, items, objective_val, objective_amount, objective_percentile,
         horizon_years, enable_decumulation, lang,
@@ -589,11 +626,23 @@ def update_tab2(n_portfolios, *args):
         )
         compare_style = {"display": "block"}
 
+    sequence_risk_style = {"display": "none"}
+    sequence_risk_fig = empty_fig
+    if inject_crisis and shock_timing == "random" and shock_months is not None:
+        first_label, first_returns = items[0]
+        shock_years, final_values, invested_final = build_sequence_risk_series(
+            first_returns, schedules["constant"], annual_fee_pct, apply_tax, tax_rate, shock_months,
+        )
+        sequence_risk_fig = make_sequence_risk_figure(
+            shock_years, final_values, invested_final, lang=lang, palette=palette, dark=dark,
+        )
+        sequence_risk_style = {"display": "block"}
+
     return (
         figs.get("constant", empty_fig),
         figs.get("progressive", empty_fig),
-        cards, table_data, table_columns, style_header, style_cell, style_data, csv_data, "",
-        compare_style, compare_fig, objective_result,
+        cards, table_data, table_columns, style_header, style_cell, style_data, table_tooltip_header, csv_data,
+        "", compare_style, compare_fig, sequence_risk_style, sequence_risk_fig, objective_result,
     )
 
 
@@ -610,7 +659,7 @@ def download_tab2(n_clicks, csv_data):
 
 
 # ============================================================
-# 10. CALLBACKS — onglet 3 (valorisation d'actions individuelles)
+# 10. CALLBACKS :onglet 3 (valorisation d'actions individuelles)
 # ============================================================
 
 def _format_market_cap(value):
@@ -704,7 +753,7 @@ def render_stock_views(rows, sector_value, lang, palette_code, dark_mode):
         return placeholder, placeholder, "", placeholder, [], [], style_header, style_cell, style_data, ""
 
     # Noms de colonnes internes gardés stables (français) : ce sont des clés de travail, pas du
-    # texte affiché — seul le libellé de colonne du tableau final ("name") est traduit plus bas.
+    # texte affiché : seul le libellé de colonne du tableau final ("name") est traduit plus bas.
     df = pd.DataFrame(rows)
     df = df.rename(columns={
         "sector": "Secteur", "currency": "Devise", "price": "Prix",
@@ -752,7 +801,7 @@ def render_stock_views(rows, sector_value, lang, palette_code, dark_mode):
             (L(lang, "priciest_title"), priciest, "danger"),
         ]:
             items = [
-                html.Li(f"{row['Entreprise']} — P/E {row['P/E (trailing)']:.1f} ({row['Secteur']})")
+                html.Li(f"{row['Entreprise']} : P/E {row['P/E (trailing)']:.1f} ({row['Secteur']})")
                 for _, row in subset.iterrows()
             ]
             cards.append(dbc.Col(dbc.Card(dbc.CardBody([
@@ -772,7 +821,7 @@ def render_stock_views(rows, sector_value, lang, palette_code, dark_mode):
         ]:
             items = [
                 html.Li(
-                    f"{row['Entreprise']} — P/E actuel {row['P/E (trailing)']:.1f} vs moyenne 5 ans "
+                    f"{row['Entreprise']} : P/E actuel {row['P/E (trailing)']:.1f} vs moyenne 5 ans "
                     f"{row['P/E moyen 5 ans (approx.)']:.1f} (percentile {row['Position vs historique 5 ans (percentile)']:.0f})"
                 )
                 for _, row in subset.iterrows()
@@ -876,6 +925,76 @@ def update_pe_history_chart(selected_rows, lang, palette_code, dark_mode, virtua
         xaxis_title="", yaxis_title="P/E", margin=dict(t=60),
     )
     return fig, ""
+
+
+@app.callback(
+    Output("dcf-result", "children"),
+    Output("dcf-chart", "figure"),
+    Input("stocks-table", "derived_virtual_selected_rows"),
+    Input("dcf-growth-slider", "value"),
+    Input("dcf-discount-slider", "value"),
+    Input("dcf-terminal-growth-slider", "value"),
+    Input("dcf-horizon-slider", "value"),
+    Input("lang-radio", "value"),
+    Input("palette-dropdown", "value"),
+    Input("dark-mode-switch", "value"),
+    State("stocks-table", "derived_virtual_data"),
+)
+def update_dcf(selected_rows, growth_pct, discount_pct, terminal_growth_pct, horizon_years,
+                lang, palette_code, dark_mode, virtual_data):
+    lang = lang or "fr"
+    palette = PALETTES.get(palette_code, PALETTE)
+    dark = bool(dark_mode)
+    empty_fig = empty_figure_with_message("", dark=dark)
+    if not selected_rows or not virtual_data:
+        return L(lang, "dcf_hint_default"), empty_fig
+
+    row = virtual_data[selected_rows[0]]
+    ticker, name = row["Ticker"], row["Entreprise"]
+    inputs = get_dcf_inputs(ticker)
+    if not inputs.get("fcf") or not inputs.get("shares_outstanding"):
+        msg = L(lang, "dcf_unavailable", name=name)
+        return dbc.Alert(msg, color="warning"), empty_figure_with_message(msg, dark=dark)
+    if discount_pct <= terminal_growth_pct:
+        return dbc.Alert(L(lang, "dcf_invalid_assumptions"), color="warning"), empty_fig
+
+    net_debt = inputs["total_debt"] - inputs["total_cash"]
+    result = compute_dcf_fair_value(
+        inputs["fcf"], growth_pct, discount_pct, terminal_growth_pct, int(horizon_years),
+        net_debt, inputs["shares_outstanding"],
+    )
+    if result is None:
+        return dbc.Alert(L(lang, "dcf_invalid_assumptions"), color="warning"), empty_fig
+
+    fair_value = result["fair_value_per_share"]
+    price = inputs.get("price")
+    currency = inputs["currency"]
+    upside_pct = (fair_value / price - 1) * 100 if price else None
+
+    stat_cols = [
+        dbc.Col([html.Small(L(lang, "dcf_fair_value_label"), className="text-muted d-block"),
+                 html.H5(f"{fair_value:,.2f} {currency}".replace(",", " "))]),
+        dbc.Col([html.Small(L(lang, "dcf_current_price_label"), className="text-muted d-block"),
+                 html.H5(f"{price:,.2f} {currency}".replace(",", " ") if price else "N/A")]),
+    ]
+    if upside_pct is not None:
+        stat_cols.append(dbc.Col([
+            html.Small(L(lang, "dcf_upside_label"), className="text-muted d-block"),
+            html.H5(f"{upside_pct:+.1f} %", className="text-success" if upside_pct >= 0 else "text-danger"),
+        ]))
+    card = dbc.Card(dbc.CardBody([html.H6(name, className="card-subtitle text-muted mb-2"), dbc.Row(stat_cols)]))
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=[L(lang, "dcf_fair_value_label"), L(lang, "dcf_current_price_label")],
+        y=[fair_value, price or 0],
+        marker_color=[palette[0], palette[1 % len(palette)]],
+    ))
+    fig.update_layout(
+        template="plotly_dark" if dark else "plotly",
+        title=L(lang, "dcf_chart_title", name=name), yaxis_title=currency, margin=dict(t=60),
+    )
+    return card, fig
 
 
 @app.callback(

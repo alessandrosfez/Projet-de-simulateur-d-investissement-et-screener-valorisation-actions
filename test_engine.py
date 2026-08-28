@@ -58,6 +58,28 @@ def test_simplex_grid_sums_to_total():
         assert all(c % 25 == 0 for c in combo)
 
 
+# ---------- choc de marché ----------
+
+def test_inject_shock_random_timing_returns_per_simulation_starts():
+    rng = np.random.default_rng(0)
+    returns = np.zeros((5, 24))
+    shocked, starts = m.inject_shock(returns, shock_pct=-30, shock_duration=6, start_month=None, rng=rng)
+    assert starts.shape == (5,)
+    assert starts.min() >= 0 and starts.max() <= 24 - 6
+    # chaque simulation doit avoir sa fenêtre de choc à l'endroit indiqué par starts[s]
+    for s in range(5):
+        assert not np.allclose(shocked[s, starts[s]:starts[s] + 6], 0.0)
+
+
+def test_inject_shock_fixed_timing_returns_none_for_starts():
+    rng = np.random.default_rng(0)
+    returns = np.zeros((3, 24))
+    shocked, starts = m.inject_shock(returns, shock_pct=-30, shock_duration=6, start_month=10, rng=rng)
+    assert starts is None
+    assert not np.allclose(shocked[:, 10:16], 0.0)
+    assert np.allclose(shocked[:, :10], 0.0)
+
+
 # ---------- accumulation DCA ----------
 
 def test_returns_to_dca_zero_returns_equals_cumulative_contributions():
@@ -111,7 +133,7 @@ def test_simulate_portfolio_asset_returns_preserves_covariance():
 
 def test_simulate_index_returns_has_fatter_tails_than_gaussian():
     """La loi t de Student (nu=5) doit produire un excès de kurtosis net positif, contrairement à
-    une gaussienne pure — c'est tout l'intérêt du changement de méthode."""
+    une gaussienne pure : c'est tout l'intérêt du changement de méthode."""
     hist = pd.Series(np.random.default_rng(4).normal(0.007, 0.04, 240))
     sims = m.simulate_index_returns(hist, n_months=1, n_sims=100000, seed=5, method="normal")
     kurtosis = pd.Series(sims.ravel()).kurtosis()
@@ -152,3 +174,46 @@ def test_compute_objective_contribution_linear_scaling():
 
 def test_compute_objective_contribution_empty_when_no_constant_schedule():
     assert m.compute_objective_contribution({}, {}, [], 50000.0, "median") == []
+
+
+# ---------- DCF ----------
+
+def test_project_fcf_grows_geometrically():
+    projected = m.project_fcf(100.0, growth_rate_pct=10.0, n_years=3)
+    np.testing.assert_allclose(projected, [110.0, 121.0, 133.1])
+
+
+def test_terminal_value_gordon_formula():
+    tv = m.terminal_value_gordon(final_fcf=100.0, terminal_growth_pct=2.0, discount_rate_pct=8.0)
+    assert tv == pytest.approx(100.0 * 1.02 / 0.06)
+
+
+def test_discount_to_present_first_year_uses_one_year_of_discounting():
+    pv = m.discount_to_present(np.array([100.0, 100.0]), discount_rate_pct=10.0)
+    np.testing.assert_allclose(pv, [100.0 / 1.1, 100.0 / 1.1**2])
+
+
+def test_compute_dcf_fair_value_basic():
+    result = m.compute_dcf_fair_value(
+        last_fcf=100.0, growth_rate_pct=5.0, discount_rate_pct=8.0, terminal_growth_pct=2.0,
+        n_years=5, net_debt=200.0, shares_outstanding=100.0,
+    )
+    assert result is not None
+    assert result["enterprise_value"] > 0
+    assert result["equity_value"] == pytest.approx(result["enterprise_value"] - 200.0)
+    assert result["fair_value_per_share"] == pytest.approx(result["equity_value"] / 100.0)
+
+
+def test_compute_dcf_fair_value_none_when_terminal_growth_exceeds_discount_rate():
+    assert m.compute_dcf_fair_value(100.0, 5.0, 2.0, 3.0, 5, 0.0, 100.0) is None
+
+
+def test_compute_dcf_fair_value_none_when_no_shares_outstanding():
+    assert m.compute_dcf_fair_value(100.0, 5.0, 8.0, 2.0, 5, 0.0, 0) is None
+
+
+def test_compute_dcf_fair_value_net_cash_increases_equity_value():
+    """Une dette nette négative (plus de cash que de dette) doit augmenter la valeur des
+    capitaux propres par rapport à la valeur d'entreprise, pas la diminuer."""
+    result = m.compute_dcf_fair_value(100.0, 5.0, 8.0, 2.0, 5, net_debt=-50.0, shares_outstanding=100.0)
+    assert result["equity_value"] > result["enterprise_value"]

@@ -45,8 +45,11 @@ def make_correlation_heatmap(corr: pd.DataFrame, lang="fr", dark: bool = False):
 
 
 def make_band_figure(series, years_axis, title, lang="fr", palette=None, invested_capital=None,
-                      phase_boundary_years=None, dark: bool = False):
-    """series: liste de (label, median, p_low, p_high)."""
+                      phase_boundary_years=None, dark: bool = False, backtest_series=None):
+    """series: liste de (label, median, p_low, p_high). backtest_series : liste optionnelle de
+    (label, years_bt, values_bt) : trajectoire réellement observée (pas simulée), superposée en
+    pointillés sur la même couleur que la bande de percentiles du label correspondant, pour
+    comparer projection et réalité historique."""
     palette = palette or PALETTE
     fig = go.Figure()
     for i, (label, median, p_low, p_high) in enumerate(series):
@@ -58,6 +61,12 @@ def make_band_figure(series, years_axis, title, lang="fr", palette=None, investe
                                   showlegend=False, hoverinfo="skip"))
         fig.add_trace(go.Scatter(x=years_axis, y=median, mode="lines", name=label,
                                   line=dict(color=color)))
+    if backtest_series:
+        for i, (label, bt_years, bt_values) in enumerate(backtest_series):
+            color = palette[i % len(palette)]
+            fig.add_trace(go.Scatter(x=bt_years, y=bt_values, mode="lines",
+                                      name=L(lang, "backtest_trace", label=label),
+                                      line=dict(color=color, dash="dot", width=2)))
     if invested_capital is not None:
         fig.add_trace(go.Scatter(x=years_axis, y=invested_capital, mode="lines",
                                   name=L(lang, "invested_capital_trace"),
@@ -72,6 +81,31 @@ def make_band_figure(series, years_axis, title, lang="fr", palette=None, investe
         yaxis_title=L(lang, "value_axis"),
         hovermode="x unified",
         legend=dict(font=dict(size=9)),
+        margin=dict(t=60),
+    )
+    return fig
+
+
+def make_sequence_risk_figure(shock_years, final_values, invested_capital, lang="fr", palette=None,
+                               dark: bool = False):
+    """Nuage de points : valeur finale du portefeuille (une simulation Monte Carlo = un point) vs
+    l'année où le choc de marché a démarré pour cette simulation. Visualise le risque de séquence
+    des rendements : un krach précoce dans l'horizon pèse-t-il plus qu'un krach tardif ?"""
+    palette = palette or PALETTE
+    colors = [palette[0] if v >= invested_capital else palette[1 % len(palette)] for v in final_values]
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=shock_years, y=final_values, mode="markers",
+        marker=dict(color=colors, size=6, opacity=0.5),
+        showlegend=False,
+    ))
+    fig.add_hline(y=invested_capital, line_dash="dash", line_color="gray",
+                  annotation_text=L(lang, "invested_capital_trace"), annotation_position="top left")
+    fig.update_layout(
+        template="plotly_dark" if dark else "plotly",
+        title=L(lang, "sequence_risk_chart_title"),
+        xaxis_title=L(lang, "sequence_risk_x_axis"),
+        yaxis_title=L(lang, "value_axis"),
         margin=dict(t=60),
     )
     return fig

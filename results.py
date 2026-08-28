@@ -36,12 +36,35 @@ def build_schedules(horizon_years, enable_decumulation, decumulation_years, with
     return n_months, years_axis, phase_boundary_years, schedules
 
 
+def _backtest_trajectory(historical_returns, schedule, years_axis, annual_fee_pct, apply_tax, tax_rate,
+                          inflation_pct, display_real):
+    """Trajectoire réellement observée (une seule séquence historique, pas une simulation) : "si
+    j'avais investi il y a n mois avec ce même plan d'apport, où en serais-je aujourd'hui ?".
+    Utilise les n derniers mois de l'historique de calibration (les plus récents, jusqu'à
+    aujourd'hui, pas les plus anciens) pour que la trajectoire se termine bien à la date
+    actuelle. Tronquée à la plus courte des deux séries : un historique de calibration plus court
+    que l'horizon de projection ne peut pas couvrir tout le graphique."""
+    n = min(len(historical_returns), len(schedule))
+    if n == 0:
+        return None
+    monthly_returns = np.asarray(historical_returns[-n:]).reshape(1, n)
+    net_returns = apply_fee(monthly_returns, annual_fee_pct)
+    portfolio_value, invested_capital = returns_to_dca(net_returns, schedule[:n])
+    portfolio_value = apply_social_tax(portfolio_value, invested_capital, apply_tax, tax_rate)
+    portfolio_value, _ = to_display_values(
+        portfolio_value, invested_capital, years_axis[:n], inflation_pct, display_real
+    )
+    return years_axis[:n], portfolio_value[0]
+
+
 def compute_results(items, years_axis, schedules, annual_fee_pct, apply_tax, tax_rate, inflation_pct,
                      display_real, lower_pct, upper_pct, enable_decumulation, phase_boundary_years,
-                     lang="fr", palette=None, dark=False):
+                     lang="fr", palette=None, dark=False, backtest_items=None):
     """items: liste de (label, monthly_returns (n_sims, n_months)). all_metrics est indexé par le
-    tuple (label, strat_name) — strat_name est une clé stable ("constant"/"progressive"), traduite
-    uniquement à l'affichage."""
+    tuple (label, strat_name) : strat_name est une clé stable ("constant"/"progressive"), traduite
+    uniquement à l'affichage. backtest_items : liste optionnelle de (label, rendements_historiques
+    1D), même labels que items. La trajectoire réellement observée est superposée à la bande de
+    percentiles correspondante ("qu'aurait donné cet historique réel ?")."""
     all_metrics = {}
     series_by_strategy = {name: [] for name in schedules}
     invested_by_strategy = {}
@@ -64,6 +87,22 @@ def compute_results(items, years_axis, schedules, annual_fee_pct, apply_tax, tax
             p_high = np.percentile(portfolio_value, upper_pct, axis=0)
             series_by_strategy[strat_name].append((label, median, p_low, p_high))
 
+    backtest_series_by_strategy = {name: [] for name in schedules}
+    if backtest_items:
+        backtest_map = dict(backtest_items)
+        for label, _ in items:
+            hist_returns = backtest_map.get(label)
+            if hist_returns is None or len(hist_returns) == 0:
+                continue
+            for strat_name, schedule in schedules.items():
+                result = _backtest_trajectory(
+                    hist_returns, schedule, years_axis, annual_fee_pct, apply_tax, tax_rate,
+                    inflation_pct, display_real,
+                )
+                if result is not None:
+                    bt_years, bt_values = result
+                    backtest_series_by_strategy[strat_name].append((label, bt_years, bt_values))
+
     figs = {}
     for strat_name, series in series_by_strategy.items():
         strat_display = L(lang, f"schedule_{strat_name}")
@@ -74,8 +113,22 @@ def compute_results(items, years_axis, schedules, annual_fee_pct, apply_tax, tax
             invested_capital=invested_by_strategy.get(strat_name),
             phase_boundary_years=phase_boundary_years,
             dark=dark,
+            backtest_series=backtest_series_by_strategy.get(strat_name),
         )
     return all_metrics, figs, series_by_strategy
+
+
+def build_sequence_risk_series(monthly_returns, schedule, annual_fee_pct, apply_tax, tax_rate,
+                                shock_start_months):
+    """Apparie la valeur finale du portefeuille, pour chaque simulation, au mois où le choc de
+    marché a démarré pour cette simulation (nécessite un timing de choc aléatoire par simulation,
+    voir engine.inject_shock). Visualise le risque de séquence des rendements : un krach précoce
+    dans l'horizon pèse-t-il plus qu'un krach tardif sur le résultat final ?"""
+    net_returns = apply_fee(monthly_returns, annual_fee_pct)
+    portfolio_value, invested_capital = returns_to_dca(net_returns, schedule)
+    portfolio_value = apply_social_tax(portfolio_value, invested_capital, apply_tax, tax_rate)
+    shock_years = np.asarray(shock_start_months) / 12
+    return shock_years, portfolio_value[:, -1], float(invested_capital[-1])
 
 
 def build_metric_cards(all_metrics, series_by_strategy, apply_tax, tax_rate, lang="fr"):
@@ -118,7 +171,7 @@ def build_envelope_comparison_figure(items, schedules, annual_fee_pct, inflation
             cto_value = apply_social_tax(portfolio_value, invested_capital, True, cto_tax_rate)
             pea_value, _ = to_display_values(pea_value, invested_capital, years_axis, inflation_pct, display_real)
             cto_value, _ = to_display_values(cto_value, invested_capital, years_axis, inflation_pct, display_real)
-            labels.append(f"{label} — {L(lang, f'schedule_{strat_name}')}")
+            labels.append(f"{label} : {L(lang, f'schedule_{strat_name}')}")
             pea_values.append(float(np.percentile(pea_value[:, -1], 50)))
             cto_values.append(float(np.percentile(cto_value[:, -1], 50)))
 
@@ -149,8 +202,10 @@ METRIC_DEFS = [
 
 def build_metrics_outputs(all_metrics: dict, lang: str, lower_pct: float, upper_pct: float):
     """all_metrics: {(label, strat_name): metrics_dict (clés stables, voir engine.summarize())}.
-    Renvoie (table_data, table_columns, csv_data) : la table affichée est traduite/formatée dans
-    `lang`, le CSV exporte les mêmes libellés mais avec des valeurs numériques brutes."""
+    Renvoie (table_data, table_columns, csv_data, tooltip_header) : la table affichée est
+    traduite/formatée dans `lang`, le CSV exporte les mêmes libellés mais avec des valeurs
+    numériques brutes, et tooltip_header alimente le survol (ⓘ) des en-têtes de colonnes
+    (Sharpe, drawdown...) via le prop natif DataTable.tooltip_header."""
     has_ruin = any("prob_ruin" in m for m in all_metrics.values())
     col_defs = [
         (key, L(lang, label_key, pct=(f"{lower_pct:g}" if key == "p_low" else f"{upper_pct:g}") if needs_pct else None), fmt)
@@ -161,7 +216,7 @@ def build_metrics_outputs(all_metrics: dict, lang: str, lower_pct: float, upper_
 
     rows_raw = []
     for (label, strat_name), m in all_metrics.items():
-        row = {scenario_label: f"{label} — {L(lang, f'schedule_{strat_name}')}"}
+        row = {scenario_label: f"{label} : {L(lang, f'schedule_{strat_name}')}"}
         for key, col_label, _ in col_defs:
             row[col_label] = m.get(key)
         rows_raw.append(row)
@@ -179,7 +234,11 @@ def build_metrics_outputs(all_metrics: dict, lang: str, lower_pct: float, upper_
     columns = [{"name": c, "id": c} for c in display_df.columns]
     table_data = display_df.to_dict("records")
     csv_data = raw_df.to_csv(index=False)
-    return table_data, columns, csv_data
+    tooltip_header = {
+        col_label: {"type": "text", "value": L(lang, f"metric_{key}_help")}
+        for key, col_label, _ in col_defs
+    }
+    return table_data, columns, csv_data, tooltip_header
 
 
 def render_objective_result(all_metrics, schedules, items, objective_val, objective_amount,

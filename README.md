@@ -1,4 +1,4 @@
-# Projection PEA — simulation Monte Carlo (Dash)
+# Projection PEA : simulation Monte Carlo (Dash)
 
 Application web interactive (Plotly Dash) pour projeter l'évolution future d'un
 portefeuille PEA/CTO par simulation Monte Carlo, calibrée sur l'historique
@@ -43,15 +43,15 @@ L'application est servie sur [http://localhost:8050](http://localhost:8050).
 
 ## Structure du code
 
-- `constants.py` — indices/ETF PEA, paniers d'actions par marché, taux de fiscalité.
-- `i18n.py` — traductions FR/EN et palettes de couleurs.
-- `market_data.py` — appels yfinance et cache disque.
-- `engine.py` — moteur de calcul pur (simulation Monte Carlo, DCA, frais,
+- `constants.py` : indices/ETF PEA, paniers d'actions par marché, taux de fiscalité.
+- `i18n.py` : traductions FR/EN et palettes de couleurs.
+- `market_data.py` : appels yfinance et cache disque.
+- `engine.py` : moteur de calcul pur (simulation Monte Carlo, DCA, frais,
   fiscalité, poids optimaux). Aucune dépendance Dash/réseau.
-- `charts.py` — constructeurs de graphiques Plotly.
-- `results.py` — agrège les résultats du moteur en métriques/figures affichables.
-- `layout.py` — construction de la sidebar et des onglets.
-- `app_instance.py` / `callbacks.py` / `app.py` — instance Dash, callbacks, point d'entrée.
+- `charts.py` : constructeurs de graphiques Plotly.
+- `results.py` : agrège les résultats du moteur en métriques/figures affichables.
+- `layout.py` : construction de la sidebar et des onglets.
+- `app_instance.py` / `callbacks.py` / `app.py` : instance Dash, callbacks, point d'entrée.
 
 ## Tests
 
@@ -61,7 +61,7 @@ pytest test_engine.py -v
 ```
 
 Les tests couvrent le moteur de calcul pur (frais, fiscalité, bootstrap,
-DCA, simulation Monte Carlo, poids optimaux, mode objectif) — pas la couche
+DCA, simulation Monte Carlo, poids optimaux, mode objectif), pas la couche
 interface, ni les appels réseau.
 
 ## Docker

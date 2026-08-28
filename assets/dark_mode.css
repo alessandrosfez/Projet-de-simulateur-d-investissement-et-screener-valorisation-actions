@@ -26,3 +26,28 @@ body.dark-mode {
     --Dash-Stroke-Weak: rgba(255, 255, 255, 0.12);
     --Dash-Stroke-Strong: rgba(255, 255, 255, 0.35);
 }
+
+/* Bulle de tooltip_header (survol des en-têtes de colonnes DataTable, ex: "Sharpe",
+   "Max drawdown") : fond clair #f6f6f6 codé en dur par dash_table dans une feuille de
+   style qu'il injecte lui-même, sans couleur de texte propre (héritée de l'ancêtre,
+   donc blanche en mode sombre) : texte blanc sur fond clair, illisible. Ces sélecteurs
+   sont plus spécifiques que ceux de dash_table, donc gagnent sans !important. */
+body.dark-mode .dash-tooltip {
+    border-color: #444;
+}
+body.dark-mode .dash-tooltip .dash-table-tooltip {
+    background-color: #2b2b2b;
+    color: #e9ecef;
+}
+body.dark-mode .dash-tooltip[data-attr-anchor='top']:after {
+    border-bottom-color: #2b2b2b;
+}
+body.dark-mode .dash-tooltip[data-attr-anchor='top']:before {
+    border-bottom-color: #444;
+}
+body.dark-mode .dash-tooltip[data-attr-anchor='bottom']:after {
+    border-top-color: #2b2b2b;
+}
+body.dark-mode .dash-tooltip[data-attr-anchor='bottom']:before {
+    border-top-color: #444;
+}

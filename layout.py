@@ -1,7 +1,7 @@
 """
 Construction de l'interface Dash (sidebar, onglets) et petits helpers d'affichage
-conditionnel (visible/caché, libellé de taxe...) réutilisés à la fois ici — pour
-l'état initial des composants — et par callbacks.py, qui les enregistre comme
+conditionnel (visible/caché, libellé de taxe...) réutilisés à la fois ici (pour
+l'état initial des composants) et par callbacks.py, qui les enregistre comme
 callbacks Dash. Ce module ne dépend jamais de callbacks.py ni de l'instance
 `app` (pour éviter tout import circulaire).
 """
@@ -75,6 +75,8 @@ TAB_STATE_FIELDS = (
     + [(f"name-p{p}", "value") for p in range(N_PORTFOLIOS_MAX)]
     + [(f"weight-p{p}-t{i}", "value") for p in range(N_PORTFOLIOS_MAX) for i in range(len(TICKER_KEYS))]
     + [("universe-checklist", "value"), ("sector-filter", "value"), ("shrinkage-slider", "value")]
+    + [("dcf-growth-slider", "value"), ("dcf-discount-slider", "value"),
+       ("dcf-terminal-growth-slider", "value"), ("dcf-horizon-slider", "value")]
 )
 
 
@@ -166,8 +168,19 @@ def toggle_portfolio_blocks(n_portfolios):
 # COMPOSANTS DE FORMULAIRE
 # ============================================================
 
-def slider_block(label, slider_id, minv, maxv, value, step=1, marks=None, help_text=None):
-    children = [dbc.Label(label, html_for=slider_id, className="mb-0")]
+def info_tooltip(info_id, tooltip_text):
+    """ⓘ cliquable/survolable renvoyant un (Span, Tooltip) à ajouter à côté d'un libellé."""
+    return [
+        html.Span(" ⓘ", id=info_id, style={"cursor": "help"}),
+        dbc.Tooltip(tooltip_text, target=info_id, placement="right"),
+    ]
+
+
+def slider_block(label, slider_id, minv, maxv, value, step=1, marks=None, help_text=None, tooltip_text=None):
+    label_row = [dbc.Label(label, html_for=slider_id, className="mb-0")]
+    if tooltip_text:
+        label_row += info_tooltip(f"{slider_id}-info", tooltip_text)
+    children = [html.Div(label_row)]
     if help_text:
         children.append(html.Div(help_text, className="text-muted", style={"fontSize": "0.75rem"}))
     children.append(dcc.Slider(
@@ -210,14 +223,14 @@ def build_sidebar(lang, v=None):
         ),
         html.Div(
             html.Ul([
-                html.Li([html.B(name), f" → {TICKERS[name]['etf']} — {ETF_NAMES[TICKERS[name]['etf']]}"])
+                html.Li([html.B(name), f" → {TICKERS[name]['etf']} : {ETF_NAMES[TICKERS[name]['etf']]}"])
                 for name in TICKERS
             ], style={"fontSize": "0.75rem"}),
             id="etf-info", style=toggle_etf_info(source), className="mb-2",
         ),
         slider_block(L(lang, "lookback_label"), "lookback-slider", 5, 30, gv(v, "lookback-slider", 20)),
         slider_block(L(lang, "horizon_label"), "horizon-slider", 5, 40, gv(v, "horizon-slider", 20)),
-        dbc.Label(L(lang, "method_label"), className="mb-0"),
+        html.Div([dbc.Label(L(lang, "method_label"), className="mb-0")] + info_tooltip("method-radio-info", L(lang, "method_help"))),
         dcc.RadioItems(
             id="method-radio",
             options=[{"label": L(lang, "method_normal"), "value": "normal"}, {"label": L(lang, "method_bootstrap"), "value": "bootstrap"}],
@@ -291,7 +304,7 @@ def build_sidebar(lang, v=None):
             help_text=L(lang, "fee_help"),
         ),
         slider_block(L(lang, "inflation_label"), "inflation-slider", 0.0, 5.0, gv(v, "inflation-slider", 2.0), step=0.1),
-        dbc.Label(L(lang, "display_label"), className="mb-0"),
+        html.Div([dbc.Label(L(lang, "display_label"), className="mb-0")] + info_tooltip("display-radio-info", L(lang, "display_help"))),
         dcc.RadioItems(
             id="display-radio",
             options=[{"label": L(lang, "display_nominal"), "value": "nominal"}, {"label": L(lang, "display_real"), "value": "real"}],
@@ -417,11 +430,16 @@ def build_tab1(lang, v=None):
             html.Div(id="tab1-metric-cards"),
             html.Div(id="tab1-objective-result", className="mt-2"),
             html.H5(L(lang, "metrics_title"), className="mt-3"),
-            dash_table.DataTable(id="tab1-metrics-table", style_table={"overflowX": "auto"}, style_cell={"fontSize": "0.8rem", "textAlign": "left"}),
+            dash_table.DataTable(id="tab1-metrics-table", style_table={"overflowX": "auto"}, style_cell={"fontSize": "0.8rem", "textAlign": "left"}, tooltip_delay=0, tooltip_duration=None),
             html.Div([
                 html.H5(L(lang, "compare_pea_cto_title"), className="mt-3"),
                 dcc.Graph(id="tab1-envelope-compare-chart", config=GRAPH_CONFIG),
             ], id="tab1-envelope-compare-container", style={"display": "none"}),
+            html.Div([
+                html.H5(L(lang, "sequence_risk_title"), className="mt-3"),
+                html.P(L(lang, "sequence_risk_intro"), className="text-muted", style={"fontSize": "0.8rem"}),
+                dcc.Graph(id="tab1-sequence-risk-chart", config=GRAPH_CONFIG),
+            ], id="tab1-sequence-risk-container", style={"display": "none"}),
         ]),
         dbc.Button(L(lang, "download_metrics_btn"), id="btn-download-tab1", color="secondary", size="sm", className="mt-2"),
         dcc.Download(id="download-tab1"),
@@ -508,11 +526,16 @@ def build_tab2(lang, v=None):
             html.Div(id="tab2-metric-cards"),
             html.Div(id="tab2-objective-result", className="mt-2"),
             html.H5(L(lang, "metrics_title_portfolio"), className="mt-3"),
-            dash_table.DataTable(id="tab2-metrics-table", style_table={"overflowX": "auto"}, style_cell={"fontSize": "0.8rem", "textAlign": "left"}),
+            dash_table.DataTable(id="tab2-metrics-table", style_table={"overflowX": "auto"}, style_cell={"fontSize": "0.8rem", "textAlign": "left"}, tooltip_delay=0, tooltip_duration=None),
             html.Div([
                 html.H5(L(lang, "compare_pea_cto_title"), className="mt-3"),
                 dcc.Graph(id="tab2-envelope-compare-chart", config=GRAPH_CONFIG),
             ], id="tab2-envelope-compare-container", style={"display": "none"}),
+            html.Div([
+                html.H5(L(lang, "sequence_risk_title"), className="mt-3"),
+                html.P(L(lang, "sequence_risk_intro"), className="text-muted", style={"fontSize": "0.8rem"}),
+                dcc.Graph(id="tab2-sequence-risk-chart", config=GRAPH_CONFIG),
+            ], id="tab2-sequence-risk-container", style={"display": "none"}),
         ]),
         dbc.Button(L(lang, "download_metrics_btn"), id="btn-download-tab2", color="secondary", size="sm", className="mt-2"),
         dcc.Download(id="download-tab2"),
@@ -572,6 +595,18 @@ def build_tab3(lang, v=None):
             html.H5(L(lang, "history_title"), className="mt-3"),
             html.Div(id="stocks-pe-history-title", className="text-muted", style={"fontSize": "0.85rem"}),
             dcc.Graph(id="stocks-pe-history-chart", config=GRAPH_CONFIG),
+
+            html.Hr(),
+            html.H5(L(lang, "dcf_title"), className="mt-3"),
+            html.P(L(lang, "dcf_intro"), className="text-muted", style={"fontSize": "0.85rem"}),
+            dbc.Row([
+                dbc.Col(slider_block(L(lang, "dcf_growth_label"), "dcf-growth-slider", -10, 30, gv(v, "dcf-growth-slider", 5), step=1, tooltip_text=L(lang, "dcf_growth_help")), width=3),
+                dbc.Col(slider_block(L(lang, "dcf_discount_label"), "dcf-discount-slider", 4, 20, gv(v, "dcf-discount-slider", 8), step=0.5, tooltip_text=L(lang, "dcf_discount_help")), width=3),
+                dbc.Col(slider_block(L(lang, "dcf_terminal_growth_label"), "dcf-terminal-growth-slider", 0, 5, gv(v, "dcf-terminal-growth-slider", 2), step=0.25, tooltip_text=L(lang, "dcf_terminal_growth_help")), width=3),
+                dbc.Col(slider_block(L(lang, "dcf_horizon_label"), "dcf-horizon-slider", 3, 10, gv(v, "dcf-horizon-slider", 5), step=1, tooltip_text=L(lang, "dcf_horizon_help")), width=3),
+            ]),
+            html.Div(id="dcf-result", children=L(lang, "dcf_hint_default"), className="text-muted mb-2"),
+            dcc.Graph(id="dcf-chart", config=GRAPH_CONFIG),
         ]),
         dbc.Button(L(lang, "download_btn"), id="btn-download-stocks", color="secondary", size="sm", className="mt-2"),
         dcc.Download(id="download-stocks"),
@@ -584,6 +619,10 @@ def build_header_text(lang):
         html.H2(L(lang, "app_title")),
         html.P(L(lang, "app_subtitle"), className="text-muted"),
     ]
+
+
+def build_footer(lang):
+    return html.Small(L(lang, "footer_disclaimer"), className="text-muted")
 
 
 def build_tabs(lang, v=None, active_tab="tab-par-indice"):

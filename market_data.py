@@ -111,7 +111,7 @@ def get_stock_pe_history(ticker: str) -> pd.Series:
     """Série de P/E implicite sur 5 ans (prix historique / BPA actuel), corrigée d'un
     éventuel décalage d'échelle prix/BPA. Approximatif : suppose le BPA à peu près
     stable sur la période, ce qui n'est pas vrai pour une valeur très cyclique ou en
-    forte croissance des bénéfices — à prendre comme indication, pas comme vérité.
+    forte croissance des bénéfices, à prendre comme indication, pas comme vérité.
     Série vide si le BPA n'est pas disponible."""
     info = _get_ticker_info(ticker)
     trailing_pe = info.get("trailingPE")
@@ -156,4 +156,22 @@ def get_stock_valuation(ticker: str) -> dict:
         "market_cap": info.get("marketCap"),
         "pe_5y_mean": pe_5y_mean,
         "pe_5y_percentile": pe_5y_percentile,
+    }
+
+
+def get_dcf_inputs(ticker: str) -> dict:
+    """Intrants DCF les plus récents pour une action : FCF déjà calculé par Yahoo Finance
+    (freeCashflow, TTM), dette totale, trésorerie, nombre d'actions, prix courant. Réutilise
+    _get_ticker_info (déjà mis en cache par get_stock_valuation si l'action a déjà été chargée) :
+    aucun appel réseau supplémentaire dans ce cas. `fcf`/`shares_outstanding` valent None si
+    Yahoo Finance ne les fournit pas pour ce titre (fréquent pour certaines actions non
+    américaines), à l'appelant de gérer ce cas comme "DCF indisponible"."""
+    info = _get_ticker_info(ticker)
+    return {
+        "fcf": info.get("freeCashflow"),
+        "total_debt": info.get("totalDebt") or 0,
+        "total_cash": info.get("totalCash") or 0,
+        "shares_outstanding": info.get("sharesOutstanding"),
+        "price": info.get("currentPrice") or info.get("regularMarketPrice"),
+        "currency": info.get("currency") or "N/A",
     }

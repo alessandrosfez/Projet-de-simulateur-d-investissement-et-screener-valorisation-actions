@@ -1,7 +1,7 @@
 """
 Moteur de calcul pur : simulation Monte Carlo (paramétrique ou bootstrap), DCA,
 frais, fiscalité, et optimisation de poids de portefeuille. Aucune dépendance
-sur Dash/Plotly/yfinance — c'est ce que couvre test_engine.py.
+sur Dash/Plotly/yfinance : c'est ce que couvre test_engine.py.
 """
 import numpy as np
 import pandas as pd
@@ -123,9 +123,13 @@ def withdrawal_schedule(n_months_decum: int, monthly_amount: float, inflation_pc
     return monthly_amount * (1 + inflation_pct / 100) ** years
 
 
-def inject_shock(returns: np.ndarray, shock_pct: float, shock_duration: int, start_month, rng) -> np.ndarray:
+def inject_shock(returns: np.ndarray, shock_pct: float, shock_duration: int, start_month, rng):
     """Remplace une fenêtre de rendements par un choc. `returns` peut être (n_sims, n_months) ou
-    (n_sims, n_months, k) ; `start_month=None` tire un moment de choc indépendant par simulation."""
+    (n_sims, n_months, k) ; `start_month=None` tire un moment de choc indépendant par simulation.
+    Renvoie (rendements_choqués, mois_de_départ) : mois_de_départ est un tableau (n_sims,) si
+    start_month=None (un tirage par simulation, exploitable pour visualiser le risque de séquence
+    des rendements, voir results.build_sequence_risk_series), sinon None (même mois pour toutes
+    les simulations, rien à comparer)."""
     shocked = returns.copy()
     n_sims, n_months = shocked.shape[0], shocked.shape[1]
     monthly_shock_return = (1 + shock_pct / 100) ** (1 / shock_duration) - 1
@@ -133,10 +137,10 @@ def inject_shock(returns: np.ndarray, shock_pct: float, shock_duration: int, sta
         starts = rng.integers(0, max(n_months - shock_duration, 1), size=n_sims)
         for s in range(n_sims):
             shocked[s, starts[s]:starts[s] + shock_duration, ...] = monthly_shock_return
-    else:
-        end = min(start_month + shock_duration, n_months)
-        shocked[:, start_month:end, ...] = monthly_shock_return
-    return shocked
+        return shocked, starts
+    end = min(start_month + shock_duration, n_months)
+    shocked[:, start_month:end, ...] = monthly_shock_return
+    return shocked, None
 
 
 def to_display_values(portfolio_value, invested_capital, years_axis, inflation_pct, real: bool):
@@ -231,7 +235,7 @@ def suggest_optimal_weights(aligned_hist: pd.DataFrame, step_pct: int = 5, shrin
     vers des solutions de coin (tout sur l'actif qui a eu le plus de chance historiquement).
     On les "shrink" donc vers leur moyenne d'ensemble (aucune vue différenciée par défaut),
     ce qui stabilise fortement l'allocation suggérée. `mu_override_pct` (liste de rendements
-    annuels en %, ou None par actif) remplace directement — sans shrinkage — la moyenne
+    annuels en %, ou None par actif) remplace directement (sans shrinkage) la moyenne
     historique de l'actif concerné : c'est déjà une hypothèse choisie, pas un estimateur bruité.
     """
     names = list(aligned_hist.columns)
@@ -265,3 +269,55 @@ def suggest_optimal_weights(aligned_hist: pd.DataFrame, step_pct: int = 5, shrin
     vol_weights = dict(zip(names, (best_vol_w * 100).round(0))) if best_vol_w is not None else None
     rp_weights = dict(zip(names, (best_rp_w * 100).round(0))) if best_rp_w is not None else None
     return sharpe_weights, vol_weights, rp_weights
+
+
+# ============================================================
+# DCF (flux de trésorerie actualisés) : valorisation intrinsèque d'une action
+# ============================================================
+
+def project_fcf(last_fcf: float, growth_rate_pct: float, n_years: int) -> np.ndarray:
+    """FCF (free cash flow) projeté sur n_years, croissance annuelle constante."""
+    years = np.arange(1, n_years + 1)
+    return last_fcf * (1 + growth_rate_pct / 100) ** years
+
+
+def terminal_value_gordon(final_fcf: float, terminal_growth_pct: float, discount_rate_pct: float) -> float:
+    """Valeur terminale (Gordon-Shapiro) à la fin de l'horizon de projection : capitalise le
+    dernier FCF projeté en rente perpétuelle croissante. N'a de sens que si discount_rate_pct >
+    terminal_growth_pct (sinon dénominateur négatif ou nul), à valider par l'appelant."""
+    g, r = terminal_growth_pct / 100, discount_rate_pct / 100
+    return final_fcf * (1 + g) / (r - g)
+
+
+def discount_to_present(cash_flows: np.ndarray, discount_rate_pct: float) -> np.ndarray:
+    """Valeur actuelle de chaque flux futur (le flux d'indice i, en années depuis aujourd'hui,
+    est actualisé sur i+1 ans)."""
+    r = discount_rate_pct / 100
+    years = np.arange(1, len(cash_flows) + 1)
+    return cash_flows / (1 + r) ** years
+
+
+def compute_dcf_fair_value(last_fcf: float, growth_rate_pct: float, discount_rate_pct: float,
+                            terminal_growth_pct: float, n_years: int, net_debt: float,
+                            shares_outstanding: float):
+    """DCF non levier (FCFF) : projette le FCF, l'actualise avec une valeur terminale, retranche
+    la dette nette pour passer de la valeur d'entreprise à la valeur des capitaux propres, puis
+    divise par le nombre d'actions. Renvoie None si les hypothèses sont incohérentes (croissance
+    terminale >= taux d'actualisation) ou si le nombre d'actions est inconnu/nul."""
+    if discount_rate_pct <= terminal_growth_pct:
+        return None
+    if not shares_outstanding or shares_outstanding <= 0:
+        return None
+
+    projected = project_fcf(last_fcf, growth_rate_pct, n_years)
+    pv_flows = discount_to_present(projected, discount_rate_pct)
+    terminal_value = terminal_value_gordon(projected[-1], terminal_growth_pct, discount_rate_pct)
+    pv_terminal_value = terminal_value / (1 + discount_rate_pct / 100) ** n_years
+
+    enterprise_value = float(pv_flows.sum() + pv_terminal_value)
+    equity_value = enterprise_value - net_debt
+    return {
+        "enterprise_value": enterprise_value,
+        "equity_value": equity_value,
+        "fair_value_per_share": equity_value / shares_outstanding,
+    }
