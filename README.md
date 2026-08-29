@@ -31,9 +31,14 @@ but éducatif, pas un conseil en investissement.
 ## Démarrage rapide
 
 ```bash
-cd portfolio_projection && pip install -r requirements.txt && python app.py   # http://localhost:8050
-cd stock_valuation && pip install -r requirements.txt && python app.py       # http://localhost:8051
+pip install -r portfolio_projection/requirements.txt -r stock_valuation/requirements.txt
+python run_both.py
 ```
 
-Voir le README de chaque dossier pour le détail des fonctionnalités, la
-méthodologie, les tests et Docker.
+Lance les deux outils en parallèle (http://localhost:8050 et
+http://localhost:8051), Ctrl+C pour tout arrêter. Pur confort de
+lancement : `run_both.py` ne crée aucun lien entre les deux projets, il se
+contente de démarrer deux processus indépendants.
+
+Pour lancer un seul des deux (ou via Docker), voir le README du dossier
+correspondant.
