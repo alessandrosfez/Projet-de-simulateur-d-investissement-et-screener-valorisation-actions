@@ -10,19 +10,20 @@ import json
 import dash
 import dash_bootstrap_components as dbc
 import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 from dash import Input, Output, State, dcc, html
 
 import layout
 from app_instance import app
 from charts import make_correlation_heatmap, make_sequence_risk_figure
-from constants import N_PORTFOLIOS_MAX, TICKER_KEYS, TICKERS
+from constants import BACKTEST_ANCHORS, N_PORTFOLIOS_MAX, TICKER_KEYS, TICKERS
 from engine import inject_shock, simulate_index_returns, simulate_portfolio_asset_returns, suggest_optimal_weights
 from i18n import L, PALETTE, PALETTE_CODES, PALETTE_NAMES, PALETTES
 from market_data import get_aligned_returns, get_monthly_returns
 from results import (
     build_envelope_comparison_figure, build_metric_cards, build_metrics_outputs, build_schedules,
-    build_sequence_risk_series, compute_results, render_objective_result,
+    build_sequence_risk_series, compute_results, render_objective_result, render_rolling_backtest_result,
 )
 
 # ============================================================
@@ -191,10 +192,12 @@ def upload_config(contents):
     Output("tab1-sequence-risk-container", "style"),
     Output("tab1-sequence-risk-chart", "figure"),
     Output("tab1-objective-result", "children"),
+    Output("tab1-rolling-backtest-result", "children"),
     Input("indices-checklist", "value"),
     Input("source-radio", "value"),
     Input("lookback-slider", "value"),
     Input("horizon-slider", "value"),
+    Input("backtest-anchor-radio", "value"),
     Input("decumulation-checkbox", "value"),
     Input("decumulation-years-slider", "value"),
     Input("withdrawal-monthly-slider", "value"),
@@ -227,7 +230,7 @@ def upload_config(contents):
     Input("objective-percentile-radio", "value"),
     *[Input(f"mu-override-t{i}", "value") for i in range(len(TICKER_KEYS))],
 )
-def update_tab1(indices, source, lookback_years, horizon_years, decum_val, decumulation_years,
+def update_tab1(indices, source, lookback_years, horizon_years, backtest_anchor, decum_val, decumulation_years,
                  withdrawal_monthly, method, block_size, crisis_val, shock_pct, shock_duration,
                  shock_timing, shock_year, apport_constant, apport_initial, apport_final,
                  annual_fee_pct, inflation_pct, display_mode, tax_val, envelope, cto_method, cto_tmi,
@@ -242,7 +245,7 @@ def update_tab1(indices, source, lookback_years, horizon_years, decum_val, decum
     if not indices:
         return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, {}, "",
                 dbc.Alert(L(lang, "tab1_warning_select_index"), color="warning"), {"display": "none"}, empty_fig,
-                {"display": "none"}, empty_fig, "")
+                {"display": "none"}, empty_fig, "", "")
 
     enable_decumulation = bool(decum_val and "on" in decum_val)
     inject_crisis = bool(crisis_val and "on" in crisis_val)
@@ -261,6 +264,8 @@ def update_tab1(indices, source, lookback_years, horizon_years, decum_val, decum
 
     rng_shock = np.random.default_rng(seed + 1)
     shock_start_month = shock_year * 12 if (inject_crisis and shock_timing == "fixed") else None
+    anchor_key = backtest_anchor or "recent"
+    anchor_raw = BACKTEST_ANCHORS.get(anchor_key)
 
     items, backtest_items, warnings = [], [], []
     first_shock_months = None
@@ -271,6 +276,11 @@ def update_tab1(indices, source, lookback_years, horizon_years, decum_val, decum
         except ValueError as exc:
             warnings.append(str(exc))
             continue
+        if anchor_raw is not None and returns.index.min() > pd.Timestamp(anchor_raw):
+            warnings.append(L(
+                lang, "backtest_anchor_truncated", label=name, anchor=L(lang, f"backtest_anchor_{anchor_key}"),
+                available_from=returns.index.min().strftime("%Y-%m"),
+            ))
         mu_override = mu_overrides[TICKER_KEYS.index(name)]
         monthly_returns = simulate_index_returns(
             returns, n_months, n_sims, seed, method, block_size=block_size, mu_override_pct=mu_override,
@@ -280,25 +290,31 @@ def update_tab1(indices, source, lookback_years, horizon_years, decum_val, decum
             if first_shock_months is None:
                 first_shock_months = shock_months
         items.append((name, monthly_returns))
-        backtest_items.append((name, returns.values))
+        backtest_items.append((name, returns))
 
     if not items:
         msg = " ".join(warnings) or L(lang, "tab1_no_data")
         return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, {}, "",
                 dbc.Alert(msg, color="danger"), {"display": "none"}, empty_fig,
-                {"display": "none"}, empty_fig, "")
+                {"display": "none"}, empty_fig, "", "")
 
-    all_metrics, figs, series_by_strategy = compute_results(
+    all_metrics, figs, series_by_strategy, backtest_truncated = compute_results(
         items, years_axis, schedules, annual_fee_pct, apply_tax, tax_rate, inflation_pct, display_real,
         lower_pct, upper_pct, enable_decumulation, phase_boundary_years, lang=lang, palette=palette, dark=dark,
-        backtest_items=backtest_items,
+        backtest_items=backtest_items, backtest_anchor_date=anchor_raw,
     )
     cards = build_metric_cards(all_metrics, series_by_strategy, apply_tax, tax_rate, lang=lang)
     table_data, table_columns, csv_data, table_tooltip_header = build_metrics_outputs(all_metrics, lang, lower_pct, upper_pct)
+    if backtest_truncated:
+        warnings.append(L(lang, "backtest_truncated_note", labels=", ".join(backtest_truncated)))
     warning_alert = dbc.Alert(" ".join(warnings), color="warning") if warnings else ""
     objective_result = render_objective_result(
         all_metrics, schedules, items, objective_val, objective_amount, objective_percentile,
         horizon_years, enable_decumulation, lang,
+    )
+    rolling_backtest_result = render_rolling_backtest_result(
+        backtest_items, schedules["constant"], years_axis, annual_fee_pct, apply_tax, tax_rate,
+        inflation_pct, display_real, objective_val, objective_amount, enable_decumulation, lang,
     )
 
     compare_style = {"display": "none"}
@@ -328,6 +344,7 @@ def update_tab1(indices, source, lookback_years, horizon_years, decum_val, decum
         figs.get("progressive", empty_fig),
         cards, table_data, table_columns, style_header, style_cell, style_data, table_tooltip_header, csv_data,
         warning_alert, compare_style, compare_fig, sequence_risk_style, sequence_risk_fig, objective_result,
+        rolling_backtest_result,
     )
 
 
@@ -467,12 +484,14 @@ _tab2_name_inputs = [Input(f"name-p{p}", "value") for p in range(N_PORTFOLIOS_MA
     Output("tab2-sequence-risk-container", "style"),
     Output("tab2-sequence-risk-chart", "figure"),
     Output("tab2-objective-result", "children"),
+    Output("tab2-rolling-backtest-result", "children"),
     Input("n-portfolios-input", "value"),
     *_tab2_name_inputs,
     *_tab2_weight_inputs,
     Input("source-radio", "value"),
     Input("lookback-slider", "value"),
     Input("horizon-slider", "value"),
+    Input("backtest-anchor-radio", "value"),
     Input("decumulation-checkbox", "value"),
     Input("decumulation-years-slider", "value"),
     Input("withdrawal-monthly-slider", "value"),
@@ -517,7 +536,7 @@ def update_tab2(n_portfolios, *args):
     rest = rest[:-3]
     dark_mode = rest[-1]
     rest = rest[:-1]
-    (source, lookback_years, horizon_years, decum_val, decumulation_years, withdrawal_monthly,
+    (source, lookback_years, horizon_years, backtest_anchor, decum_val, decumulation_years, withdrawal_monthly,
      method, block_size, crisis_val, shock_pct, shock_duration, shock_timing, shock_year,
      apport_constant, apport_initial, apport_final, annual_fee_pct, inflation_pct, display_mode,
      tax_val, envelope, cto_method, cto_tmi, compare_val, band_width, n_sims, seed, lang, palette_code) = rest
@@ -546,7 +565,7 @@ def update_tab2(n_portfolios, *args):
     if not portfolios:
         return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, {}, "",
                 dbc.Alert(L(lang, "portfolio_warning_zero"), color="warning"),
-                {"display": "none"}, empty_fig, {"display": "none"}, empty_fig, "")
+                {"display": "none"}, empty_fig, {"display": "none"}, empty_fig, "", "")
 
     source_key = "etf" if source == "etf" else "indice"
     try:
@@ -554,11 +573,11 @@ def update_tab2(n_portfolios, *args):
     except ValueError as exc:
         return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, {}, "",
                 dbc.Alert(str(exc), color="danger"), {"display": "none"}, empty_fig,
-                {"display": "none"}, empty_fig, "")
+                {"display": "none"}, empty_fig, "", "")
     if aligned.empty:
         return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, {}, "",
                 dbc.Alert(L(lang, "no_aligned_data"), color="danger"), {"display": "none"}, empty_fig,
-                {"display": "none"}, empty_fig, "")
+                {"display": "none"}, empty_fig, "", "")
 
     enable_decumulation = bool(decum_val and "on" in decum_val)
     inject_crisis = bool(crisis_val and "on" in crisis_val)
@@ -577,6 +596,15 @@ def update_tab2(n_portfolios, *args):
 
     rng_shock = np.random.default_rng(seed + 1)
     shock_start_month = shock_year * 12 if (inject_crisis and shock_timing == "fixed") else None
+    anchor_key = backtest_anchor or "recent"
+    anchor_raw = BACKTEST_ANCHORS.get(anchor_key)
+
+    tab2_warnings = []
+    if anchor_raw is not None and aligned.index.min() > pd.Timestamp(anchor_raw):
+        tab2_warnings.append(L(
+            lang, "backtest_anchor_truncated", label=L(lang, "tab_portefeuille"),
+            anchor=L(lang, f"backtest_anchor_{anchor_key}"), available_from=aligned.index.min().strftime("%Y-%m"),
+        ))
 
     asset_returns = simulate_portfolio_asset_returns(
         aligned, n_months, n_sims, seed, method, block_size=block_size, mu_override_pct=mu_overrides,
@@ -590,18 +618,25 @@ def update_tab2(n_portfolios, *args):
         weights_vec = np.array([normalized.get(name, 0.0) for name in aligned.columns])
         portfolio_returns = asset_returns @ weights_vec
         items.append((portfolio_name, portfolio_returns))
-        backtest_items.append((portfolio_name, aligned.values @ weights_vec))
+        backtest_items.append((portfolio_name, pd.Series(aligned.values @ weights_vec, index=aligned.index)))
 
-    all_metrics, figs, series_by_strategy = compute_results(
+    all_metrics, figs, series_by_strategy, backtest_truncated = compute_results(
         items, years_axis, schedules, annual_fee_pct, apply_tax, tax_rate, inflation_pct, display_real,
         lower_pct, upper_pct, enable_decumulation, phase_boundary_years, lang=lang, palette=palette, dark=dark,
-        backtest_items=backtest_items,
+        backtest_items=backtest_items, backtest_anchor_date=anchor_raw,
     )
     cards = build_metric_cards(all_metrics, series_by_strategy, apply_tax, tax_rate, lang=lang)
     table_data, table_columns, csv_data, table_tooltip_header = build_metrics_outputs(all_metrics, lang, lower_pct, upper_pct)
+    if backtest_truncated:
+        tab2_warnings.append(L(lang, "backtest_truncated_note", labels=", ".join(backtest_truncated)))
+    tab2_warning_alert = dbc.Alert(" ".join(tab2_warnings), color="warning") if tab2_warnings else ""
     objective_result = render_objective_result(
         all_metrics, schedules, items, objective_val, objective_amount, objective_percentile,
         horizon_years, enable_decumulation, lang,
+    )
+    rolling_backtest_result = render_rolling_backtest_result(
+        backtest_items, schedules["constant"], years_axis, annual_fee_pct, apply_tax, tax_rate,
+        inflation_pct, display_real, objective_val, objective_amount, enable_decumulation, lang,
     )
 
     compare_style = {"display": "none"}
@@ -630,7 +665,8 @@ def update_tab2(n_portfolios, *args):
         figs.get("constant", empty_fig),
         figs.get("progressive", empty_fig),
         cards, table_data, table_columns, style_header, style_cell, style_data, table_tooltip_header, csv_data,
-        "", compare_style, compare_fig, sequence_risk_style, sequence_risk_fig, objective_result,
+        tab2_warning_alert, compare_style, compare_fig, sequence_risk_style, sequence_risk_fig, objective_result,
+        rolling_backtest_result,
     )
 
 

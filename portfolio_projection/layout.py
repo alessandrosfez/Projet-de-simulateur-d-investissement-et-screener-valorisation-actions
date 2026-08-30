@@ -8,7 +8,9 @@ callbacks Dash. Ce module ne dépend jamais de callbacks.py ni de l'instance
 import dash_bootstrap_components as dbc
 from dash import dash_table, dcc, html
 
-from constants import CTO_FLAT_TAX_RATE, N_PORTFOLIOS_MAX, PEA_TAX_RATE, TICKER_KEYS, TICKERS, ETF_NAMES
+from constants import (
+    BACKTEST_ANCHOR_KEYS, CTO_FLAT_TAX_RATE, N_PORTFOLIOS_MAX, PEA_TAX_RATE, TICKER_KEYS, TICKERS, ETF_NAMES,
+)
 from i18n import L
 
 GRAPH_CONFIG = {
@@ -49,6 +51,7 @@ CONFIG_FIELDS = [
     ("shock_duration", "shock-duration-slider", "value"),
     ("shock_timing", "shock-timing-radio", "value"),
     ("shock_year", "shock-year-slider", "value"),
+    ("backtest_anchor", "backtest-anchor-radio", "value"),
     ("apport_constant", "apport-constant-slider", "value"),
     ("apport_initial", "apport-initial-slider", "value"),
     ("apport_final", "apport-final-slider", "value"),
@@ -227,6 +230,12 @@ def build_sidebar(lang, v=None):
         ),
         slider_block(L(lang, "lookback_label"), "lookback-slider", 5, 30, gv(v, "lookback-slider", 20)),
         slider_block(L(lang, "horizon_label"), "horizon-slider", 5, 40, gv(v, "horizon-slider", 20)),
+        html.Div([dbc.Label(L(lang, "backtest_anchor_label"), className="mb-0")] + info_tooltip("backtest-anchor-info", L(lang, "backtest_anchor_help"))),
+        dcc.RadioItems(
+            id="backtest-anchor-radio",
+            options=[{"label": L(lang, f"backtest_anchor_{k}"), "value": k} for k in BACKTEST_ANCHOR_KEYS],
+            value=gv(v, "backtest-anchor-radio", "recent"), labelStyle={"display": "block"}, className="mb-2",
+        ),
         html.Div([dbc.Label(L(lang, "method_label"), className="mb-0")] + info_tooltip("method-radio-info", L(lang, "method_help"))),
         dcc.RadioItems(
             id="method-radio",
@@ -426,6 +435,7 @@ def build_tab1(lang, v=None):
             ]),
             html.Div(id="tab1-metric-cards"),
             html.Div(id="tab1-objective-result", className="mt-2"),
+            html.Div(id="tab1-rolling-backtest-result", className="mt-2"),
             html.H5(L(lang, "metrics_title"), className="mt-3"),
             dash_table.DataTable(id="tab1-metrics-table", style_table={"overflowX": "auto"}, style_cell={"fontSize": "0.8rem", "textAlign": "left"}, tooltip_delay=0, tooltip_duration=None),
             html.Div([
@@ -522,6 +532,7 @@ def build_tab2(lang, v=None):
             ]),
             html.Div(id="tab2-metric-cards"),
             html.Div(id="tab2-objective-result", className="mt-2"),
+            html.Div(id="tab2-rolling-backtest-result", className="mt-2"),
             html.H5(L(lang, "metrics_title_portfolio"), className="mt-3"),
             dash_table.DataTable(id="tab2-metrics-table", style_table={"overflowX": "auto"}, style_cell={"fontSize": "0.8rem", "textAlign": "left"}, tooltip_delay=0, tooltip_duration=None),
             html.Div([

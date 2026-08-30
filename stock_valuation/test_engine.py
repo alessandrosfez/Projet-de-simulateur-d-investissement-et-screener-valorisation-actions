@@ -52,6 +52,112 @@ def test_compute_dcf_fair_value_net_cash_increases_equity_value():
     assert result["equity_value"] > result["enterprise_value"]
 
 
+# ---------- Scénarios Bear/Base/Bull ----------
+
+_SCENARIO_BASE_ARGS = dict(
+    last_fcf=100.0, base_growth_pct=5.0, base_discount_pct=8.0, terminal_growth_pct=2.0,
+    n_years=5, net_debt=200.0, shares_outstanding=100.0,
+)
+
+
+def test_compute_scenario_dcf_fair_values_weighted_average_arithmetic():
+    scenarios = m.compute_scenario_dcf_fair_values(
+        **_SCENARIO_BASE_ARGS, growth_offset_pct=2.0, discount_offset_pct=1.0,
+        weight_bear=25, weight_base=50, weight_bull=25,
+    )
+    assert scenarios["bear"] is not None and scenarios["base"] is not None and scenarios["bull"] is not None
+    expected = (
+        scenarios["bear"]["fair_value_per_share"] * 25
+        + scenarios["base"]["fair_value_per_share"] * 50
+        + scenarios["bull"]["fair_value_per_share"] * 25
+    ) / 100
+    assert scenarios["weighted_fair_value"] == pytest.approx(expected)
+    # Bear (croissance réduite, taux augmenté) doit valoriser moins que Bull (l'inverse).
+    assert scenarios["bear"]["fair_value_per_share"] < scenarios["base"]["fair_value_per_share"]
+    assert scenarios["bull"]["fair_value_per_share"] > scenarios["base"]["fair_value_per_share"]
+
+
+def test_compute_scenario_dcf_fair_values_renormalization_invariance():
+    """Le résultat pondéré ne doit dépendre que du RATIO des poids, pas de leur échelle absolue."""
+    a = m.compute_scenario_dcf_fair_values(
+        **_SCENARIO_BASE_ARGS, growth_offset_pct=2.0, discount_offset_pct=1.0,
+        weight_bear=25, weight_base=50, weight_bull=25,
+    )
+    b = m.compute_scenario_dcf_fair_values(
+        **_SCENARIO_BASE_ARGS, growth_offset_pct=2.0, discount_offset_pct=1.0,
+        weight_bear=10, weight_base=20, weight_bull=10,
+    )
+    assert a["weighted_fair_value"] == pytest.approx(b["weighted_fair_value"])
+
+
+def test_compute_scenario_dcf_fair_values_invalid_scenario_excluded_from_average():
+    """Un écart de taux d'actualisation assez agressif pour faire tomber le scénario Bull sous la
+    croissance terminale doit le rendre None sans casser les autres, la moyenne pondérée se
+    renormalisant sur les scénarios restants."""
+    scenarios = m.compute_scenario_dcf_fair_values(
+        **_SCENARIO_BASE_ARGS, growth_offset_pct=2.0, discount_offset_pct=6.5,  # 8 - 6.5 = 1.5 < terminal_growth 2.0
+        weight_bear=25, weight_base=50, weight_bull=25,
+    )
+    assert scenarios["bull"] is None
+    assert scenarios["bear"] is not None and scenarios["base"] is not None
+    expected = (
+        scenarios["bear"]["fair_value_per_share"] * 25 + scenarios["base"]["fair_value_per_share"] * 50
+    ) / 75
+    assert scenarios["weighted_fair_value"] == pytest.approx(expected)
+
+
+def test_compute_scenario_dcf_fair_values_none_when_all_weights_zero():
+    scenarios = m.compute_scenario_dcf_fair_values(
+        **_SCENARIO_BASE_ARGS, growth_offset_pct=2.0, discount_offset_pct=1.0,
+        weight_bear=0, weight_base=0, weight_bull=0,
+    )
+    assert scenarios["weighted_fair_value"] is None
+
+
+# ---------- Grille de sensibilité DCF ----------
+
+def test_compute_dcf_sensitivity_grid_shape_and_center_cell():
+    growth_values, discount_values, grid = m.compute_dcf_sensitivity_grid(
+        last_fcf=100.0, base_growth_pct=5.0, base_discount_pct=8.0, terminal_growth_pct=2.0,
+        n_years=5, net_debt=200.0, shares_outstanding=100.0, growth_step_pct=5, discount_step_pct=1,
+        grid_size=5,
+    )
+    assert len(growth_values) == 5 and len(discount_values) == 5
+    assert len(grid) == 5 and all(len(row) == 5 for row in grid)
+    half = 5 // 2
+    assert growth_values[half] == pytest.approx(5.0)
+    assert discount_values[half] == pytest.approx(8.0)
+    base_result = m.compute_dcf_fair_value(100.0, 5.0, 8.0, 2.0, 5, 200.0, 100.0)
+    assert grid[half][half] == pytest.approx(base_result["fair_value_per_share"])
+
+
+def test_compute_dcf_sensitivity_grid_monotonic():
+    growth_values, discount_values, grid = m.compute_dcf_sensitivity_grid(
+        last_fcf=100.0, base_growth_pct=5.0, base_discount_pct=8.0, terminal_growth_pct=2.0,
+        n_years=5, net_debt=200.0, shares_outstanding=100.0, growth_step_pct=5, discount_step_pct=1,
+        grid_size=5,
+    )
+    # Ligne fixe : plus le taux d'actualisation (colonnes) augmente, plus la valeur baisse.
+    row = grid[2]
+    assert all(row[j] > row[j + 1] for j in range(len(row) - 1))
+    # Colonne fixe : plus la croissance (lignes) augmente, plus la valeur augmente.
+    col = [grid[i][2] for i in range(len(grid))]
+    assert all(col[i] < col[i + 1] for i in range(len(col) - 1))
+
+
+def test_compute_dcf_sensitivity_grid_none_at_invalid_edge():
+    """Une cellule où le taux d'actualisation descend à/sous la croissance terminale doit valoir
+    None, pas planter ni renvoyer un chiffre trompeur."""
+    growth_values, discount_values, grid = m.compute_dcf_sensitivity_grid(
+        last_fcf=100.0, base_growth_pct=5.0, base_discount_pct=3.0, terminal_growth_pct=2.0,
+        n_years=5, net_debt=200.0, shares_outstanding=100.0, growth_step_pct=5, discount_step_pct=1,
+        grid_size=5,
+    )
+    # base_discount=3, discount_step=1, grid_size=5 -> colonnes [1,2,3,4,5] : 1 et 2 <= terminal_growth (2.0)
+    assert grid[0][0] is None
+    assert grid[0][1] is None
+
+
 # ---------- Comparables ----------
 
 def test_compute_comparables_fair_value_scales_price_by_multiple_ratio():

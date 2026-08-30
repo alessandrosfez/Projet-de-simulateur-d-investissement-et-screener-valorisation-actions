@@ -17,9 +17,9 @@ import layout
 from app_instance import app
 from charts import empty_figure_with_message
 from constants import UNIVERSE_TICKERS
-from engine import compute_comparables_fair_value, compute_dcf_fair_value
+from engine import compute_comparables_fair_value, compute_dcf_sensitivity_grid, compute_scenario_dcf_fair_values
 from i18n import L, PALETTE, PALETTE_CODES, PALETTE_NAMES, PALETTES
-from market_data import get_dcf_inputs, get_stock_pe_history, get_stock_valuation
+from market_data import get_dcf_inputs, get_stock_pe_history, get_stock_quality_metrics, get_stock_valuation
 
 # ============================================================
 # Habillage global (langue, palette, thème) : identique dans l'esprit à
@@ -338,6 +338,70 @@ def update_pe_history_chart(selected_rows, lang, palette_code, dark_mode, virtua
 
 
 @app.callback(
+    Output("dcf-scenario-collapse", "is_open"),
+    Input("btn-toggle-dcf-scenarios", "n_clicks"),
+    State("dcf-scenario-collapse", "is_open"),
+    prevent_initial_call=True,
+)
+def toggle_dcf_scenarios(n_clicks, is_open):
+    return not is_open
+
+
+@app.callback(
+    Output("dcf-scenario-weights-caption", "children"),
+    Input("dcf-weight-bear-input", "value"),
+    Input("dcf-weight-base-input", "value"),
+    Input("dcf-weight-bull-input", "value"),
+    Input("lang-radio", "value"),
+)
+def update_dcf_scenario_weights_caption(weight_bear, weight_base, weight_bull, lang):
+    lang = lang or "fr"
+    weights = [weight_bear or 0, weight_base or 0, weight_bull or 0]
+    total = sum(weights)
+    if total == 0:
+        return ""
+    bear, base, bull = (w / total * 100 for w in weights)
+    return L(lang, "dcf_scenario_weights_caption", bear=bear, base=base, bull=bull)
+
+
+@app.callback(
+    Output("quality-metrics-card", "children"),
+    Input("stocks-table", "derived_virtual_selected_rows"),
+    Input("lang-radio", "value"),
+    State("stocks-table", "derived_virtual_data"),
+)
+def update_quality_metrics(selected_rows, lang, virtual_data):
+    lang = lang or "fr"
+    if not selected_rows or not virtual_data:
+        return html.Div(L(lang, "quality_hint_default"), className="text-muted")
+
+    row = virtual_data[selected_rows[0]]
+    ticker = row["Ticker"]
+    m = get_stock_quality_metrics(ticker)
+
+    def stat(label_key, value, suffix=""):
+        text = f"{value:.1f}{suffix}" if value is not None else "N/A"
+        return dbc.Col([
+            html.Small(L(lang, label_key), className="text-muted d-block"),
+            html.H6(text),
+        ], width=3, className="mb-2")
+
+    stats = [
+        stat("quality_roic_label", m["roic"], " %"),
+        stat("quality_roe_label", m["return_on_equity"], " %"),
+        stat("quality_roa_label", m["return_on_assets"], " %"),
+        stat("quality_revenue_growth_label", m["revenue_growth"], " %"),
+        stat("quality_gross_margin_label", m["gross_margin"], " %"),
+        stat("quality_operating_margin_label", m["operating_margin"], " %"),
+        stat("quality_profit_margin_label", m["profit_margin"], " %"),
+        stat("quality_debt_to_equity_label", m["debt_to_equity"]),
+        stat("quality_current_ratio_label", m["current_ratio"]),
+        stat("quality_quick_ratio_label", m["quick_ratio"]),
+    ]
+    return dbc.Card(dbc.CardBody(dbc.Row(stats)))
+
+
+@app.callback(
     Output("dcf-result", "children"),
     Output("dcf-chart", "figure"),
     Input("stocks-table", "derived_virtual_selected_rows"),
@@ -345,12 +409,18 @@ def update_pe_history_chart(selected_rows, lang, palette_code, dark_mode, virtua
     Input("dcf-discount-slider", "value"),
     Input("dcf-terminal-growth-slider", "value"),
     Input("dcf-horizon-slider", "value"),
+    Input("dcf-growth-offset-slider", "value"),
+    Input("dcf-discount-offset-slider", "value"),
+    Input("dcf-weight-bear-input", "value"),
+    Input("dcf-weight-base-input", "value"),
+    Input("dcf-weight-bull-input", "value"),
     Input("lang-radio", "value"),
     Input("palette-dropdown", "value"),
     Input("dark-mode-switch", "value"),
     State("stocks-table", "derived_virtual_data"),
 )
 def update_dcf(selected_rows, growth_pct, discount_pct, terminal_growth_pct, horizon_years,
+                growth_offset_pct, discount_offset_pct, weight_bear, weight_base, weight_bull,
                 lang, palette_code, dark_mode, virtual_data):
     lang = lang or "fr"
     palette = PALETTES.get(palette_code, PALETTE)
@@ -373,22 +443,34 @@ def update_dcf(selected_rows, growth_pct, discount_pct, terminal_growth_pct, hor
     # une valeur capitalistique en pleine phase d'investissement (énergie, télécoms...) sans que ce
     # soit un signe de difficulté. On le signale au lieu d'afficher un chiffre trompeur, mais on
     # garde les comparables ci-dessous : eux ne dépendent pas du FCF.
+    growth_offset_pct = growth_offset_pct if growth_offset_pct is not None else 5
+    discount_offset_pct = discount_offset_pct if discount_offset_pct is not None else 2
+    weight_bear = weight_bear if weight_bear is not None else 0
+    weight_base = weight_base if weight_base is not None else 0
+    weight_bull = weight_bull if weight_bull is not None else 0
+
     dcf_blocked_msg = None
     fair_value = None
+    bear_fv, bull_fv, weighted_fv = None, None, None
     if inputs["fcf"] < 0:
         dcf_blocked_msg = L(lang, "dcf_negative_fcf", name=name)
     elif discount_pct <= terminal_growth_pct:
         dcf_blocked_msg = L(lang, "dcf_invalid_assumptions")
     else:
         net_debt = inputs["total_debt"] - inputs["total_cash"]
-        result = compute_dcf_fair_value(
+        scenarios = compute_scenario_dcf_fair_values(
             inputs["fcf"], growth_pct, discount_pct, terminal_growth_pct, int(horizon_years),
-            net_debt, inputs["shares_outstanding"],
+            net_debt, inputs["shares_outstanding"], growth_offset_pct, discount_offset_pct,
+            weight_bear, weight_base, weight_bull,
         )
+        result = scenarios["base"]
         if result is None:
             dcf_blocked_msg = L(lang, "dcf_invalid_assumptions")
         else:
             fair_value = result["fair_value_per_share"]
+            bear_fv = scenarios["bear"]["fair_value_per_share"] if scenarios["bear"] else None
+            bull_fv = scenarios["bull"]["fair_value_per_share"] if scenarios["bull"] else None
+            weighted_fv = scenarios["weighted_fair_value"]
 
     upside_pct = (fair_value / price - 1) * 100 if (fair_value is not None and price) else None
 
@@ -498,6 +580,21 @@ def update_dcf(selected_rows, growth_pct, discount_pct, terminal_growth_pct, hor
             html.Small(L(lang, "dcf_fair_value_label"), className="text-muted d-block"),
             html.H5(f"{fair_value:,.2f} {currency}".replace(",", " ")),
         ]))
+    if bear_fv is not None:
+        stat_cols.append(dbc.Col([
+            html.Small(L(lang, "dcf_bear_fair_value_label"), className="text-muted d-block"),
+            html.H5(f"{bear_fv:,.2f} {currency}".replace(",", " ")),
+        ]))
+    if bull_fv is not None:
+        stat_cols.append(dbc.Col([
+            html.Small(L(lang, "dcf_bull_fair_value_label"), className="text-muted d-block"),
+            html.H5(f"{bull_fv:,.2f} {currency}".replace(",", " ")),
+        ]))
+    if weighted_fv is not None:
+        stat_cols.append(dbc.Col([
+            html.Small(L(lang, "dcf_weighted_fair_value_label"), className="text-muted d-block"),
+            html.H5(f"{weighted_fv:,.2f} {currency}".replace(",", " ")),
+        ]))
     if comp_fair_value is not None:
         stat_cols.append(dbc.Col([
             html.Small(L(lang, "comp_fair_value_label"), className="text-muted d-block"),
@@ -523,6 +620,28 @@ def update_dcf(selected_rows, growth_pct, discount_pct, terminal_growth_pct, hor
                          style={"cursor": "pointer", "fontSize": "0.85rem"}),
             html.Div(detail_children, className="mt-2"),
         ]))
+    if fair_value is not None:
+        growth_values, discount_values, grid = compute_dcf_sensitivity_grid(
+            inputs["fcf"], growth_pct, discount_pct, terminal_growth_pct, int(horizon_years),
+            net_debt, inputs["shares_outstanding"],
+        )
+        half = len(growth_values) // 2
+        header = html.Thead(html.Tr(
+            [html.Th("")] + [html.Th(f"{d:.1f}%") for d in discount_values]
+        ))
+        body_rows = []
+        for i, g in enumerate(growth_values):
+            cells = [html.Th(f"{g:.1f}%")]
+            for j, val in enumerate(grid[i]):
+                text = f"{val:,.2f} {currency}".replace(",", " ") if val is not None else "N/A"
+                is_center = i == half and j == half
+                cells.append(html.Td(text, className="fw-bold table-active" if is_center else None))
+            body_rows.append(html.Tr(cells))
+        card_children.append(html.Details([
+            html.Summary(L(lang, "dcf_sensitivity_summary"), className="text-muted mt-2",
+                         style={"cursor": "pointer", "fontSize": "0.85rem"}),
+            html.Div(dbc.Table([header, html.Tbody(body_rows)], bordered=True, striped=False, size="sm", className="mt-2")),
+        ]))
     card = dbc.Card(dbc.CardBody(card_children))
 
     bar_labels, bar_values, bar_colors = [], [], []
@@ -530,6 +649,18 @@ def update_dcf(selected_rows, growth_pct, discount_pct, terminal_growth_pct, hor
         bar_labels.append(L(lang, "dcf_fair_value_label"))
         bar_values.append(fair_value)
         bar_colors.append(palette[0])
+    if bear_fv is not None:
+        bar_labels.append(L(lang, "dcf_bear_fair_value_label"))
+        bar_values.append(bear_fv)
+        bar_colors.append(palette[3 % len(palette)])
+    if bull_fv is not None:
+        bar_labels.append(L(lang, "dcf_bull_fair_value_label"))
+        bar_values.append(bull_fv)
+        bar_colors.append(palette[4 % len(palette)])
+    if weighted_fv is not None:
+        bar_labels.append(L(lang, "dcf_weighted_fair_value_label"))
+        bar_values.append(weighted_fv)
+        bar_colors.append(palette[5 % len(palette)])
     if comp_fair_value is not None:
         bar_labels.append(L(lang, "comp_fair_value_label"))
         bar_values.append(comp_fair_value)

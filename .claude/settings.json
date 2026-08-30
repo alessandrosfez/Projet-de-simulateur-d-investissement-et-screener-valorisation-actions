@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python \"C:\\\\Users\\\\aless\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\c--Users-aless-OneDrive-Documents-Projets-pyhton-pea-forecast\\\\9948ffc7-2105-44a8-8275-9cb20649322c\\\\scratchpad\\\\test_lang_switch.py\")",
+      "Bash(python -m pytest test_engine.py -v)",
+      "Bash(python -c \"import app_instance; import layout; import callbacks; import results; import engine; import constants; import i18n; print\\('OK: all modules import cleanly'\\)\")",
+      "Bash(python -c ' *)",
+      "Bash(python -c \"import app_instance; import layout; import callbacks; import engine; import market_data; import constants; import i18n; print\\('OK: all modules import cleanly'\\)\")",
+      "Bash(python -m pip show ruff)",
+      "Bash(python -m ruff --version)",
+      "Bash(python -m pip install ruff)",
+      "Bash(python -m ruff check .)",
+      "Bash(python -m ruff check . --statistics)",
+      "Bash(python -m ruff check . --fix)",
+      "Bash(git checkout *)",
+      "Bash(python -m ruff check portfolio_projection/charts.py portfolio_projection/market_data.py --diff)",
+      "Bash(python -m pytest test_engine.py -q)",
+      "Read(//c/Users/aless/OneDrive/Documents/Projets pyhton/**)",
+      "Bash(python -c \"import sys; sys.path.insert\\(0,'portfolio_projection'\\); import app_instance, layout, callbacks, results, engine, constants, i18n; print\\('portfolio_projection OK'\\)\")",
+      "Bash(python -c \"import sys; sys.path.insert\\(0,'stock_valuation'\\); import app_instance, layout, callbacks, engine, market_data, constants, i18n; print\\('stock_valuation OK'\\)\")",
+      "Bash(python -m pytest test_market_data.py -v)",
+      "Bash(python -m pytest test_market_data.py test_engine.py -q)"
+    ]
+  }
+}

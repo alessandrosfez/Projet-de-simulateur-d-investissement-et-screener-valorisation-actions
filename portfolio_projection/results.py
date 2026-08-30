@@ -12,7 +12,8 @@ from dash import html
 from constants import PEA_TAX_RATE
 from engine import (
     apply_fee, apply_social_tax, compute_objective_contribution, constant_schedule,
-    progressive_schedule, returns_to_dca, summarize, to_display_values, withdrawal_schedule,
+    progressive_schedule, returns_to_dca, rolling_backtest_final_values, summarize, to_display_values,
+    withdrawal_schedule,
 )
 from charts import make_band_figure
 from i18n import L, PALETTE
@@ -37,34 +38,44 @@ def build_schedules(horizon_years, enable_decumulation, decumulation_years, with
 
 
 def _backtest_trajectory(historical_returns, schedule, years_axis, annual_fee_pct, apply_tax, tax_rate,
-                          inflation_pct, display_real):
+                          inflation_pct, display_real, anchor_date=None):
     """Trajectoire réellement observée (une seule séquence historique, pas une simulation) : "si
     j'avais investi il y a n mois avec ce même plan d'apport, où en serais-je aujourd'hui ?".
-    Utilise les n derniers mois de l'historique de calibration (les plus récents, jusqu'à
-    aujourd'hui, pas les plus anciens) pour que la trajectoire se termine bien à la date
-    actuelle. Tronquée à la plus courte des deux séries : un historique de calibration plus court
-    que l'horizon de projection ne peut pas couvrir tout le graphique."""
+
+    Par défaut (anchor_date=None), utilise les n derniers mois de l'historique de calibration (les
+    plus récents, jusqu'à aujourd'hui) pour que la trajectoire se termine à la date actuelle. Si
+    anchor_date est fourni (ex: "2008-01-01"), la trajectoire démarre à cette date réelle à la
+    place ("qu'aurait donné ce plan en partant de ce point précis ?") : `historical_returns` doit
+    alors être un pd.Series avec un DatetimeIndex, pas un tableau brut. Tronquée à la plus courte
+    des deux séries dans les deux cas : un historique plus court que l'horizon de projection ne
+    peut pas couvrir tout le graphique (la trajectoire s'arrête simplement avant la fin)."""
+    if anchor_date is not None:
+        historical_returns = historical_returns[historical_returns.index >= pd.Timestamp(anchor_date)]
     n = min(len(historical_returns), len(schedule))
     if n == 0:
         return None
-    monthly_returns = np.asarray(historical_returns[-n:]).reshape(1, n)
+    window = historical_returns[:n] if anchor_date is not None else historical_returns[-n:]
+    monthly_returns = np.asarray(window).reshape(1, n)
     net_returns = apply_fee(monthly_returns, annual_fee_pct)
     portfolio_value, invested_capital = returns_to_dca(net_returns, schedule[:n])
     portfolio_value = apply_social_tax(portfolio_value, invested_capital, apply_tax, tax_rate)
     portfolio_value, _ = to_display_values(
         portfolio_value, invested_capital, years_axis[:n], inflation_pct, display_real
     )
-    return years_axis[:n], portfolio_value[0]
+    return years_axis[:n], portfolio_value[0], n < len(schedule)
 
 
 def compute_results(items, years_axis, schedules, annual_fee_pct, apply_tax, tax_rate, inflation_pct,
                      display_real, lower_pct, upper_pct, enable_decumulation, phase_boundary_years,
-                     lang="fr", palette=None, dark=False, backtest_items=None):
+                     lang="fr", palette=None, dark=False, backtest_items=None, backtest_anchor_date=None):
     """items: liste de (label, monthly_returns (n_sims, n_months)). all_metrics est indexé par le
     tuple (label, strat_name) : strat_name est une clé stable ("constant"/"progressive"), traduite
-    uniquement à l'affichage. backtest_items : liste optionnelle de (label, rendements_historiques
-    1D), même labels que items. La trajectoire réellement observée est superposée à la bande de
-    percentiles correspondante ("qu'aurait donné cet historique réel ?")."""
+    uniquement à l'affichage. backtest_items : liste optionnelle de (label, rendements_historiques),
+    même labels que items ; si backtest_anchor_date est fourni, chaque série doit être un pd.Series
+    avec un DatetimeIndex (voir _backtest_trajectory). La trajectoire réellement observée est
+    superposée à la bande de percentiles correspondante ("qu'aurait donné cet historique réel ?").
+    Renvoie en plus la liste des labels dont la trajectoire a été tronquée (historique plus court
+    que l'horizon, ou point de départ demandé trop récent pour couvrir tout l'horizon)."""
     all_metrics = {}
     series_by_strategy = {name: [] for name in schedules}
     invested_by_strategy = {}
@@ -88,6 +99,7 @@ def compute_results(items, years_axis, schedules, annual_fee_pct, apply_tax, tax
             series_by_strategy[strat_name].append((label, median, p_low, p_high))
 
     backtest_series_by_strategy = {name: [] for name in schedules}
+    backtest_truncated_labels = set()
     if backtest_items:
         backtest_map = dict(backtest_items)
         for label, _ in items:
@@ -97,11 +109,13 @@ def compute_results(items, years_axis, schedules, annual_fee_pct, apply_tax, tax
             for strat_name, schedule in schedules.items():
                 result = _backtest_trajectory(
                     hist_returns, schedule, years_axis, annual_fee_pct, apply_tax, tax_rate,
-                    inflation_pct, display_real,
+                    inflation_pct, display_real, anchor_date=backtest_anchor_date,
                 )
                 if result is not None:
-                    bt_years, bt_values = result
+                    bt_years, bt_values, truncated = result
                     backtest_series_by_strategy[strat_name].append((label, bt_years, bt_values))
+                    if truncated:
+                        backtest_truncated_labels.add(label)
 
     figs = {}
     for strat_name, series in series_by_strategy.items():
@@ -115,7 +129,7 @@ def compute_results(items, years_axis, schedules, annual_fee_pct, apply_tax, tax
             dark=dark,
             backtest_series=backtest_series_by_strategy.get(strat_name),
         )
-    return all_metrics, figs, series_by_strategy
+    return all_metrics, figs, series_by_strategy, sorted(backtest_truncated_labels)
 
 
 def build_sequence_risk_series(monthly_returns, schedule, annual_fee_pct, apply_tax, tax_rate,
@@ -258,5 +272,38 @@ def render_objective_result(all_metrics, schedules, items, objective_val, object
           years=horizon_years, percentile=L(lang, percentile_label_key)).replace(",", " ")
         for label, amount in rows
     ]
+    body = html.Ul([html.Li(line) for line in lines]) if len(lines) > 1 else lines[0]
+    return dbc.Alert(body, color="info")
+
+
+def render_rolling_backtest_result(backtest_items, schedule, years_axis, annual_fee_pct, apply_tax, tax_rate,
+                                    inflation_pct, display_real, objective_val, objective_amount,
+                                    enable_decumulation, lang):
+    """"Si ce plan avait démarré n'importe quel mois de l'historique, quelle fraction aurait atteint
+    l'objectif ?" — un résultat par item déjà simulé. N'a de sens que si le mode objectif est actif
+    (c'est lui qui définit la cible) et hors décumulation (même hypothèse que
+    render_objective_result : le calcul suppose une phase d'accumulation pure). Réutilise
+    schedule=schedules["constant"], comme compute_objective_contribution."""
+    if not (objective_val and "on" in objective_val) or enable_decumulation or not backtest_items:
+        return ""
+    target = float(objective_amount or 0)
+    lines = []
+    for label, hist_returns in backtest_items:
+        if hist_returns is None or len(hist_returns) == 0:
+            continue
+        final_values = rolling_backtest_final_values(
+            hist_returns, schedule, years_axis, annual_fee_pct, apply_tax, tax_rate, inflation_pct, display_real,
+        )
+        if final_values is None:
+            lines.append(L(lang, "rolling_backtest_insufficient_data_line", label=label))
+            continue
+        rate = round(float((final_values >= target).mean() * 100), 1)
+        lines.append(L(
+            lang, "rolling_backtest_result_line", label=label, rate=rate, n_starts=len(final_values),
+            target=target, min_val=float(final_values.min()), median_val=float(np.median(final_values)),
+            max_val=float(final_values.max()),
+        ).replace(",", " "))
+    if not lines:
+        return ""
     body = html.Ul([html.Li(line) for line in lines]) if len(lines) > 1 else lines[0]
     return dbc.Alert(body, color="info")

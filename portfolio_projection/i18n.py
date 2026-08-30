@@ -144,6 +144,27 @@ TRANSLATIONS = {
         "value_axis": "Valeur (€)",
         "invested_capital_trace": "Capital investi",
         "backtest_trace": "{label} (historique réel)",
+        "backtest_anchor_label": "Point de départ de l'historique superposé",
+        "backtest_anchor_help": "Choisit quelle période réelle sert de trajectoire superposée aux bandes de "
+                                "percentiles (ligne pointillée) : soit les mois les plus récents (se termine "
+                                "aujourd'hui), soit le début d'une crise connue, pour voir \"qu'aurait donné "
+                                "ce plan en partant de là ?\". Nécessite un historique de calibration "
+                                "remontant jusqu'à la date choisie (voir la source \"Indice brut\" pour la "
+                                "plus longue historique).",
+        "backtest_anchor_recent": "Plus récent (se termine aujourd'hui)",
+        "backtest_anchor_2008": "Crise de 2008",
+        "backtest_anchor_2020": "Krach COVID (2020)",
+        "backtest_anchor_2022": "Choc taux/inflation (2022)",
+        "backtest_anchor_truncated": "{label} : l'historique disponible commence en {available_from}, plus "
+                                     "tard que le point de départ demandé ({anchor}) — la trajectoire "
+                                     "affichée démarre à la date réellement disponible.",
+        "backtest_truncated_note": "Trajectoire(s) historique(s) tronquée(s) (historique plus court que "
+                                   "l'horizon) : {labels}.",
+        "rolling_backtest_result_line": "{label} : {rate:.1f} % des {n_starts} points de départ historiques "
+                                        "auraient atteint {target:,.0f} € (valeurs finales : min {min_val:,.0f} € "
+                                        "/ médiane {median_val:,.0f} € / max {max_val:,.0f} €).",
+        "rolling_backtest_insufficient_data_line": "{label} : historique de calibration trop court pour "
+                                                    "calculer un taux de réussite sur cet horizon.",
         "sequence_risk_title": "Risque de séquence des rendements",
         "sequence_risk_intro": "Chaque point est une simulation : sa position horizontale montre "
                                "l'année où le choc de marché est survenu pour elle, sa position "
@@ -332,6 +353,26 @@ TRANSLATIONS = {
         "value_axis": "Value (€)",
         "invested_capital_trace": "Invested capital",
         "backtest_trace": "{label} (actual history)",
+        "backtest_anchor_label": "Overlaid history starting point",
+        "backtest_anchor_help": "Chooses which real period is overlaid on the percentile bands (dotted "
+                                "line): either the most recent months (ending today), or the start of a "
+                                "known crisis, to see \"what would this plan have done starting from there?\". "
+                                "Requires the calibration history to reach back to the chosen date (see the "
+                                "\"Raw index\" source for the longest history).",
+        "backtest_anchor_recent": "Most recent (ends today)",
+        "backtest_anchor_2008": "2008 crisis",
+        "backtest_anchor_2020": "COVID crash (2020)",
+        "backtest_anchor_2022": "Rate/inflation shock (2022)",
+        "backtest_anchor_truncated": "{label}: available history starts in {available_from}, later than the "
+                                     "requested starting point ({anchor}) — the trajectory shown starts at "
+                                     "the actually available date.",
+        "backtest_truncated_note": "Historical trajectory/trajectories truncated (history shorter than the "
+                                   "horizon): {labels}.",
+        "rolling_backtest_result_line": "{label}: {rate:.1f}% of {n_starts} historical starting points would "
+                                        "have reached {target:,.0f} € (final values: min {min_val:,.0f} € / "
+                                        "median {median_val:,.0f} € / max {max_val:,.0f} €).",
+        "rolling_backtest_insufficient_data_line": "{label}: calibration history too short to compute a "
+                                                    "success rate over this horizon.",
         "sequence_risk_title": "Sequence-of-returns risk",
         "sequence_risk_intro": "Each point is one simulation: its horizontal position shows the "
                                "year the market shock hit for that simulation, its vertical "

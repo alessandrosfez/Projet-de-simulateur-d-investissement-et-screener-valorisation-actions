@@ -29,3 +29,16 @@ N_PORTFOLIOS_MAX = 4
 # l'utilisateur aux 17,2 % de prélèvements sociaux (voir layout.compute_cto_tax_rate).
 PEA_TAX_RATE = 0.172
 CTO_FLAT_TAX_RATE = 0.30
+
+# Points de départ réels proposés pour la trajectoire historique superposée aux bandes de
+# percentiles (voir results._backtest_trajectory) : au lieu de toujours prendre les derniers mois
+# de l'historique de calibration ("recent"), on peut ancrer la trajectoire au début d'une crise
+# connue pour voir "qu'aurait donné ce plan en partant de là ?". None = comportement par défaut
+# (derniers mois, se termine aujourd'hui).
+BACKTEST_ANCHORS = {
+    "recent": None,
+    "2008": "2008-01-01",
+    "2020": "2020-02-01",
+    "2022": "2022-01-01",
+}
+BACKTEST_ANCHOR_KEYS = list(BACKTEST_ANCHORS.keys())

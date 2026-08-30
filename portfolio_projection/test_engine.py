@@ -174,3 +174,42 @@ def test_compute_objective_contribution_linear_scaling():
 
 def test_compute_objective_contribution_empty_when_no_constant_schedule():
     assert m.compute_objective_contribution({}, {}, [], 50000.0, "median") == []
+
+
+# ---------- backtest glissant ----------
+
+def test_rolling_backtest_final_values_none_when_history_too_short():
+    hist = np.zeros(23)  # 23 mois d'historique, plan sur 24 mois : aucune fenêtre complète
+    schedule = np.array([100.0] * 24)
+    years_axis = np.arange(24) / 12
+    result = m.rolling_backtest_final_values(hist, schedule, years_axis, 0.0, False, 0.0, 0.0, False)
+    assert result is None
+
+
+def test_rolling_backtest_final_values_zero_returns_equals_invested():
+    """Rendements nuls sur tout l'historique : chaque fenêtre de départ doit terminer exactement au
+    capital investi cumulé, et le nombre de fenêtres doit être n_obs - n_months + 1 (pas de repli
+    circulaire, contrairement au bootstrap)."""
+    n_obs, n_months = 30, 12
+    hist = np.zeros(n_obs)
+    schedule = np.array([100.0] * n_months)
+    years_axis = np.arange(n_months) / 12
+    final_values = m.rolling_backtest_final_values(hist, schedule, years_axis, 0.0, False, 0.0, 0.0, False)
+    assert final_values.shape == (n_obs - n_months + 1,)
+    np.testing.assert_allclose(final_values, 1200.0)
+
+
+def test_rolling_backtest_final_values_no_circular_wrap():
+    """Un pic de rendement placé au tout dernier mois de l'historique ne doit affecter QUE la
+    dernière fenêtre (celle qui l'inclut réellement) : avec un repli circulaire (comme
+    block_bootstrap_indices), il pourrait aussi se retrouver combiné à des fenêtres démarrant
+    ailleurs dans l'historique. (Un pic au tout premier mois n'est pas utilisable ici : le premier
+    rendement d'une fenêtre n'a par construction aucun effet, le solde de départ étant nul.)"""
+    n_obs, n_months = 30, 12
+    hist = np.zeros(n_obs)
+    hist[-1] = 10.0  # pic isolé au tout dernier mois : n'appartient qu'à la dernière fenêtre valide
+    schedule = np.array([100.0] * n_months)
+    years_axis = np.arange(n_months) / 12
+    final_values = m.rolling_backtest_final_values(hist, schedule, years_axis, 0.0, False, 0.0, 0.0, False)
+    assert final_values[-1] > 1200.0  # la dernière fenêtre a capté le pic
+    np.testing.assert_allclose(final_values[:-1], 1200.0)  # aucune autre fenêtre ne l'a capté

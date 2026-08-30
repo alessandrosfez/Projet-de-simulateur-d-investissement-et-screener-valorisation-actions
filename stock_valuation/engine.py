@@ -63,6 +63,67 @@ def compute_dcf_fair_value(last_fcf: float, growth_rate_pct: float, discount_rat
     }
 
 
+def compute_scenario_dcf_fair_values(last_fcf: float, base_growth_pct: float, base_discount_pct: float,
+                                      terminal_growth_pct: float, n_years: int, net_debt: float,
+                                      shares_outstanding: float, growth_offset_pct: float,
+                                      discount_offset_pct: float, weight_bear: float, weight_base: float,
+                                      weight_bull: float) -> dict:
+    """3 scénarios DCF autour des mêmes hypothèses de base (terminal_growth_pct/n_years/net_debt/
+    shares_outstanding identiques aux 3) : Bear = croissance réduite de growth_offset_pct et taux
+    d'actualisation augmenté de discount_offset_pct (flux plus faibles, actualisés plus fort),
+    Bull = l'inverse symétrique, Base = hypothèses inchangées. Chaque scénario réutilise
+    compute_dcf_fair_value tel quel, qui renvoie déjà None si les hypothèses deviennent incohérentes
+    (ex : le taux d'actualisation abaissé du scénario Bull tombe à/sous la croissance terminale) —
+    ce scénario est alors simplement absent de la moyenne pondérée plutôt que de faire échouer les
+    autres. Les poids (n'importe quelle unité positive, pas nécessairement déjà normalisée à 100)
+    sont renormalisés en interne sur les seuls scénarios valides. Renvoie {"bear": dict|None,
+    "base": dict|None, "bull": dict|None, "weighted_fair_value": float|None} ; weighted_fair_value
+    vaut None si aucun scénario n'est valide ou si les poids des scénarios valides somment à 0."""
+    scenarios = {
+        "bear": (base_growth_pct - growth_offset_pct, base_discount_pct + discount_offset_pct, weight_bear),
+        "base": (base_growth_pct, base_discount_pct, weight_base),
+        "bull": (base_growth_pct + growth_offset_pct, base_discount_pct - discount_offset_pct, weight_bull),
+    }
+    results = {}
+    weighted_sum, weight_total = 0.0, 0.0
+    for key, (growth_pct, discount_pct, weight) in scenarios.items():
+        result = compute_dcf_fair_value(
+            last_fcf, growth_pct, discount_pct, terminal_growth_pct, n_years, net_debt, shares_outstanding,
+        )
+        results[key] = result
+        if result is not None and weight and weight > 0:
+            weighted_sum += result["fair_value_per_share"] * weight
+            weight_total += weight
+    results["weighted_fair_value"] = (weighted_sum / weight_total) if weight_total > 0 else None
+    return results
+
+
+def compute_dcf_sensitivity_grid(last_fcf: float, base_growth_pct: float, base_discount_pct: float,
+                                  terminal_growth_pct: float, n_years: int, net_debt: float,
+                                  shares_outstanding: float, growth_step_pct: float = 5,
+                                  discount_step_pct: float = 1, grid_size: int = 5):
+    """Grille grid_size x grid_size de fair_value_per_share (croissance en lignes, taux
+    d'actualisation en colonnes), centrée sur les hypothèses de base avec un pas de
+    growth_step_pct/discount_step_pct par cellule. grid_size doit être impair pour que le cas de
+    base tombe exactement sur la cellule d'indice (half, half) où half = grid_size // 2 — c'est
+    cette position d'indice, pas une comparaison de flottants sur les valeurs, qui identifie la
+    cellule centrale à l'affichage. Une cellule vaut None quand ses hypothèses deviennent
+    incohérentes (garde existante dans compute_dcf_fair_value), à afficher comme "N/A". Renvoie
+    (growth_values, discount_values, grid) : deux listes de grid_size flottants (axes triés
+    croissants) et une liste de listes grid_size x grid_size de float|None."""
+    half = grid_size // 2
+    growth_values = [base_growth_pct + (i - half) * growth_step_pct for i in range(grid_size)]
+    discount_values = [base_discount_pct + (j - half) * discount_step_pct for j in range(grid_size)]
+    grid = [
+        [
+            (compute_dcf_fair_value(last_fcf, g, d, terminal_growth_pct, n_years, net_debt, shares_outstanding) or {}).get("fair_value_per_share")
+            for d in discount_values
+        ]
+        for g in growth_values
+    ]
+    return growth_values, discount_values, grid
+
+
 # ============================================================
 # Comparables : valorisation relative par les multiples des pairs
 # ============================================================

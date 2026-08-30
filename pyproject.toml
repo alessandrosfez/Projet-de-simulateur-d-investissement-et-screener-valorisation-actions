@@ -1,0 +1,17 @@
+[tool.ruff]
+line-length = 115
+target-version = "py313"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "UP"]
+# E501 (line too long) off: this codebase's existing style is dense single-line Dash component
+# builders (layout.py, callbacks.py) that regularly exceed any reasonable limit by convention, not
+# by accident - enforcing it would force a disruptive reformat of pre-existing, working code rather
+# than catch real issues.
+# Import sorting (I / isort) intentionally not enabled: this repo's import order is hand-arranged
+# in ways isort's model doesn't cleanly capture (case-sensitive grouping for some blocks, plain
+# alphabetical for others, single-letter identifiers, and two independent apps that reuse the same
+# local module names) - chasing an accurate isort config here fights the existing style for a
+# purely cosmetic rule with zero behavioral impact. F/E (minus E501)/W/UP still catch unused
+# imports, undefined names, and outdated syntax, which is where the real value is.
+ignore = ["E501"]

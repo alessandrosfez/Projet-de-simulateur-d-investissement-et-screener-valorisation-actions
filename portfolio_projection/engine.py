@@ -187,6 +187,30 @@ def summarize(
     return result
 
 
+def rolling_backtest_final_values(historical_returns: np.ndarray, schedule: np.ndarray, years_axis: np.ndarray,
+                                   annual_fee_pct: float, apply_tax: bool, tax_rate: float,
+                                   inflation_pct: float, display_real: bool):
+    """Pour chaque mois de départ t tel qu'une fenêtre complète de len(schedule) mois tienne dans
+    historical_returns (n_starts = n_obs - n_months + 1, sans repli circulaire contrairement au
+    bootstrap : seuls des départs réellement observés dans l'historique sont utilisés), calcule la
+    valeur finale du portefeuille avec ce même plan d'apport, via la même chaîne que
+    results._backtest_trajectory (frais -> DCA -> fiscalité -> affichage nominal/réel).
+    `historical_returns` joue ici le rôle de l'axe "n_sims" de returns_to_dca (chaque fenêtre est un
+    scénario indépendant, returns_to_dca ne fait pas la différence). Renvoie un tableau (n_starts,)
+    de valeurs finales, ou None si l'historique est plus court que l'horizon du plan."""
+    historical_returns = np.asarray(historical_returns)
+    n_obs, n_months = len(historical_returns), len(schedule)
+    n_starts = n_obs - n_months + 1
+    if n_starts <= 0:
+        return None
+    windows = np.lib.stride_tricks.sliding_window_view(historical_returns, n_months)
+    net_returns = apply_fee(windows, annual_fee_pct)
+    portfolio_value, invested_capital = returns_to_dca(net_returns, schedule)
+    portfolio_value = apply_social_tax(portfolio_value, invested_capital, apply_tax, tax_rate)
+    portfolio_value, _ = to_display_values(portfolio_value, invested_capital, years_axis, inflation_pct, display_real)
+    return portfolio_value[:, -1]
+
+
 def compute_objective_contribution(all_metrics: dict, schedules: dict, items: list,
                                     target_amount: float, percentile_key: str):
     """Apport mensuel constant nécessaire pour atteindre `target_amount` au percentile choisi

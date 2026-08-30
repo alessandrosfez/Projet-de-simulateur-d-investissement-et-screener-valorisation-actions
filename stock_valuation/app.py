@@ -92,4 +92,8 @@ if __name__ == "__main__":
     # d'un panier d'actions déclenche des dizaines de téléchargements yfinance non mis en cache
     # au premier chargement ; sans multi-threading, ça reste bloqué en attente derrière ces
     # requêtes lentes au lieu d'être traité en parallèle.
-    app.run(debug=True, host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ.get("PORT", 8051)), threaded=True)
+    # debug=False par défaut (sécurité/perf) : DASH_DEBUG=1 réactive le rechargement à chaud en
+    # développement local. Comparaison de chaîne explicite plutôt que bool(os.environ.get(...)) :
+    # bool("0") vaut True en Python, un simple DASH_DEBUG=0 activerait sinon le mode debug.
+    debug = os.environ.get("DASH_DEBUG", "").strip().lower() in ("1", "true", "yes", "on")
+    app.run(debug=debug, host=os.environ.get("HOST", "127.0.0.1"), port=int(os.environ.get("PORT", 8051)), threaded=True)

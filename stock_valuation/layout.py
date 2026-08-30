@@ -44,6 +44,8 @@ TAB_STATE_FIELDS = [
     ("universe-checklist", "value"), ("sector-filter", "value"),
     ("dcf-growth-slider", "value"), ("dcf-discount-slider", "value"),
     ("dcf-terminal-growth-slider", "value"), ("dcf-horizon-slider", "value"),
+    ("dcf-growth-offset-slider", "value"), ("dcf-discount-offset-slider", "value"),
+    ("dcf-weight-bear-input", "value"), ("dcf-weight-base-input", "value"), ("dcf-weight-bull-input", "value"),
 ]
 
 
@@ -129,6 +131,9 @@ def build_tab3(lang, v=None):
             html.Div(id="stocks-pe-history-title", className="text-muted", style={"fontSize": "0.85rem"}),
             dcc.Graph(id="stocks-pe-history-chart", config=GRAPH_CONFIG),
 
+            html.H5(L(lang, "quality_title"), className="mt-3"),
+            html.Div(id="quality-metrics-card"),
+
             html.Hr(),
             html.H5(L(lang, "dcf_title"), className="mt-3"),
             html.P(L(lang, "dcf_intro"), className="text-muted", style={"fontSize": "0.85rem"}),
@@ -138,6 +143,27 @@ def build_tab3(lang, v=None):
                 dbc.Col(slider_block(L(lang, "dcf_terminal_growth_label"), "dcf-terminal-growth-slider", 0, 5, gv(v, "dcf-terminal-growth-slider", 2), step=0.25, tooltip_text=L(lang, "dcf_terminal_growth_help")), width=3),
                 dbc.Col(slider_block(L(lang, "dcf_horizon_label"), "dcf-horizon-slider", 3, 10, gv(v, "dcf-horizon-slider", 5), step=1, tooltip_text=L(lang, "dcf_horizon_help")), width=3),
             ]),
+            dbc.Button(L(lang, "dcf_scenario_toggle"), id="btn-toggle-dcf-scenarios",
+                       color="link", size="sm", className="p-0 mb-2"),
+            dbc.Collapse([
+                dbc.Row([
+                    dbc.Col(slider_block(L(lang, "dcf_growth_offset_label"), "dcf-growth-offset-slider", 0, 15, gv(v, "dcf-growth-offset-slider", 5), step=1), width=3),
+                    dbc.Col(slider_block(L(lang, "dcf_discount_offset_label"), "dcf-discount-offset-slider", 0, 5, gv(v, "dcf-discount-offset-slider", 2), step=0.5), width=3),
+                    dbc.Col([
+                        dbc.Label(L(lang, "dcf_weight_bear_label"), className="mb-0"),
+                        dcc.Input(id="dcf-weight-bear-input", type="number", min=0, step=5, value=gv(v, "dcf-weight-bear-input", 25), className="form-control form-control-sm"),
+                    ], width=2),
+                    dbc.Col([
+                        dbc.Label(L(lang, "dcf_weight_base_label"), className="mb-0"),
+                        dcc.Input(id="dcf-weight-base-input", type="number", min=0, step=5, value=gv(v, "dcf-weight-base-input", 50), className="form-control form-control-sm"),
+                    ], width=2),
+                    dbc.Col([
+                        dbc.Label(L(lang, "dcf_weight_bull_label"), className="mb-0"),
+                        dcc.Input(id="dcf-weight-bull-input", type="number", min=0, step=5, value=gv(v, "dcf-weight-bull-input", 25), className="form-control form-control-sm"),
+                    ], width=2),
+                ], className="align-items-end"),
+                html.Div(id="dcf-scenario-weights-caption", className="text-muted mb-2", style={"fontSize": "0.75rem"}),
+            ], id="dcf-scenario-collapse", is_open=False, className="mb-2"),
             html.Div(id="dcf-result", children=L(lang, "dcf_hint_default"), className="text-muted mb-2"),
             dcc.Graph(id="dcf-chart", config=GRAPH_CONFIG),
         ]),

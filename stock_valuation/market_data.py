@@ -155,6 +155,96 @@ def _get_annual_fcf_history(ticker: str) -> pd.DataFrame:
     return cf.loc[rows].T.dropna(subset=["Free Cash Flow"])
 
 
+@cached_ttl(3600)
+def _get_annual_income_statement(ticker: str) -> pd.DataFrame:
+    """Compte de résultat annuel (Ticker.financials transposé, un exercice clos par ligne, le plus
+    récent en premier), limité aux lignes utiles au calcul du ROIC. DataFrame vide si l'appel
+    échoue ou si aucune des lignes attendues n'est disponible pour ce titre."""
+    try:
+        fin = yf.Ticker(ticker).financials
+    except Exception:
+        return pd.DataFrame()
+    if fin is None or fin.empty:
+        return pd.DataFrame()
+    rows = [r for r in ["EBIT", "Pretax Income", "Tax Provision"] if r in fin.index]
+    if not rows:
+        return pd.DataFrame()
+    return fin.loc[rows].T
+
+
+@cached_ttl(3600)
+def _get_annual_balance_sheet(ticker: str) -> pd.DataFrame:
+    """Bilan annuel (Ticker.balance_sheet transposé), même convention que
+    _get_annual_income_statement, limité aux lignes utiles au calcul du ROIC."""
+    try:
+        bs = yf.Ticker(ticker).balance_sheet
+    except Exception:
+        return pd.DataFrame()
+    if bs is None or bs.empty:
+        return pd.DataFrame()
+    rows = [r for r in ["Total Debt", "Stockholders Equity", "Cash And Cash Equivalents"] if r in bs.index]
+    if not rows:
+        return pd.DataFrame()
+    return bs.loc[rows].T
+
+
+def _pct(x) -> float:
+    return round(x * 100, 2) if x is not None else None
+
+
+def get_stock_quality_metrics(ticker: str) -> dict:
+    """Marges, rendements et ratios de liquidité lus directement sur Ticker.info (aucun appel
+    réseau supplémentaire : déjà mis en cache par _get_ticker_info dès que le titre a été chargé
+    une première fois), plus le ROIC (rendement du capital investi) calculé sur le dernier exercice
+    clos : NOPAT (EBIT après impôt effectif) / capitaux investis (dette + capitaux propres -
+    trésorerie). `roic` vaut None si le compte de résultat ou le bilan manque une donnée
+    nécessaire, si le résultat avant impôt est nul/négatif (taux d'impôt effectif non
+    significatif), ou si les capitaux investis sont <= 0.
+
+    EBIT/dette/capitaux propres/trésorerie sont remis à l'échelle du prix courant via
+    _price_scale_factor, exactement comme le FCF dans get_dcf_inputs : les mêmes places boursières
+    cotant en pence (Londres) ou dans une autre devise de reporting (valeurs à double cotation)
+    affecteraient un ROIC calculé sans cette correction. Dette/capitaux propres/trésorerie
+    proviennent uniquement du bilan (une seule famille de données), jamais mélangés avec les champs
+    de _get_ticker_info : deux endpoints yfinance différents ne garantissent pas la même échelle
+    même pour la même entreprise, et le facteur d'échelle (déduit du prix/P/E/BPA) ne rattraperait
+    pas un décalage entre les deux."""
+    info = _get_ticker_info(ticker)
+    price = info.get("currentPrice") or info.get("regularMarketPrice")
+    price_scale = _price_scale_factor(info.get("trailingPE"), info.get("trailingEps"), price)
+
+    roic = None
+    income = _get_annual_income_statement(ticker)
+    balance = _get_annual_balance_sheet(ticker)
+    if not income.empty and not balance.empty:
+        li, lb = income.iloc[0], balance.iloc[0]
+        ebit = li.get("EBIT")
+        pretax = li.get("Pretax Income")
+        tax = li.get("Tax Provision")
+        debt = lb.get("Total Debt")
+        equity = lb.get("Stockholders Equity")
+        cash = lb.get("Cash And Cash Equivalents")
+        if pd.notna(ebit) and pd.notna(pretax) and pretax and pd.notna(debt) and pd.notna(equity):
+            eff_tax_rate = min(max((float(tax) / float(pretax)) if pd.notna(tax) else 0.0, 0.0), 1.0)
+            nopat = float(ebit) * price_scale * (1 - eff_tax_rate)
+            invested_capital = (float(debt) + float(equity) - float(cash or 0)) * price_scale
+            if invested_capital > 0:
+                roic = round(nopat / invested_capital * 100, 2)
+
+    return {
+        "roic": roic,
+        "return_on_equity": _pct(info.get("returnOnEquity")),
+        "return_on_assets": _pct(info.get("returnOnAssets")),
+        "gross_margin": _pct(info.get("grossMargins")),
+        "operating_margin": _pct(info.get("operatingMargins")),
+        "profit_margin": _pct(info.get("profitMargins")),
+        "revenue_growth": _pct(info.get("revenueGrowth")),
+        "debt_to_equity": info.get("debtToEquity"),
+        "current_ratio": info.get("currentRatio"),
+        "quick_ratio": info.get("quickRatio"),
+    }
+
+
 def get_dcf_inputs(ticker: str) -> dict:
     """Intrants DCF les plus récents pour une action : FCF, dette totale, trésorerie, nombre
     d'actions, prix courant. Le FCF est la moyenne des DCF_FCF_AVERAGING_YEARS derniers exercices
