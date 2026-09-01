@@ -10,6 +10,8 @@ rechargement automatique que Dash/Werkzeug relance lui-même en mode debug).
 import subprocess
 import sys
 import time
+import urllib.request
+import webbrowser
 from pathlib import Path
 
 ROOT = Path(__file__).parent
@@ -39,11 +41,30 @@ def _kill_tree(proc: subprocess.Popen):
         proc.kill()
 
 
+def _wait_for_server(url: str, timeout: float = 30.0) -> bool:
+    """Attend que le serveur Dash réponde avant d'ouvrir le navigateur : l'ouvrir trop tôt affiche
+    une page "connexion refusée" le temps que le serveur de dev finisse de démarrer."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        try:
+            urllib.request.urlopen(url, timeout=1)
+            return True
+        except Exception:
+            time.sleep(0.3)
+    return False
+
+
 def main():
     procs = []
     for folder, url in APPS:
         print(f"Lancement de {folder} -> {url}")
         procs.append(subprocess.Popen([sys.executable, "app.py"], cwd=ROOT / folder))
+
+    for folder, url in APPS:
+        if _wait_for_server(url):
+            webbrowser.open(url)
+        else:
+            print(f"{folder} ne répond pas encore après 30s, ouvre {url} manuellement une fois prêt.")
 
     print("\nLes deux outils tournent (logs entremêlés ci-dessous). Ctrl+C pour tout arrêter.\n")
     try:
