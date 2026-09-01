@@ -51,6 +51,7 @@ CONFIG_FIELDS = [
     ("shock_duration", "shock-duration-slider", "value"),
     ("shock_timing", "shock-timing-radio", "value"),
     ("shock_year", "shock-year-slider", "value"),
+    ("view_mode", "view-mode-radio", "value"),
     ("backtest_anchor", "backtest-anchor-radio", "value"),
     ("apport_constant", "apport-constant-slider", "value"),
     ("apport_initial", "apport-initial-slider", "value"),
@@ -139,6 +140,19 @@ def toggle_block_size(method):
     return {"display": "block"} if method == "bootstrap" else {"display": "none"}
 
 
+def toggle_prevision_only(view_mode):
+    """Paramètres qui n'ont de sens que pour une simulation (horizon de projection...) : sans
+    effet en mode historique, qui rejoue une séquence réellement observée plutôt que de simuler."""
+    return {"display": "block"} if (view_mode or "prevision") != "historique" else {"display": "none"}
+
+
+def toggle_historique_only(view_mode):
+    """Paramètres qui n'ont de sens que pour la trajectoire historique (point de départ parmi les
+    crises connues...) : sans effet en mode prévision, dont le graphique n'affiche plus cette
+    trajectoire réelle depuis qu'elle a sa propre bascule dédiée."""
+    return {"display": "block"} if view_mode == "historique" else {"display": "none"}
+
+
 def toggle_crisis(v):
     return {"display": "block"} if v and "on" in v else {"display": "none"}
 
@@ -210,6 +224,19 @@ def build_sidebar(lang, v=None):
     cto_tmi = gv(v, "cto-tmi-dropdown", 30)
     tax_label, tax_help = update_tax_label(envelope, cto_method, cto_tmi, lang)
     objective_val = gv(v, "objective-checkbox", [])
+    view_mode = gv(v, "view-mode-radio", "prevision")
+
+    view_mode_section = html.Div([
+        html.Div([dbc.Label(L(lang, "view_mode_label"), className="mb-0 fw-bold")] + info_tooltip("view-mode-info", L(lang, "view_mode_help"))),
+        dcc.RadioItems(
+            id="view-mode-radio",
+            options=[
+                {"label": L(lang, "view_mode_prevision"), "value": "prevision"},
+                {"label": L(lang, "view_mode_historique"), "value": "historique"},
+            ],
+            value=view_mode, labelStyle={"display": "block"}, className="mb-2",
+        ),
+    ], className="mb-3 pb-3 border-bottom")
 
     data_section = [
         dbc.Label(L(lang, "source_label"), className="mb-0"),
@@ -229,167 +256,191 @@ def build_sidebar(lang, v=None):
             id="etf-info", style=toggle_etf_info(source), className="mb-2",
         ),
         slider_block(L(lang, "lookback_label"), "lookback-slider", 5, 30, gv(v, "lookback-slider", 20)),
-        slider_block(L(lang, "horizon_label"), "horizon-slider", 5, 40, gv(v, "horizon-slider", 20)),
-        html.Div([dbc.Label(L(lang, "backtest_anchor_label"), className="mb-0")] + info_tooltip("backtest-anchor-info", L(lang, "backtest_anchor_help"))),
-        dcc.RadioItems(
-            id="backtest-anchor-radio",
-            options=[{"label": L(lang, f"backtest_anchor_{k}"), "value": k} for k in BACKTEST_ANCHOR_KEYS],
-            value=gv(v, "backtest-anchor-radio", "recent"), labelStyle={"display": "block"}, className="mb-2",
-        ),
-        html.Div([dbc.Label(L(lang, "method_label"), className="mb-0")] + info_tooltip("method-radio-info", L(lang, "method_help"))),
-        dcc.RadioItems(
-            id="method-radio",
-            options=[{"label": L(lang, "method_normal"), "value": "normal"}, {"label": L(lang, "method_bootstrap"), "value": "bootstrap"}],
-            value=method, labelStyle={"display": "block"}, className="mb-2",
-        ),
         html.Div(
-            slider_block(
-                L(lang, "block_size_label"), "block-size-slider", 1, 36, gv(v, "block-size-slider", 12),
-                help_text=L(lang, "block_size_help"),
-            ),
-            id="block-size-container", style=toggle_block_size(method),
+            slider_block(L(lang, "horizon_label"), "horizon-slider", 5, 40, gv(v, "horizon-slider", 20)),
+            id="horizon-slider-container", style=toggle_prevision_only(view_mode),
         ),
-        dbc.Button(L(lang, "mu_override_toggle"), id="btn-toggle-mu-override",
-                   color="link", size="sm", className="p-0 mb-2"),
-        dbc.Collapse([
-            html.Div(L(lang, "mu_override_note"), className="text-muted mb-2",
-                      style={"fontSize": "0.75rem", "whiteSpace": "pre-line"}),
-            html.Div([
-                dbc.Row([
-                    dbc.Col(dbc.Label(name, className="mb-0", style={"fontSize": "0.8rem"}), width=7),
-                    dbc.Col(dcc.Input(
-                        id=f"mu-override-t{i}", type="number", step=0.1,
-                        placeholder=L(lang, "mu_override_placeholder"),
-                        value=gv(v, f"mu-override-t{i}", None),
-                        className="form-control form-control-sm",
-                    ), width=5),
-                ], className="mb-1 align-items-center")
-                for i, name in enumerate(TICKER_KEYS)
-            ]),
-        ], id="mu-override-collapse", is_open=False, className="mb-2"),
+        html.Div([
+            html.Div([dbc.Label(L(lang, "backtest_anchor_label"), className="mb-0")] + info_tooltip("backtest-anchor-info", L(lang, "backtest_anchor_help"))),
+            dcc.RadioItems(
+                id="backtest-anchor-radio",
+                options=[{"label": L(lang, f"backtest_anchor_{k}"), "value": k} for k in BACKTEST_ANCHOR_KEYS],
+                value=gv(v, "backtest-anchor-radio", "recent"), labelStyle={"display": "block"}, className="mb-2",
+            ),
+        ], id="backtest-anchor-container", style=toggle_historique_only(view_mode)),
+        html.Div([
+            html.Div([dbc.Label(L(lang, "method_label"), className="mb-0")] + info_tooltip("method-radio-info", L(lang, "method_help"))),
+            dcc.RadioItems(
+                id="method-radio",
+                options=[{"label": L(lang, "method_normal"), "value": "normal"}, {"label": L(lang, "method_bootstrap"), "value": "bootstrap"}],
+                value=method, labelStyle={"display": "block"}, className="mb-2",
+            ),
+            html.Div(
+                slider_block(
+                    L(lang, "block_size_label"), "block-size-slider", 1, 36, gv(v, "block-size-slider", 12),
+                    help_text=L(lang, "block_size_help"),
+                ),
+                id="block-size-container", style=toggle_block_size(method),
+            ),
+        ], id="method-section-container", style=toggle_prevision_only(view_mode)),
+        html.Div([
+            dbc.Button(L(lang, "mu_override_toggle"), id="btn-toggle-mu-override",
+                       color="link", size="sm", className="p-0 mb-2"),
+            dbc.Collapse([
+                html.Div(L(lang, "mu_override_note"), className="text-muted mb-2",
+                          style={"fontSize": "0.75rem", "whiteSpace": "pre-line"}),
+                html.Div([
+                    dbc.Row([
+                        dbc.Col(dbc.Label(name, className="mb-0", style={"fontSize": "0.8rem"}), width=7),
+                        dbc.Col(dcc.Input(
+                            id=f"mu-override-t{i}", type="number", step=0.1,
+                            placeholder=L(lang, "mu_override_placeholder"),
+                            value=gv(v, f"mu-override-t{i}", None),
+                            className="form-control form-control-sm",
+                        ), width=5),
+                    ], className="mb-1 align-items-center")
+                    for i, name in enumerate(TICKER_KEYS)
+                ]),
+            ], id="mu-override-collapse", is_open=False, className="mb-2"),
+        ], id="mu-override-container", style=toggle_prevision_only(view_mode)),
     ]
 
     withdrawals_crisis_section = [
-        html.H6(L(lang, "decumulation_title")),
-        dcc.Checklist(id="decumulation-checkbox", options=[{"label": L(lang, "decumulation_checkbox"), "value": "on"}], value=decum_val, className="mb-2"),
         html.Div([
-            slider_block(L(lang, "decumulation_years_label"), "decumulation-years-slider", 1, 40, gv(v, "decumulation-years-slider", 20)),
-            slider_block(L(lang, "withdrawal_label"), "withdrawal-monthly-slider", 100, 5000, gv(v, "withdrawal-monthly-slider", 1000), step=100),
-        ], id="decumulation-options-container", style=toggle_decumulation(decum_val)),
+            html.H6(L(lang, "decumulation_title")),
+            dcc.Checklist(id="decumulation-checkbox", options=[{"label": L(lang, "decumulation_checkbox"), "value": "on"}], value=decum_val, className="mb-2"),
+            html.Div([
+                slider_block(L(lang, "decumulation_years_label"), "decumulation-years-slider", 1, 40, gv(v, "decumulation-years-slider", 20)),
+                slider_block(L(lang, "withdrawal_label"), "withdrawal-monthly-slider", 100, 5000, gv(v, "withdrawal-monthly-slider", 1000), step=100),
+            ], id="decumulation-options-container", style=toggle_decumulation(decum_val)),
 
-        html.H6(L(lang, "crisis_title"), className="mt-3"),
-        dcc.Checklist(id="crisis-checkbox", options=[{"label": L(lang, "crisis_checkbox"), "value": "on"}], value=crisis_val, className="mb-2"),
-        html.Div([
-            slider_block(L(lang, "shock_pct_label"), "shock-pct-slider", -80, -5, gv(v, "shock-pct-slider", -30), step=5),
-            slider_block(L(lang, "shock_duration_label"), "shock-duration-slider", 1, 24, gv(v, "shock-duration-slider", 6)),
-            dbc.Label(L(lang, "shock_timing_label"), className="mb-0"),
-            dcc.RadioItems(
-                id="shock-timing-radio",
-                options=[{"label": L(lang, "shock_random"), "value": "random"}, {"label": L(lang, "shock_fixed"), "value": "fixed"}],
-                value=shock_timing, labelStyle={"display": "block"}, className="mb-2",
-            ),
-            html.Div(
-                slider_block(L(lang, "shock_year_label"), "shock-year-slider", 1, 20, gv(v, "shock-year-slider", 5)),
-                id="shock-year-container", style=toggle_shock_year(shock_timing),
-            ),
-        ], id="crisis-options-container", style=toggle_crisis(crisis_val)),
+            html.Div([
+                html.H6(L(lang, "crisis_title"), className="mt-3"),
+                dcc.Checklist(id="crisis-checkbox", options=[{"label": L(lang, "crisis_checkbox"), "value": "on"}], value=crisis_val, className="mb-2"),
+                html.Div([
+                    slider_block(L(lang, "shock_pct_label"), "shock-pct-slider", -80, -5, gv(v, "shock-pct-slider", -30), step=5),
+                    slider_block(L(lang, "shock_duration_label"), "shock-duration-slider", 1, 24, gv(v, "shock-duration-slider", 6)),
+                    dbc.Label(L(lang, "shock_timing_label"), className="mb-0"),
+                    dcc.RadioItems(
+                        id="shock-timing-radio",
+                        options=[{"label": L(lang, "shock_random"), "value": "random"}, {"label": L(lang, "shock_fixed"), "value": "fixed"}],
+                        value=shock_timing, labelStyle={"display": "block"}, className="mb-2",
+                    ),
+                    html.Div(
+                        slider_block(L(lang, "shock_year_label"), "shock-year-slider", 1, 20, gv(v, "shock-year-slider", 5)),
+                        id="shock-year-container", style=toggle_shock_year(shock_timing),
+                    ),
+                ], id="crisis-options-container", style=toggle_crisis(crisis_val)),
+            ], id="crisis-section-container", style=toggle_prevision_only(view_mode)),
+        ], id="withdrawals-section-container", style=toggle_prevision_only(view_mode)),
     ]
 
     contrib_section = [
-        html.H6(L(lang, "contrib_constant_title")),
-        slider_block(L(lang, "contrib_constant_label"), "apport-constant-slider", 100, 1000, gv(v, "apport-constant-slider", 350), step=10),
+        html.Div([
+            html.H6(L(lang, "contrib_constant_title")),
+            slider_block(L(lang, "contrib_constant_label"), "apport-constant-slider", 100, 1000, gv(v, "apport-constant-slider", 350), step=10),
 
-        html.H6(L(lang, "contrib_progressive_title"), className="mt-3"),
-        slider_block(L(lang, "contrib_initial_label"), "apport-initial-slider", 100, 1000, gv(v, "apport-initial-slider", 200), step=10),
-        slider_block(L(lang, "contrib_final_label"), "apport-final-slider", 100, 1000, gv(v, "apport-final-slider", 500), step=10),
+            html.H6(L(lang, "contrib_progressive_title"), className="mt-3"),
+            slider_block(L(lang, "contrib_initial_label"), "apport-initial-slider", 100, 1000, gv(v, "apport-initial-slider", 200), step=10),
+            slider_block(L(lang, "contrib_final_label"), "apport-final-slider", 100, 1000, gv(v, "apport-final-slider", 500), step=10),
+        ], id="contrib-section-container", style=toggle_prevision_only(view_mode)),
     ]
 
     fees_tax_section = [
-        slider_block(
-            L(lang, "fee_label"), "fee-slider", 0.0, 2.0, gv(v, "fee-slider", 0.2), step=0.1,
-            help_text=L(lang, "fee_help"),
-        ),
-        slider_block(L(lang, "inflation_label"), "inflation-slider", 0.0, 5.0, gv(v, "inflation-slider", 2.0), step=0.1),
-        html.Div([dbc.Label(L(lang, "display_label"), className="mb-0")] + info_tooltip("display-radio-info", L(lang, "display_help"))),
-        dcc.RadioItems(
-            id="display-radio",
-            options=[{"label": L(lang, "display_nominal"), "value": "nominal"}, {"label": L(lang, "display_real"), "value": "real"}],
-            value=gv(v, "display-radio", "nominal"), labelStyle={"display": "block"}, className="mb-2",
-        ),
-        dbc.Label(L(lang, "envelope_label"), className="mb-0"),
-        dcc.RadioItems(
-            id="envelope-radio",
-            options=[
-                {"label": L(lang, "envelope_pea"), "value": "pea"},
-                {"label": L(lang, "envelope_cto"), "value": "cto"},
-            ],
-            value=envelope, labelStyle={"display": "block"}, className="mb-1",
-        ),
         html.Div([
-            dbc.Label(L(lang, "cto_method_label"), className="mb-0", style={"fontSize": "0.85rem"}),
+            slider_block(
+                L(lang, "fee_label"), "fee-slider", 0.0, 2.0, gv(v, "fee-slider", 0.2), step=0.1,
+                help_text=L(lang, "fee_help"),
+            ),
+            slider_block(L(lang, "inflation_label"), "inflation-slider", 0.0, 5.0, gv(v, "inflation-slider", 2.0), step=0.1),
+            html.Div([dbc.Label(L(lang, "display_label"), className="mb-0")] + info_tooltip("display-radio-info", L(lang, "display_help"))),
             dcc.RadioItems(
-                id="cto-tax-method-radio",
+                id="display-radio",
+                options=[{"label": L(lang, "display_nominal"), "value": "nominal"}, {"label": L(lang, "display_real"), "value": "real"}],
+                value=gv(v, "display-radio", "nominal"), labelStyle={"display": "block"}, className="mb-2",
+            ),
+            dbc.Label(L(lang, "envelope_label"), className="mb-0"),
+            dcc.RadioItems(
+                id="envelope-radio",
                 options=[
-                    {"label": L(lang, "cto_flat"), "value": "flat"},
-                    {"label": L(lang, "cto_bareme"), "value": "bareme"},
+                    {"label": L(lang, "envelope_pea"), "value": "pea"},
+                    {"label": L(lang, "envelope_cto"), "value": "cto"},
                 ],
-                value=cto_method, labelStyle={"display": "block"}, className="mb-1",
+                value=envelope, labelStyle={"display": "block"}, className="mb-1",
             ),
             html.Div([
-                dbc.Label(L(lang, "cto_tmi_label"), className="mb-0", style={"fontSize": "0.85rem"}),
-                dcc.Dropdown(
-                    id="cto-tmi-dropdown",
-                    options=[{"label": f"{t} %", "value": t} for t in [0, 11, 30, 41, 45]],
-                    value=cto_tmi, clearable=False, style={"maxWidth": "200px"}, className="mb-1",
+                dbc.Label(L(lang, "cto_method_label"), className="mb-0", style={"fontSize": "0.85rem"}),
+                dcc.RadioItems(
+                    id="cto-tax-method-radio",
+                    options=[
+                        {"label": L(lang, "cto_flat"), "value": "flat"},
+                        {"label": L(lang, "cto_bareme"), "value": "bareme"},
+                    ],
+                    value=cto_method, labelStyle={"display": "block"}, className="mb-1",
                 ),
-            ], id="cto-tmi-container", style=toggle_cto_tmi(cto_method)),
-        ], id="cto-tax-method-container", style=toggle_cto_tax_method(envelope), className="mb-2"),
-        dcc.Checklist(id="tax-checkbox", options=[{"label": "", "value": "on"}], value=gv(v, "tax-checkbox", []), style={"display": "inline-block"}),
-        html.Span(tax_label, id="tax-checkbox-label", style={"fontSize": "0.9rem"}),
-        html.Div(tax_help, id="tax-checkbox-help", className="text-muted mb-2", style={"fontSize": "0.75rem"}),
-        dcc.Checklist(
-            id="compare-envelopes-checkbox",
-            options=[{"label": L(lang, "compare_checkbox"), "value": "on"}],
-            value=gv(v, "compare-envelopes-checkbox", []), className="mb-2",
-        ),
+                html.Div([
+                    dbc.Label(L(lang, "cto_tmi_label"), className="mb-0", style={"fontSize": "0.85rem"}),
+                    dcc.Dropdown(
+                        id="cto-tmi-dropdown",
+                        options=[{"label": f"{t} %", "value": t} for t in [0, 11, 30, 41, 45]],
+                        value=cto_tmi, clearable=False, style={"maxWidth": "200px"}, className="mb-1",
+                    ),
+                ], id="cto-tmi-container", style=toggle_cto_tmi(cto_method)),
+            ], id="cto-tax-method-container", style=toggle_cto_tax_method(envelope), className="mb-2"),
+            dcc.Checklist(id="tax-checkbox", options=[{"label": "", "value": "on"}], value=gv(v, "tax-checkbox", []), style={"display": "inline-block"}),
+            html.Span(tax_label, id="tax-checkbox-label", style={"fontSize": "0.9rem"}),
+            html.Div(tax_help, id="tax-checkbox-help", className="text-muted mb-2", style={"fontSize": "0.75rem"}),
+            html.Div(
+                dcc.Checklist(
+                    id="compare-envelopes-checkbox",
+                    options=[{"label": L(lang, "compare_checkbox"), "value": "on"}],
+                    value=gv(v, "compare-envelopes-checkbox", []), className="mb-2",
+                ),
+                id="compare-envelopes-option-container", style=toggle_prevision_only(view_mode),
+            ),
+        ], id="fees-tax-section-container", style=toggle_prevision_only(view_mode)),
     ]
 
     display_sim_section = [
-        slider_block(
-            L(lang, "band_width_label"), "band-width-slider", 50, 95, gv(v, "band-width-slider", 80), step=None,
-            marks={50: "50", 80: "80", 90: "90", 95: "95"},
-        ),
-        slider_block(L(lang, "n_sims_label"), "n-sims-slider", 100, 3000, gv(v, "n-sims-slider", 500), step=100),
-        dbc.Label(L(lang, "seed_label"), className="mb-0"),
-        dbc.Row([
-            dbc.Col(dcc.Input(id="seed-input", type="number", value=gv(v, "seed-input", 42), step=1, className="form-control"), width=8),
-            dbc.Col(dbc.Button("🎲", id="btn-reroll", color="secondary", size="sm"), width=4),
-        ], className="mb-3 g-1"),
-
-        html.H6(L(lang, "objective_title"), className="mt-3"),
-        dcc.Checklist(
-            id="objective-checkbox",
-            options=[{"label": L(lang, "objective_checkbox"), "value": "on"}],
-            value=objective_val, className="mb-2",
-        ),
         html.Div([
-            dbc.Label(L(lang, "objective_amount_label"), className="mb-0"),
-            dcc.Input(
-                id="objective-amount-input", type="number", min=1000, step=1000,
-                value=gv(v, "objective-amount-input", 50000), className="form-control mb-2",
+            slider_block(
+                L(lang, "band_width_label"), "band-width-slider", 50, 95, gv(v, "band-width-slider", 80), step=None,
+                marks={50: "50", 80: "80", 90: "90", 95: "95"},
             ),
-            dbc.Label(L(lang, "objective_percentile_label"), className="mb-0"),
-            dcc.RadioItems(
-                id="objective-percentile-radio",
-                options=[
-                    {"label": L(lang, "objective_p_low"), "value": "p_low"},
-                    {"label": L(lang, "objective_median"), "value": "median"},
-                    {"label": L(lang, "objective_p_high"), "value": "p_high"},
-                ],
-                value=gv(v, "objective-percentile-radio", "median"), labelStyle={"display": "block"},
-                className="mb-2",
+            slider_block(L(lang, "n_sims_label"), "n-sims-slider", 100, 3000, gv(v, "n-sims-slider", 500), step=100),
+            dbc.Label(L(lang, "seed_label"), className="mb-0"),
+            dbc.Row([
+                dbc.Col(dcc.Input(id="seed-input", type="number", value=gv(v, "seed-input", 42), step=1, className="form-control"), width=8),
+                dbc.Col(dbc.Button("🎲", id="btn-reroll", color="secondary", size="sm"), width=4),
+            ], className="mb-3 g-1"),
+        ], id="sim-settings-container", style=toggle_prevision_only(view_mode)),
+
+        html.Div([
+            html.H6(L(lang, "objective_title"), className="mt-3"),
+            dcc.Checklist(
+                id="objective-checkbox",
+                options=[{"label": L(lang, "objective_checkbox"), "value": "on"}],
+                value=objective_val, className="mb-2",
             ),
-        ], id="objective-options-container", style=toggle_objective(objective_val)),
+            html.Div([
+                dbc.Label(L(lang, "objective_amount_label"), className="mb-0"),
+                dcc.Input(
+                    id="objective-amount-input", type="number", min=1000, step=1000,
+                    value=gv(v, "objective-amount-input", 50000), className="form-control mb-2",
+                ),
+                dbc.Label(L(lang, "objective_percentile_label"), className="mb-0"),
+                dcc.RadioItems(
+                    id="objective-percentile-radio",
+                    options=[
+                        {"label": L(lang, "objective_p_low"), "value": "p_low"},
+                        {"label": L(lang, "objective_median"), "value": "median"},
+                        {"label": L(lang, "objective_p_high"), "value": "p_high"},
+                    ],
+                    value=gv(v, "objective-percentile-radio", "median"), labelStyle={"display": "block"},
+                    className="mb-2",
+                ),
+            ], id="objective-options-container", style=toggle_objective(objective_val)),
+        ], id="objective-section-container", style=toggle_prevision_only(view_mode)),
     ]
 
     config_section = [
@@ -407,14 +458,26 @@ def build_sidebar(lang, v=None):
 
     accordion = dbc.Accordion([
         dbc.AccordionItem(data_section, title=L(lang, "section_data"), item_id="item-data"),
-        dbc.AccordionItem(withdrawals_crisis_section, title=L(lang, "section_withdrawals_crisis"), item_id="item-retraits-crise"),
-        dbc.AccordionItem(contrib_section, title=L(lang, "section_contributions"), item_id="item-contrib"),
-        dbc.AccordionItem(fees_tax_section, title=L(lang, "section_fees_tax"), item_id="item-fees"),
-        dbc.AccordionItem(display_sim_section, title=L(lang, "section_display_sim"), item_id="item-sim"),
+        dbc.AccordionItem(
+            withdrawals_crisis_section, title=L(lang, "section_withdrawals_crisis"), item_id="item-retraits-crise",
+            id="accordion-item-retraits-crise", style=toggle_prevision_only(view_mode),
+        ),
+        dbc.AccordionItem(
+            contrib_section, title=L(lang, "section_contributions"), item_id="item-contrib",
+            id="accordion-item-contrib", style=toggle_prevision_only(view_mode),
+        ),
+        dbc.AccordionItem(
+            fees_tax_section, title=L(lang, "section_fees_tax"), item_id="item-fees",
+            id="accordion-item-fees", style=toggle_prevision_only(view_mode),
+        ),
+        dbc.AccordionItem(
+            display_sim_section, title=L(lang, "section_display_sim"), item_id="item-sim",
+            id="accordion-item-sim", style=toggle_prevision_only(view_mode),
+        ),
         dbc.AccordionItem(config_section, title=L(lang, "section_config"), item_id="item-config"),
     ], always_open=True, active_item=["item-data", "item-contrib", "item-fees"], flush=True)
 
-    return html.Div(accordion, style={"height": "100vh", "overflowY": "auto", "padding": "1rem"})
+    return html.Div([view_mode_section, accordion], style={"height": "100vh", "overflowY": "auto", "padding": "1rem"})
 
 
 # ---------- Onglet 1 : par indice ----------
@@ -428,15 +491,17 @@ def build_tab1(lang, v=None):
         ),
         html.Div(id="tab1-warning"),
         dcc.Loading(type="circle", children=[
-            html.H5(L(lang, "trajectories_title")),
-            dbc.Row([
-                dbc.Col(dcc.Graph(id="tab1-graph-const", config=GRAPH_CONFIG), width=6),
-                dbc.Col(dcc.Graph(id="tab1-graph-prog", config=GRAPH_CONFIG), width=6),
-            ]),
+            html.H5(L(lang, "trajectories_title"), id="tab1-trajectories-title"),
+            html.Div([
+                html.Div(dcc.Graph(id="tab1-graph-const", config=GRAPH_CONFIG),
+                         id="tab1-graph-const-container", style={"flex": "1", "minWidth": "0"}),
+                html.Div(dcc.Graph(id="tab1-graph-prog", config=GRAPH_CONFIG),
+                         id="tab1-graph-prog-container", style={"flex": "1", "minWidth": "0"}),
+            ], style={"display": "flex", "gap": "1rem", "flexWrap": "wrap"}),
             html.Div(id="tab1-metric-cards"),
             html.Div(id="tab1-objective-result", className="mt-2"),
             html.Div(id="tab1-rolling-backtest-result", className="mt-2"),
-            html.H5(L(lang, "metrics_title"), className="mt-3"),
+            html.H5(L(lang, "metrics_title"), id="tab1-metrics-title", className="mt-3"),
             dash_table.DataTable(id="tab1-metrics-table", style_table={"overflowX": "auto"}, style_cell={"fontSize": "0.8rem", "textAlign": "left"}, tooltip_delay=0, tooltip_duration=None),
             html.Div([
                 html.H5(L(lang, "compare_pea_cto_title"), className="mt-3"),
@@ -525,15 +590,17 @@ def build_tab2(lang, v=None):
         dcc.Store(id="rp-weights-store"),
 
         dcc.Loading(type="circle", children=[
-            html.H5(L(lang, "trajectories_title")),
-            dbc.Row([
-                dbc.Col(dcc.Graph(id="tab2-graph-const", config=GRAPH_CONFIG), width=6),
-                dbc.Col(dcc.Graph(id="tab2-graph-prog", config=GRAPH_CONFIG), width=6),
-            ]),
+            html.H5(L(lang, "trajectories_title"), id="tab2-trajectories-title"),
+            html.Div([
+                html.Div(dcc.Graph(id="tab2-graph-const", config=GRAPH_CONFIG),
+                         id="tab2-graph-const-container", style={"flex": "1", "minWidth": "0"}),
+                html.Div(dcc.Graph(id="tab2-graph-prog", config=GRAPH_CONFIG),
+                         id="tab2-graph-prog-container", style={"flex": "1", "minWidth": "0"}),
+            ], style={"display": "flex", "gap": "1rem", "flexWrap": "wrap"}),
             html.Div(id="tab2-metric-cards"),
             html.Div(id="tab2-objective-result", className="mt-2"),
             html.Div(id="tab2-rolling-backtest-result", className="mt-2"),
-            html.H5(L(lang, "metrics_title_portfolio"), className="mt-3"),
+            html.H5(L(lang, "metrics_title_portfolio"), id="tab2-metrics-title", className="mt-3"),
             dash_table.DataTable(id="tab2-metrics-table", style_table={"overflowX": "auto"}, style_cell={"fontSize": "0.8rem", "textAlign": "left"}, tooltip_delay=0, tooltip_duration=None),
             html.Div([
                 html.H5(L(lang, "compare_pea_cto_title"), className="mt-3"),

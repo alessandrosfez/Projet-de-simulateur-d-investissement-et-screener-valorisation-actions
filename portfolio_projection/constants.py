@@ -30,11 +30,11 @@ N_PORTFOLIOS_MAX = 4
 PEA_TAX_RATE = 0.172
 CTO_FLAT_TAX_RATE = 0.30
 
-# Points de départ réels proposés pour la trajectoire historique superposée aux bandes de
-# percentiles (voir results._backtest_trajectory) : au lieu de toujours prendre les derniers mois
-# de l'historique de calibration ("recent"), on peut ancrer la trajectoire au début d'une crise
-# connue pour voir "qu'aurait donné ce plan en partant de là ?". None = comportement par défaut
-# (derniers mois, se termine aujourd'hui).
+# Points de départ réels proposés pour la trajectoire du mode historique (voir
+# results._backtest_trajectory) : au lieu de toujours prendre tout l'historique de calibration
+# téléchargé ("recent"), on peut ancrer la trajectoire au début d'une crise connue pour voir "qu'a
+# fait le marché depuis ce point précis ?". None = comportement par défaut (tout l'historique
+# téléchargé, se termine aujourd'hui).
 BACKTEST_ANCHORS = {
     "recent": None,
     "2008": "2008-01-01",

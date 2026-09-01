@@ -134,6 +134,7 @@ TRANSLATIONS = {
         "tab1_warning_select_index": "Sélectionne au moins un indice.",
         "tab1_no_data": "Aucune donnée disponible.",
         "trajectories_title": "Trajectoires simulées",
+        "historique_trajectory_title": "Trajectoire historique",
         "metrics_title": "Métriques par scénario",
         "metrics_title_portfolio": "Métriques par portefeuille et stratégie",
         "download_metrics_btn": "Télécharger les métriques (CSV)",
@@ -141,16 +142,28 @@ TRANSLATIONS = {
         "tax_net_note": "Valeurs nettes de {rate:.1f} % de fiscalité sur les gains.",
         "prob_gain_prefix": "Probabilité de gain : ",
         "years_axis": "Années",
+        "date_axis": "Date",
         "value_axis": "Valeur (€)",
+        "value_axis_base100": "Valeur (base 100)",
         "invested_capital_trace": "Capital investi",
-        "backtest_trace": "{label} (historique réel)",
-        "backtest_anchor_label": "Point de départ de l'historique superposé",
-        "backtest_anchor_help": "Choisit quelle période réelle sert de trajectoire superposée aux bandes de "
-                                "percentiles (ligne pointillée) : soit les mois les plus récents (se termine "
-                                "aujourd'hui), soit le début d'une crise connue, pour voir \"qu'aurait donné "
-                                "ce plan en partant de là ?\". Nécessite un historique de calibration "
-                                "remontant jusqu'à la date choisie (voir la source \"Indice brut\" pour la "
-                                "plus longue historique).",
+        "view_mode_label": "Mode d'affichage",
+        "view_mode_prevision": " Prévision (simulation Monte Carlo)",
+        "view_mode_historique": " Historique (trajectoire réellement observée)",
+        "view_mode_help": "Prévision : bandes de percentiles issues de la simulation Monte Carlo, avec "
+                          "apports, frais, fiscalité et retraits selon tes réglages. Historique : "
+                          "croissance brute réellement observée sur la période sélectionnée (\"Point de "
+                          "départ de l'historique\" ci-dessous), base 100 — achat unique sans apports, "
+                          "frais, fiscalité ni retraits, qui sont des réglages de planification hors-sujet "
+                          "pour \"qu'a fait le marché ?\".",
+        "historique_no_data": "Aucune donnée historique disponible pour cette période — essaie un autre "
+                              "point de départ ou un historique de calibration plus long.",
+        "backtest_anchor_label": "Point de départ de l'historique",
+        "backtest_anchor_help": "Choisit la fenêtre de la trajectoire historique affichée : soit tout "
+                                "l'historique de calibration téléchargé (se termine aujourd'hui), soit le "
+                                "début d'une crise connue, pour voir \"qu'a fait le marché depuis ce point "
+                                "précis ?\". Nécessite un historique de calibration remontant jusqu'à la "
+                                "date choisie (voir la source \"Indice brut\" pour la plus longue "
+                                "historique).",
         "backtest_anchor_recent": "Plus récent (se termine aujourd'hui)",
         "backtest_anchor_2008": "Crise de 2008",
         "backtest_anchor_2020": "Krach COVID (2020)",
@@ -158,8 +171,6 @@ TRANSLATIONS = {
         "backtest_anchor_truncated": "{label} : l'historique disponible commence en {available_from}, plus "
                                      "tard que le point de départ demandé ({anchor}) — la trajectoire "
                                      "affichée démarre à la date réellement disponible.",
-        "backtest_truncated_note": "Trajectoire(s) historique(s) tronquée(s) (historique plus court que "
-                                   "l'horizon) : {labels}.",
         "rolling_backtest_result_line": "{label} : {rate:.1f} % des {n_starts} points de départ historiques "
                                         "auraient atteint {target:,.0f} € (valeurs finales : min {min_val:,.0f} € "
                                         "/ médiane {median_val:,.0f} € / max {max_val:,.0f} €).",
@@ -196,6 +207,20 @@ TRANSLATIONS = {
         "metric_sharpe_help": "Ratio de Sharpe médian : rendement excédentaire obtenu par unité de risque (volatilité) pris. Plus il est élevé, meilleur est le couple rendement/risque.",
         "metric_max_drawdown_help": "Perte maximale médiane entre un plus haut et un creux ultérieur sur la trajectoire simulée : mesure l'ampleur du pire passage à vide, pas seulement le résultat final.",
         "metric_prob_ruin_help": "Part des simulations où le capital est totalement épuisé avant la fin de la phase de retrait (affiché seulement si la décumulation est activée).",
+        "historique_metrics_title": "Statistiques de la trajectoire historique",
+        "col_index_portfolio": "Indice / Portefeuille",
+        "metric_historique_years": "Période (années)",
+        "metric_historique_total_return": "Rendement total (%)",
+        "metric_historique_cagr": "Rendement annualisé (%)",
+        "metric_historique_volatility": "Volatilité annualisée (%)",
+        "metric_historique_max_drawdown": "Max drawdown (%)",
+        "metric_historique_sharpe": "Sharpe",
+        "metric_historique_years_help": "Durée réelle couverte par la trajectoire affichée.",
+        "metric_historique_total_return_help": "Croissance totale sur toute la période affichée (base 100 au point de départ) : achat unique, sans apports ni frais ni fiscalité.",
+        "metric_historique_cagr_help": "Rendement annualisé (CAGR) : le taux de croissance annuel constant qui, appliqué sur toute la période, aurait produit le même rendement total.",
+        "metric_historique_volatility_help": "Écart-type annualisé des rendements mensuels réellement observés sur la période.",
+        "metric_historique_max_drawdown_help": "Perte maximale réellement subie entre un plus haut et un creux ultérieur sur la période affichée.",
+        "metric_historique_sharpe_help": "Rendement annualisé (CAGR) divisé par la volatilité annualisée, sans taux sans risque : une approximation simple du couple rendement/risque, pas un vrai ratio de Sharpe.",
         "envelope_compare_title": "Valeur finale médiane nette : PEA vs CTO",
         "pea_trace_label": "PEA (net, {rate:.1f} %)",
         "cto_trace_label": "CTO (net, {rate:.1f} %)",
@@ -343,6 +368,7 @@ TRANSLATIONS = {
         "tab1_warning_select_index": "Select at least one index.",
         "tab1_no_data": "No data available.",
         "trajectories_title": "Simulated trajectories",
+        "historique_trajectory_title": "Historical trajectory",
         "metrics_title": "Metrics by scenario",
         "metrics_title_portfolio": "Metrics by portfolio and strategy",
         "download_metrics_btn": "Download metrics (CSV)",
@@ -350,15 +376,27 @@ TRANSLATIONS = {
         "tax_net_note": "Values net of {rate:.1f}% tax on gains.",
         "prob_gain_prefix": "Probability of gain: ",
         "years_axis": "Years",
+        "date_axis": "Date",
         "value_axis": "Value (€)",
+        "value_axis_base100": "Value (base 100)",
         "invested_capital_trace": "Invested capital",
-        "backtest_trace": "{label} (actual history)",
-        "backtest_anchor_label": "Overlaid history starting point",
-        "backtest_anchor_help": "Chooses which real period is overlaid on the percentile bands (dotted "
-                                "line): either the most recent months (ending today), or the start of a "
-                                "known crisis, to see \"what would this plan have done starting from there?\". "
-                                "Requires the calibration history to reach back to the chosen date (see the "
-                                "\"Raw index\" source for the longest history).",
+        "view_mode_label": "Display mode",
+        "view_mode_prevision": " Forecast (Monte Carlo simulation)",
+        "view_mode_historique": " Historical (actually observed trajectory)",
+        "view_mode_help": "Forecast: percentile bands from the Monte Carlo simulation, with contributions, "
+                          "fees, tax and withdrawals per your settings. Historical: actually observed raw "
+                          "growth over the selected period (\"History starting point\" below), base 100 — "
+                          "a single lump-sum purchase with no contributions, fees, tax or withdrawals, "
+                          "which are planning settings beside the point of \"what did the market actually "
+                          "do?\".",
+        "historique_no_data": "No historical data available for this period — try a different starting "
+                              "point or a longer calibration history.",
+        "backtest_anchor_label": "History starting point",
+        "backtest_anchor_help": "Chooses the window of the historical trajectory shown: either the whole "
+                                "downloaded calibration history (ending today), or the start of a known "
+                                "crisis, to see \"what did the market do since that point?\". Requires the "
+                                "calibration history to reach back to the chosen date (see the \"Raw index\" "
+                                "source for the longest history).",
         "backtest_anchor_recent": "Most recent (ends today)",
         "backtest_anchor_2008": "2008 crisis",
         "backtest_anchor_2020": "COVID crash (2020)",
@@ -366,8 +404,6 @@ TRANSLATIONS = {
         "backtest_anchor_truncated": "{label}: available history starts in {available_from}, later than the "
                                      "requested starting point ({anchor}) — the trajectory shown starts at "
                                      "the actually available date.",
-        "backtest_truncated_note": "Historical trajectory/trajectories truncated (history shorter than the "
-                                   "horizon): {labels}.",
         "rolling_backtest_result_line": "{label}: {rate:.1f}% of {n_starts} historical starting points would "
                                         "have reached {target:,.0f} € (final values: min {min_val:,.0f} € / "
                                         "median {median_val:,.0f} € / max {max_val:,.0f} €).",
@@ -404,6 +440,20 @@ TRANSLATIONS = {
         "metric_sharpe_help": "Median Sharpe ratio: excess return earned per unit of risk (volatility) taken. Higher means a better risk/return trade-off.",
         "metric_max_drawdown_help": "Median largest peak-to-trough loss along the simulated path: measures the worst dip endured, not just the final outcome.",
         "metric_prob_ruin_help": "Share of simulations where capital is fully depleted before the end of the withdrawal phase (shown only when decumulation is enabled).",
+        "historique_metrics_title": "Historical trajectory statistics",
+        "col_index_portfolio": "Index / Portfolio",
+        "metric_historique_years": "Period (years)",
+        "metric_historique_total_return": "Total return (%)",
+        "metric_historique_cagr": "Annualized return (%)",
+        "metric_historique_volatility": "Annualized volatility (%)",
+        "metric_historique_max_drawdown": "Max drawdown (%)",
+        "metric_historique_sharpe": "Sharpe",
+        "metric_historique_years_help": "Actual duration covered by the trajectory shown.",
+        "metric_historique_total_return_help": "Total growth over the whole period shown (base 100 at the starting point): a single lump-sum purchase, no contributions, fees or taxes.",
+        "metric_historique_cagr_help": "Compound annual growth rate (CAGR): the constant yearly growth rate that, applied over the whole period, would have produced the same total return.",
+        "metric_historique_volatility_help": "Annualized standard deviation of the monthly returns actually observed over the period.",
+        "metric_historique_max_drawdown_help": "Largest loss actually incurred between a peak and a later trough over the period shown.",
+        "metric_historique_sharpe_help": "Annualized return (CAGR) divided by annualized volatility, with no risk-free rate: a simple approximation of the risk/return trade-off, not a true Sharpe ratio.",
         "envelope_compare_title": "Median net final value: PEA vs brokerage account",
         "pea_trace_label": "PEA (net, {rate:.1f}%)",
         "cto_trace_label": "Brokerage (net, {rate:.1f}%)",

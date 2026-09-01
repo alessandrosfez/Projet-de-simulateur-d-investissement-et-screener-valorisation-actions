@@ -104,6 +104,37 @@ def test_withdrawal_schedule_grows_with_inflation():
     assert sched[-1] > sched[0]  # le retrait suit l'inflation
 
 
+def test_summarize_historique_zero_returns():
+    monthly_returns = np.zeros(24)
+    result = m.summarize_historique(monthly_returns)
+    assert result["total_return"] == 0.0
+    assert result["cagr"] == 0.0
+    assert result["volatility"] == 0.0
+    assert result["max_drawdown"] == 0.0
+    assert result["sharpe"] is None  # volatilité nulle : ratio non défini
+
+
+def test_summarize_historique_constant_positive_return_matches_cagr():
+    # 12 mois à +1%/mois : rendement total = 1.01**12 - 1, et comme la séquence est
+    # constante l'annualisé (CAGR sur 1 an) doit coïncider avec le rendement total.
+    monthly_returns = np.full(12, 0.01)
+    result = m.summarize_historique(monthly_returns)
+    expected_total = (1.01 ** 12 - 1) * 100
+    assert result["total_return"] == pytest.approx(expected_total, abs=0.05)
+    assert result["cagr"] == pytest.approx(expected_total, abs=0.05)
+    assert result["max_drawdown"] == 0.0  # jamais de baisse
+    assert result["n_years"] == 1.0
+
+
+def test_summarize_historique_drawdown_detects_the_trough():
+    # +10%, -50%, +10% : le point bas (après le krach) doit être détecté comme le max drawdown.
+    monthly_returns = np.array([0.10, -0.50, 0.10])
+    result = m.summarize_historique(monthly_returns)
+    growth = np.cumprod(1 + monthly_returns)
+    expected_dd = ((growth[1] - growth[0]) / growth[0]) * 100
+    assert result["max_drawdown"] == pytest.approx(expected_dd, abs=0.01)
+
+
 # ---------- simulation Monte Carlo (loi t de Student) ----------
 
 def test_simulate_index_returns_shape_and_target_mean():

@@ -12,8 +12,8 @@ from dash import html
 from constants import PEA_TAX_RATE
 from engine import (
     apply_fee, apply_social_tax, compute_objective_contribution, constant_schedule,
-    progressive_schedule, returns_to_dca, rolling_backtest_final_values, summarize, to_display_values,
-    withdrawal_schedule,
+    progressive_schedule, returns_to_dca, rolling_backtest_final_values, summarize, summarize_historique,
+    to_display_values, withdrawal_schedule,
 )
 from charts import make_band_figure
 from i18n import L, PALETTE
@@ -37,45 +37,44 @@ def build_schedules(horizon_years, enable_decumulation, decumulation_years, with
     return n_months, years_axis, phase_boundary_years, schedules
 
 
-def _backtest_trajectory(historical_returns, schedule, years_axis, annual_fee_pct, apply_tax, tax_rate,
-                          inflation_pct, display_real, anchor_date=None):
-    """Trajectoire réellement observée (une seule séquence historique, pas une simulation) : "si
-    j'avais investi il y a n mois avec ce même plan d'apport, où en serais-je aujourd'hui ?".
+def _backtest_trajectory(historical_returns, anchor_date=None):
+    """Croissance brute réellement observée (achat unique, "buy & hold"), base 100 au premier point
+    de la fenêtre : le mode historique répond à "qu'a fait le marché ?", pas à "combien aurais-je
+    accumulé avec tel plan d'apport ?" — apports, frais, fiscalité et retraits sont des réglages de
+    planification hors-sujet ici (masqués dans la sidebar, voir layout.toggle_prevision_only) et ne
+    sont donc plus appliqués à cette trajectoire.
 
-    Par défaut (anchor_date=None), utilise les n derniers mois de l'historique de calibration (les
-    plus récents, jusqu'à aujourd'hui) pour que la trajectoire se termine à la date actuelle. Si
-    anchor_date est fourni (ex: "2008-01-01"), la trajectoire démarre à cette date réelle à la
-    place ("qu'aurait donné ce plan en partant de ce point précis ?") : `historical_returns` doit
-    alors être un pd.Series avec un DatetimeIndex, pas un tableau brut. Tronquée à la plus courte
-    des deux séries dans les deux cas : un historique plus court que l'horizon de projection ne
-    peut pas couvrir tout le graphique (la trajectoire s'arrête simplement avant la fin)."""
+    Par défaut (anchor_date=None), la fenêtre est tout l'historique de calibration téléchargé
+    (lookback_years), jusqu'à aujourd'hui. Si anchor_date est fourni (ex: "2008-01-01"), la fenêtre
+    démarre à cette date réelle à la place ("qu'a fait le marché depuis ce point précis ?") :
+    `historical_returns` doit alors être un pd.Series avec un DatetimeIndex, pas un tableau brut.
+
+    Renvoie les vraies dates calendaires de l'historique (pas des années relatives 0..horizon) :
+    le mode historique doit se lire comme "qu'est-ce qui s'est passé en 2008-2010 ?", pas comme une
+    projection simplement décalée dans le temps."""
     if anchor_date is not None:
         historical_returns = historical_returns[historical_returns.index >= pd.Timestamp(anchor_date)]
-    n = min(len(historical_returns), len(schedule))
-    if n == 0:
+    if len(historical_returns) == 0:
         return None
-    window = historical_returns[:n] if anchor_date is not None else historical_returns[-n:]
-    monthly_returns = np.asarray(window).reshape(1, n)
-    net_returns = apply_fee(monthly_returns, annual_fee_pct)
-    portfolio_value, invested_capital = returns_to_dca(net_returns, schedule[:n])
-    portfolio_value = apply_social_tax(portfolio_value, invested_capital, apply_tax, tax_rate)
-    portfolio_value, _ = to_display_values(
-        portfolio_value, invested_capital, years_axis[:n], inflation_pct, display_real
-    )
-    return years_axis[:n], portfolio_value[0], n < len(schedule)
+    returns_arr = np.asarray(historical_returns)
+    growth = 100 * np.cumprod(1 + returns_arr)
+    return historical_returns.index, growth, summarize_historique(returns_arr)
 
 
 def compute_results(items, years_axis, schedules, annual_fee_pct, apply_tax, tax_rate, inflation_pct,
                      display_real, lower_pct, upper_pct, enable_decumulation, phase_boundary_years,
-                     lang="fr", palette=None, dark=False, backtest_items=None, backtest_anchor_date=None):
+                     lang="fr", palette=None, dark=False, backtest_items=None, backtest_anchor_date=None,
+                     view_mode="prevision"):
     """items: liste de (label, monthly_returns (n_sims, n_months)). all_metrics est indexé par le
     tuple (label, strat_name) : strat_name est une clé stable ("constant"/"progressive"), traduite
     uniquement à l'affichage. backtest_items : liste optionnelle de (label, rendements_historiques),
     même labels que items ; si backtest_anchor_date est fourni, chaque série doit être un pd.Series
-    avec un DatetimeIndex (voir _backtest_trajectory). La trajectoire réellement observée est
-    superposée à la bande de percentiles correspondante ("qu'aurait donné cet historique réel ?").
-    Renvoie en plus la liste des labels dont la trajectoire a été tronquée (historique plus court
-    que l'horizon, ou point de départ demandé trop récent pour couvrir tout l'horizon)."""
+    avec un DatetimeIndex (voir _backtest_trajectory). En mode historique (view_mode="historique"),
+    la trajectoire réellement observée remplace entièrement la bande de percentiles (croissance
+    brute base 100, sans apports/frais/fiscalité — voir _backtest_trajectory). Renvoie en plus
+    historique_metrics : {label: dict} des statistiques de cette trajectoire réelle (rendement
+    annualisé, volatilité, max drawdown... voir engine.summarize_historique), vide si
+    backtest_items n'est pas fourni."""
     all_metrics = {}
     series_by_strategy = {name: [] for name in schedules}
     invested_by_strategy = {}
@@ -99,37 +98,42 @@ def compute_results(items, years_axis, schedules, annual_fee_pct, apply_tax, tax
             series_by_strategy[strat_name].append((label, median, p_low, p_high))
 
     backtest_series_by_strategy = {name: [] for name in schedules}
-    backtest_truncated_labels = set()
+    historique_metrics = {}
     if backtest_items:
         backtest_map = dict(backtest_items)
         for label, _ in items:
             hist_returns = backtest_map.get(label)
             if hist_returns is None or len(hist_returns) == 0:
                 continue
-            for strat_name, schedule in schedules.items():
-                result = _backtest_trajectory(
-                    hist_returns, schedule, years_axis, annual_fee_pct, apply_tax, tax_rate,
-                    inflation_pct, display_real, anchor_date=backtest_anchor_date,
-                )
-                if result is not None:
-                    bt_years, bt_values, truncated = result
-                    backtest_series_by_strategy[strat_name].append((label, bt_years, bt_values))
-                    if truncated:
-                        backtest_truncated_labels.add(label)
+            result = _backtest_trajectory(hist_returns, anchor_date=backtest_anchor_date)
+            if result is None:
+                continue
+            bt_dates, bt_values, bt_metrics = result
+            historique_metrics[label] = bt_metrics
+            for strat_name in schedules:
+                backtest_series_by_strategy[strat_name].append((label, bt_dates, bt_values))
 
     figs = {}
     for strat_name, series in series_by_strategy.items():
-        strat_display = L(lang, f"schedule_{strat_name}")
+        if view_mode == "historique":
+            # Un seul graphique affiché en mode historique (voir callbacks.py) : pas besoin d'un
+            # titre "Apport constant/progressif" qui n'a de sens que pour comparer deux stratégies
+            # d'apport côte à côte, le H5 au-dessus du graphique porte déjà "Trajectoire historique".
+            title = ""
+        else:
+            strat_display = L(lang, f"schedule_{strat_name}")
+            subtitle = L(lang, "band_subtitle", lower=lower_pct, upper=upper_pct)
+            title = f"{strat_display}<br><sup>{subtitle}</sup>"
         figs[strat_name] = make_band_figure(
-            series, years_axis,
-            f"{strat_display}<br><sup>{L(lang, 'band_subtitle', lower=lower_pct, upper=upper_pct)}</sup>",
+            series, years_axis, title,
             lang=lang, palette=palette,
             invested_capital=invested_by_strategy.get(strat_name),
             phase_boundary_years=phase_boundary_years,
             dark=dark,
             backtest_series=backtest_series_by_strategy.get(strat_name),
+            view_mode=view_mode,
         )
-    return all_metrics, figs, series_by_strategy, sorted(backtest_truncated_labels)
+    return all_metrics, figs, series_by_strategy, historique_metrics
 
 
 def build_sequence_risk_series(monthly_returns, schedule, annual_fee_pct, apply_tax, tax_rate,
@@ -251,6 +255,53 @@ def build_metrics_outputs(all_metrics: dict, lang: str, lower_pct: float, upper_
     tooltip_header = {
         col_label: {"type": "text", "value": L(lang, f"metric_{key}_help")}
         for key, col_label, _ in col_defs
+    }
+    return table_data, columns, csv_data, tooltip_header
+
+
+METRIC_DEFS_HISTORIQUE = [
+    ("n_years", "metric_historique_years", "years"),
+    ("total_return", "metric_historique_total_return", "percent"),
+    ("cagr", "metric_historique_cagr", "percent"),
+    ("volatility", "metric_historique_volatility", "percent"),
+    ("max_drawdown", "metric_historique_max_drawdown", "percent"),
+    ("sharpe", "metric_historique_sharpe", "ratio"),
+]
+
+
+def build_historique_metrics_outputs(historique_metrics: dict, lang: str):
+    """historique_metrics: {label: metrics_dict (clés stables, voir engine.summarize_historique())}.
+    Même forme de retour que build_metrics_outputs (table_data, table_columns, csv_data,
+    tooltip_header), mais pour la trajectoire réellement observée (une seule séquence, pas de
+    percentiles) plutôt que pour les percentiles Monte Carlo : des libellés dédiés
+    (metric_historique_*) évitent de reprendre le vocabulaire "médian"/"simulé" des métriques
+    Monte Carlo, qui ne s'applique pas à une trajectoire unique."""
+    col_defs = [(key, L(lang, label_key), fmt, label_key) for key, label_key, fmt in METRIC_DEFS_HISTORIQUE]
+    label_col = L(lang, "col_index_portfolio")
+
+    rows_raw = []
+    for label, m in historique_metrics.items():
+        row = {label_col: label}
+        for key, col_label, _, _label_key in col_defs:
+            row[col_label] = m.get(key)
+        rows_raw.append(row)
+    raw_df = pd.DataFrame(rows_raw)
+
+    display_df = raw_df.copy()
+    for _, col_label, fmt, _label_key in col_defs:
+        if fmt == "percent":
+            display_df[col_label] = raw_df[col_label].map(lambda v: f"{v:.1f} %" if v is not None else "—")
+        elif fmt == "ratio":
+            display_df[col_label] = raw_df[col_label].map(lambda v: f"{v:.2f}" if v is not None else "—")
+        elif fmt == "years":
+            display_df[col_label] = raw_df[col_label].map(lambda v: f"{v:.1f}")
+
+    columns = [{"name": c, "id": c} for c in display_df.columns]
+    table_data = display_df.to_dict("records")
+    csv_data = raw_df.to_csv(index=False)
+    tooltip_header = {
+        col_label: {"type": "text", "value": L(lang, f"{label_key}_help")}
+        for _, col_label, _, label_key in col_defs
     }
     return table_data, columns, csv_data, tooltip_header
 

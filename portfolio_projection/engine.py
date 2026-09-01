@@ -187,6 +187,30 @@ def summarize(
     return result
 
 
+def summarize_historique(monthly_returns: np.ndarray) -> dict:
+    """Statistiques descriptives d'une trajectoire historique réellement observée (achat unique,
+    pas de simulation) : à la différence de summarize(), il n'y a ici qu'une seule séquence de
+    rendements réels, donc pas de percentiles ni de probabilité de gain à calculer — seulement des
+    moyennes/écarts sur cette séquence. `monthly_returns` : rendements mensuels réels de la fenêtre
+    affichée (1D, déjà tronquée au point de départ choisi)."""
+    n = len(monthly_returns)
+    growth = np.cumprod(1 + monthly_returns)
+    years = n / 12
+    cagr = growth[-1] ** (1 / years) - 1 if years > 0 else np.nan
+    vol = monthly_returns.std() * np.sqrt(12)
+    sharpe = cagr / vol if vol > 0 else np.nan
+    running_max = np.maximum.accumulate(growth)
+    max_dd = ((growth - running_max) / running_max).min()
+    return {
+        "n_years": round(float(years), 1),
+        "total_return": round((float(growth[-1]) - 1) * 100, 1),
+        "cagr": round(float(cagr) * 100, 2),
+        "volatility": round(float(vol) * 100, 2),
+        "sharpe": round(float(sharpe), 2) if not np.isnan(sharpe) else None,
+        "max_drawdown": round(float(max_dd) * 100, 2),
+    }
+
+
 def rolling_backtest_final_values(historical_returns: np.ndarray, schedule: np.ndarray, years_axis: np.ndarray,
                                    annual_fee_pct: float, apply_tax: bool, tax_rate: float,
                                    inflation_pct: float, display_real: bool):

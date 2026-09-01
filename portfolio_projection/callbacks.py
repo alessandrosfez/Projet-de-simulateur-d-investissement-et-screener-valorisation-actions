@@ -22,8 +22,9 @@ from engine import inject_shock, simulate_index_returns, simulate_portfolio_asse
 from i18n import L, PALETTE, PALETTE_CODES, PALETTE_NAMES, PALETTES
 from market_data import get_aligned_returns, get_monthly_returns
 from results import (
-    build_envelope_comparison_figure, build_metric_cards, build_metrics_outputs, build_schedules,
-    build_sequence_risk_series, compute_results, render_objective_result, render_rolling_backtest_result,
+    build_envelope_comparison_figure, build_historique_metrics_outputs, build_metric_cards,
+    build_metrics_outputs, build_schedules, build_sequence_risk_series, compute_results,
+    render_objective_result, render_rolling_backtest_result,
 )
 
 # ============================================================
@@ -58,6 +59,26 @@ app.callback(Output("decumulation-options-container", "style"), Input("decumulat
 app.callback(Output("objective-options-container", "style"), Input("objective-checkbox", "value"))(layout.toggle_objective)
 
 app.callback(Output("block-size-container", "style"), Input("method-radio", "value"))(layout.toggle_block_size)
+
+app.callback(Output("horizon-slider-container", "style"), Input("view-mode-radio", "value"))(layout.toggle_prevision_only)
+
+app.callback(Output("backtest-anchor-container", "style"), Input("view-mode-radio", "value"))(layout.toggle_historique_only)
+
+# Réglages qui n'ont d'effet que sur la simulation Monte Carlo (méthode, choc injecté, bandes de
+# percentiles, nombre de simulations/seed, comparatif PEA/CTO) ou qui relèvent de la planification
+# future plutôt que de la simple relecture d'un historique (retraits, apports, frais/fiscalité,
+# mode objectif) : masqués en mode historique pour garder la sidebar concentrée sur ce qui compte
+# vraiment pour "qu'est-ce qui s'est passé ?" (source, historique de calibration, point de départ).
+for _container_id in (
+    "method-section-container", "mu-override-container", "crisis-section-container",
+    "sim-settings-container", "compare-envelopes-option-container",
+    "withdrawals-section-container", "contrib-section-container", "fees-tax-section-container",
+    "objective-section-container",
+    # Onglets entiers de l'accordéon devenus vides en mode historique (leur seul contenu est l'un
+    # des containers ci-dessus) : masqués en entier (en-tête compris), pas juste vidés.
+    "accordion-item-retraits-crise", "accordion-item-contrib", "accordion-item-fees", "accordion-item-sim",
+):
+    app.callback(Output(_container_id, "style"), Input("view-mode-radio", "value"))(layout.toggle_prevision_only)
 
 app.callback(Output("crisis-options-container", "style"), Input("crisis-checkbox", "value"))(layout.toggle_crisis)
 
@@ -193,10 +214,14 @@ def upload_config(contents):
     Output("tab1-sequence-risk-chart", "figure"),
     Output("tab1-objective-result", "children"),
     Output("tab1-rolling-backtest-result", "children"),
+    Output("tab1-trajectories-title", "children"),
+    Output("tab1-graph-prog-container", "style"),
+    Output("tab1-metrics-title", "children"),
     Input("indices-checklist", "value"),
     Input("source-radio", "value"),
     Input("lookback-slider", "value"),
     Input("horizon-slider", "value"),
+    Input("view-mode-radio", "value"),
     Input("backtest-anchor-radio", "value"),
     Input("decumulation-checkbox", "value"),
     Input("decumulation-years-slider", "value"),
@@ -230,7 +255,7 @@ def upload_config(contents):
     Input("objective-percentile-radio", "value"),
     *[Input(f"mu-override-t{i}", "value") for i in range(len(TICKER_KEYS))],
 )
-def update_tab1(indices, source, lookback_years, horizon_years, backtest_anchor, decum_val, decumulation_years,
+def update_tab1(indices, source, lookback_years, horizon_years, view_mode, backtest_anchor, decum_val, decumulation_years,
                  withdrawal_monthly, method, block_size, crisis_val, shock_pct, shock_duration,
                  shock_timing, shock_year, apport_constant, apport_initial, apport_final,
                  annual_fee_pct, inflation_pct, display_mode, tax_val, envelope, cto_method, cto_tmi,
@@ -239,13 +264,17 @@ def update_tab1(indices, source, lookback_years, horizon_years, backtest_anchor,
     lang = lang or "fr"
     palette = PALETTES.get(palette_code, PALETTE)
     dark = bool(dark_mode)
+    view_mode = view_mode or "prevision"
     style_header, style_cell, style_data = layout.table_style_overrides(dark)
+    trajectories_title = L(lang, "historique_trajectory_title") if view_mode == "historique" else L(lang, "trajectories_title")
+    prog_container_style = {"display": "none"} if view_mode == "historique" else {"flex": "1", "minWidth": "0"}
+    metrics_title = L(lang, "historique_metrics_title") if view_mode == "historique" else L(lang, "metrics_title")
     empty_fig = go.Figure()
     empty_fig.update_layout(template="plotly_dark" if dark else "plotly")
     if not indices:
         return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, {}, "",
                 dbc.Alert(L(lang, "tab1_warning_select_index"), color="warning"), {"display": "none"}, empty_fig,
-                {"display": "none"}, empty_fig, "", "")
+                {"display": "none"}, empty_fig, "", "", trajectories_title, prog_container_style, metrics_title)
 
     enable_decumulation = bool(decum_val and "on" in decum_val)
     inject_crisis = bool(crisis_val and "on" in crisis_val)
@@ -296,30 +325,34 @@ def update_tab1(indices, source, lookback_years, horizon_years, backtest_anchor,
         msg = " ".join(warnings) or L(lang, "tab1_no_data")
         return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, {}, "",
                 dbc.Alert(msg, color="danger"), {"display": "none"}, empty_fig,
-                {"display": "none"}, empty_fig, "", "")
+                {"display": "none"}, empty_fig, "", "", trajectories_title, prog_container_style, metrics_title)
 
-    all_metrics, figs, series_by_strategy, backtest_truncated = compute_results(
+    all_metrics, figs, series_by_strategy, historique_metrics = compute_results(
         items, years_axis, schedules, annual_fee_pct, apply_tax, tax_rate, inflation_pct, display_real,
         lower_pct, upper_pct, enable_decumulation, phase_boundary_years, lang=lang, palette=palette, dark=dark,
-        backtest_items=backtest_items, backtest_anchor_date=anchor_raw,
+        backtest_items=backtest_items, backtest_anchor_date=anchor_raw, view_mode=view_mode,
     )
-    cards = build_metric_cards(all_metrics, series_by_strategy, apply_tax, tax_rate, lang=lang)
-    table_data, table_columns, csv_data, table_tooltip_header = build_metrics_outputs(all_metrics, lang, lower_pct, upper_pct)
-    if backtest_truncated:
-        warnings.append(L(lang, "backtest_truncated_note", labels=", ".join(backtest_truncated)))
+    if view_mode == "historique":
+        cards = []
+        table_data, table_columns, csv_data, table_tooltip_header = build_historique_metrics_outputs(historique_metrics, lang)
+    else:
+        cards = build_metric_cards(all_metrics, series_by_strategy, apply_tax, tax_rate, lang=lang)
+        table_data, table_columns, csv_data, table_tooltip_header = build_metrics_outputs(all_metrics, lang, lower_pct, upper_pct)
+    if view_mode == "historique" and not backtest_items:
+        warnings.append(L(lang, "historique_no_data"))
     warning_alert = dbc.Alert(" ".join(warnings), color="warning") if warnings else ""
-    objective_result = render_objective_result(
+    objective_result = "" if view_mode == "historique" else render_objective_result(
         all_metrics, schedules, items, objective_val, objective_amount, objective_percentile,
         horizon_years, enable_decumulation, lang,
     )
-    rolling_backtest_result = render_rolling_backtest_result(
+    rolling_backtest_result = "" if view_mode == "historique" else render_rolling_backtest_result(
         backtest_items, schedules["constant"], years_axis, annual_fee_pct, apply_tax, tax_rate,
         inflation_pct, display_real, objective_val, objective_amount, enable_decumulation, lang,
     )
 
     compare_style = {"display": "none"}
     compare_fig = empty_fig
-    if compare_envelopes:
+    if compare_envelopes and view_mode != "historique":
         cto_rate_for_compare = layout.compute_cto_tax_rate(cto_method, cto_tmi)
         compare_fig = build_envelope_comparison_figure(
             items, schedules, annual_fee_pct, inflation_pct, display_real, years_axis, cto_rate_for_compare,
@@ -329,7 +362,7 @@ def update_tab1(indices, source, lookback_years, horizon_years, backtest_anchor,
 
     sequence_risk_style = {"display": "none"}
     sequence_risk_fig = empty_fig
-    if inject_crisis and shock_timing == "random" and first_shock_months is not None:
+    if view_mode != "historique" and inject_crisis and shock_timing == "random" and first_shock_months is not None:
         first_label, first_returns = items[0]
         shock_years, final_values, invested_final = build_sequence_risk_series(
             first_returns, schedules["constant"], annual_fee_pct, apply_tax, tax_rate, first_shock_months,
@@ -344,7 +377,7 @@ def update_tab1(indices, source, lookback_years, horizon_years, backtest_anchor,
         figs.get("progressive", empty_fig),
         cards, table_data, table_columns, style_header, style_cell, style_data, table_tooltip_header, csv_data,
         warning_alert, compare_style, compare_fig, sequence_risk_style, sequence_risk_fig, objective_result,
-        rolling_backtest_result,
+        rolling_backtest_result, trajectories_title, prog_container_style, metrics_title,
     )
 
 
@@ -485,12 +518,16 @@ _tab2_name_inputs = [Input(f"name-p{p}", "value") for p in range(N_PORTFOLIOS_MA
     Output("tab2-sequence-risk-chart", "figure"),
     Output("tab2-objective-result", "children"),
     Output("tab2-rolling-backtest-result", "children"),
+    Output("tab2-trajectories-title", "children"),
+    Output("tab2-graph-prog-container", "style"),
+    Output("tab2-metrics-title", "children"),
     Input("n-portfolios-input", "value"),
     *_tab2_name_inputs,
     *_tab2_weight_inputs,
     Input("source-radio", "value"),
     Input("lookback-slider", "value"),
     Input("horizon-slider", "value"),
+    Input("view-mode-radio", "value"),
     Input("backtest-anchor-radio", "value"),
     Input("decumulation-checkbox", "value"),
     Input("decumulation-years-slider", "value"),
@@ -536,14 +573,18 @@ def update_tab2(n_portfolios, *args):
     rest = rest[:-3]
     dark_mode = rest[-1]
     rest = rest[:-1]
-    (source, lookback_years, horizon_years, backtest_anchor, decum_val, decumulation_years, withdrawal_monthly,
+    (source, lookback_years, horizon_years, view_mode, backtest_anchor, decum_val, decumulation_years, withdrawal_monthly,
      method, block_size, crisis_val, shock_pct, shock_duration, shock_timing, shock_year,
      apport_constant, apport_initial, apport_final, annual_fee_pct, inflation_pct, display_mode,
      tax_val, envelope, cto_method, cto_tmi, compare_val, band_width, n_sims, seed, lang, palette_code) = rest
+    view_mode = view_mode or "prevision"
     lang = lang or "fr"
     palette = PALETTES.get(palette_code, PALETTE)
     dark = bool(dark_mode)
     style_header, style_cell, style_data = layout.table_style_overrides(dark)
+    trajectories_title = L(lang, "historique_trajectory_title") if view_mode == "historique" else L(lang, "trajectories_title")
+    prog_container_style = {"display": "none"} if view_mode == "historique" else {"flex": "1", "minWidth": "0"}
+    metrics_title = L(lang, "historique_metrics_title") if view_mode == "historique" else L(lang, "metrics_title_portfolio")
 
     k = len(TICKER_KEYS)
     weights_raw = [flat_weights[p * k:(p + 1) * k] for p in range(N_PORTFOLIOS_MAX)]
@@ -565,7 +606,8 @@ def update_tab2(n_portfolios, *args):
     if not portfolios:
         return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, {}, "",
                 dbc.Alert(L(lang, "portfolio_warning_zero"), color="warning"),
-                {"display": "none"}, empty_fig, {"display": "none"}, empty_fig, "", "")
+                {"display": "none"}, empty_fig, {"display": "none"}, empty_fig, "", "",
+                trajectories_title, prog_container_style, metrics_title)
 
     source_key = "etf" if source == "etf" else "indice"
     try:
@@ -573,11 +615,11 @@ def update_tab2(n_portfolios, *args):
     except ValueError as exc:
         return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, {}, "",
                 dbc.Alert(str(exc), color="danger"), {"display": "none"}, empty_fig,
-                {"display": "none"}, empty_fig, "", "")
+                {"display": "none"}, empty_fig, "", "", trajectories_title, prog_container_style, metrics_title)
     if aligned.empty:
         return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, {}, "",
                 dbc.Alert(L(lang, "no_aligned_data"), color="danger"), {"display": "none"}, empty_fig,
-                {"display": "none"}, empty_fig, "", "")
+                {"display": "none"}, empty_fig, "", "", trajectories_title, prog_container_style, metrics_title)
 
     enable_decumulation = bool(decum_val and "on" in decum_val)
     inject_crisis = bool(crisis_val and "on" in crisis_val)
@@ -620,28 +662,32 @@ def update_tab2(n_portfolios, *args):
         items.append((portfolio_name, portfolio_returns))
         backtest_items.append((portfolio_name, pd.Series(aligned.values @ weights_vec, index=aligned.index)))
 
-    all_metrics, figs, series_by_strategy, backtest_truncated = compute_results(
+    all_metrics, figs, series_by_strategy, historique_metrics = compute_results(
         items, years_axis, schedules, annual_fee_pct, apply_tax, tax_rate, inflation_pct, display_real,
         lower_pct, upper_pct, enable_decumulation, phase_boundary_years, lang=lang, palette=palette, dark=dark,
-        backtest_items=backtest_items, backtest_anchor_date=anchor_raw,
+        backtest_items=backtest_items, backtest_anchor_date=anchor_raw, view_mode=view_mode,
     )
-    cards = build_metric_cards(all_metrics, series_by_strategy, apply_tax, tax_rate, lang=lang)
-    table_data, table_columns, csv_data, table_tooltip_header = build_metrics_outputs(all_metrics, lang, lower_pct, upper_pct)
-    if backtest_truncated:
-        tab2_warnings.append(L(lang, "backtest_truncated_note", labels=", ".join(backtest_truncated)))
+    if view_mode == "historique":
+        cards = []
+        table_data, table_columns, csv_data, table_tooltip_header = build_historique_metrics_outputs(historique_metrics, lang)
+    else:
+        cards = build_metric_cards(all_metrics, series_by_strategy, apply_tax, tax_rate, lang=lang)
+        table_data, table_columns, csv_data, table_tooltip_header = build_metrics_outputs(all_metrics, lang, lower_pct, upper_pct)
+    if view_mode == "historique" and not backtest_items:
+        tab2_warnings.append(L(lang, "historique_no_data"))
     tab2_warning_alert = dbc.Alert(" ".join(tab2_warnings), color="warning") if tab2_warnings else ""
-    objective_result = render_objective_result(
+    objective_result = "" if view_mode == "historique" else render_objective_result(
         all_metrics, schedules, items, objective_val, objective_amount, objective_percentile,
         horizon_years, enable_decumulation, lang,
     )
-    rolling_backtest_result = render_rolling_backtest_result(
+    rolling_backtest_result = "" if view_mode == "historique" else render_rolling_backtest_result(
         backtest_items, schedules["constant"], years_axis, annual_fee_pct, apply_tax, tax_rate,
         inflation_pct, display_real, objective_val, objective_amount, enable_decumulation, lang,
     )
 
     compare_style = {"display": "none"}
     compare_fig = empty_fig
-    if compare_envelopes:
+    if compare_envelopes and view_mode != "historique":
         cto_rate_for_compare = layout.compute_cto_tax_rate(cto_method, cto_tmi)
         compare_fig = build_envelope_comparison_figure(
             items, schedules, annual_fee_pct, inflation_pct, display_real, years_axis, cto_rate_for_compare,
@@ -651,7 +697,7 @@ def update_tab2(n_portfolios, *args):
 
     sequence_risk_style = {"display": "none"}
     sequence_risk_fig = empty_fig
-    if inject_crisis and shock_timing == "random" and shock_months is not None:
+    if view_mode != "historique" and inject_crisis and shock_timing == "random" and shock_months is not None:
         first_label, first_returns = items[0]
         shock_years, final_values, invested_final = build_sequence_risk_series(
             first_returns, schedules["constant"], annual_fee_pct, apply_tax, tax_rate, shock_months,
@@ -666,7 +712,7 @@ def update_tab2(n_portfolios, *args):
         figs.get("progressive", empty_fig),
         cards, table_data, table_columns, style_header, style_cell, style_data, table_tooltip_header, csv_data,
         tab2_warning_alert, compare_style, compare_fig, sequence_risk_style, sequence_risk_fig, objective_result,
-        rolling_backtest_result,
+        rolling_backtest_result, trajectories_title, prog_container_style, metrics_title,
     )
 
 
