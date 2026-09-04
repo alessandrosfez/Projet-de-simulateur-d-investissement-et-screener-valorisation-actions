@@ -9,6 +9,12 @@ scénarios possibles (percentiles), pas un chiffre garanti. Projet frère :
 [`../stock_valuation`](../stock_valuation) (valorisation d'actions
 individuelles), indépendant de celui-ci.
 
+Pour **suivre et visualiser un PEA réellement constitué** (positions, apports
+et valeur effective dans le temps) plutôt que projeter un plan d'épargne
+hypothétique, voir le projet `invest_db` (base SQLite/SQLAlchemy, hors de ce
+dépôt) : mieux adapté à ce besoin que l'outil ci-dessous, qui reste un
+simulateur forward-looking.
+
 ## Fonctionnalités
 
 - **Deux modes d'affichage** : Prévision (simulation Monte Carlo, bandes de
