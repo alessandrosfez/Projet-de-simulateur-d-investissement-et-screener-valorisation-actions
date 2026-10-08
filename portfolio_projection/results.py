@@ -12,8 +12,8 @@ from dash import html
 from constants import PEA_TAX_RATE
 from engine import (
     apply_fee, apply_social_tax, cap_schedule, compute_objective_contribution, constant_schedule,
-    progressive_schedule, returns_to_dca, rolling_backtest_final_values, summarize, summarize_historique,
-    to_display_values, withdrawal_schedule,
+    overflow_schedule, progressive_schedule, returns_to_dca, rolling_backtest_final_values, summarize,
+    summarize_historique, to_display_values, withdrawal_schedule,
 )
 from charts import make_band_figure
 from i18n import L, PALETTE
@@ -22,7 +22,11 @@ from i18n import L, PALETTE
 def build_schedules(horizon_years, enable_decumulation, decumulation_years, withdrawal_monthly,
                      inflation_pct, apport_constant, apport_initial, apport_final, pea_cap=None):
     """pea_cap : plafond légal des versements PEA (150 000 €) à appliquer aux échéanciers, ou None
-    pour ne pas plafonner (CTO, ou utilisateur qui a décoché l'option — voir engine.cap_schedule)."""
+    pour ne pas plafonner (CTO, ou utilisateur qui a décoché l'option — voir engine.cap_schedule).
+    Renvoie aussi overflow_schedules (même clés que schedules) : la part des versements qui
+    dépasse ce plafond (engine.overflow_schedule), à tableaux de zéros quand pea_cap est None —
+    utile pour simuler la suite des versements sur un CTO une fois le PEA plein (voir
+    compute_results, paramètre overflow_schedules)."""
     n_months_accum = horizon_years * 12
     n_months_decum = decumulation_years * 12 if enable_decumulation else 0
     n_months = n_months_accum + n_months_decum
@@ -31,13 +35,15 @@ def build_schedules(horizon_years, enable_decumulation, decumulation_years, with
 
     withdrawals = withdrawal_schedule(n_months_decum, withdrawal_monthly, inflation_pct)
     schedules = {}
+    overflow_schedules = {}
     for strat_name, accum in [
         ("constant", constant_schedule(n_months_accum, apport_constant)),
         ("progressive", progressive_schedule(n_months_accum, apport_initial, apport_final)),
     ]:
         schedule = np.concatenate([accum, -withdrawals]) if enable_decumulation else accum
         schedules[strat_name] = cap_schedule(schedule, pea_cap) if pea_cap else schedule
-    return n_months, years_axis, phase_boundary_years, schedules
+        overflow_schedules[strat_name] = overflow_schedule(schedule, pea_cap) if pea_cap else np.zeros_like(schedule)
+    return n_months, years_axis, phase_boundary_years, schedules, overflow_schedules
 
 
 def _backtest_trajectory(historical_returns, anchor_date=None):
@@ -67,7 +73,7 @@ def _backtest_trajectory(historical_returns, anchor_date=None):
 def compute_results(items, years_axis, schedules, annual_fee_pct, apply_tax, tax_rate, inflation_pct,
                      display_real, lower_pct, upper_pct, enable_decumulation, phase_boundary_years,
                      lang="fr", palette=None, dark=False, backtest_items=None, backtest_anchor_date=None,
-                     view_mode="prevision"):
+                     view_mode="prevision", overflow_schedules=None, cto_tax_rate=None):
     """items: liste de (label, monthly_returns (n_sims, n_months)). all_metrics est indexé par le
     tuple (label, strat_name) : strat_name est une clé stable ("constant"/"progressive"), traduite
     uniquement à l'affichage. backtest_items : liste optionnelle de (label, rendements_historiques),
@@ -77,7 +83,15 @@ def compute_results(items, years_axis, schedules, annual_fee_pct, apply_tax, tax
     brute base 100, sans apports/frais/fiscalité — voir _backtest_trajectory). Renvoie en plus
     historique_metrics : {label: dict} des statistiques de cette trajectoire réelle (rendement
     annualisé, volatilité, max drawdown... voir engine.summarize_historique), vide si
-    backtest_items n'est pas fourni."""
+    backtest_items n'est pas fourni.
+
+    overflow_schedules (optionnel, mêmes clés que schedules, voir build_schedules) : quand fourni,
+    la part des versements qui dépasse le plafond PEA est simulée en plus (mêmes rendements
+    mensuels, donc même instrument sous-jacent) et imposée au taux cto_tax_rate (CTO) au lieu de
+    tax_rate (PEA), puis additionnée à la valeur et au capital investi PEA avant les métriques —
+    pour représenter la richesse totale réelle d'une stratégie "PEA jusqu'au plafond, puis CTO en
+    complément" plutôt que de simplement arrêter les versements au plafond. None (par défaut) :
+    comportement inchangé, pas de CTO complémentaire."""
     all_metrics = {}
     series_by_strategy = {name: [] for name in schedules}
     invested_by_strategy = {}
@@ -87,6 +101,13 @@ def compute_results(items, years_axis, schedules, annual_fee_pct, apply_tax, tax
             net_returns = apply_fee(monthly_returns, annual_fee_pct)
             portfolio_value, invested_capital = returns_to_dca(net_returns, schedule)
             portfolio_value = apply_social_tax(portfolio_value, invested_capital, apply_tax, tax_rate)
+
+            if overflow_schedules is not None and np.any(overflow_schedules[strat_name] > 0):
+                overflow_value, overflow_invested = returns_to_dca(net_returns, overflow_schedules[strat_name])
+                overflow_value = apply_social_tax(overflow_value, overflow_invested, apply_tax, cto_tax_rate)
+                portfolio_value = portfolio_value + overflow_value
+                invested_capital = invested_capital + overflow_invested
+
             portfolio_value, invested_capital = to_display_values(
                 portfolio_value, invested_capital, years_axis, inflation_pct, display_real
             )
@@ -152,11 +173,16 @@ def build_sequence_risk_series(monthly_returns, schedule, annual_fee_pct, apply_
     return shock_years, portfolio_value[:, -1], float(invested_capital[-1])
 
 
-def build_metric_cards(all_metrics, series_by_strategy, apply_tax, tax_rate, lang="fr"):
+def build_metric_cards(all_metrics, series_by_strategy, apply_tax, tax_rate, lang="fr", route_overflow=False):
     blocks = []
     if apply_tax:
         blocks.append(html.Small(
             L(lang, "tax_net_note", rate=tax_rate * 100),
+            className="text-muted d-block mb-2",
+        ))
+    if route_overflow:
+        blocks.append(html.Small(
+            L(lang, "overflow_note"),
             className="text-muted d-block mb-2",
         ))
     for strat_name, series in series_by_strategy.items():

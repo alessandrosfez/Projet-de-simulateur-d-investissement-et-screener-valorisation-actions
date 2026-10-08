@@ -103,6 +103,12 @@ TRANSLATIONS = {
         "pea_cap_help": "Au-delà de ce plafond, plus aucun versement n'est possible sur le PEA "
                        "(le capital déjà investi continue de fructifier). Décoche pour explorer un "
                        "plan sans cette limite (ex. simulation combinée avec un CTO en complément).",
+        "pea_overflow_checkbox": " Continuer les versements sur un CTO une fois le plafond atteint",
+        "pea_overflow_help": "Simule la suite des versements (même montant, même indice) sur un "
+                             "compte-titres ordinaire dès que le PEA est plein, au lieu de "
+                             "simplement arrêter d'épargner. Les métriques et le graphique "
+                             "ci-dessous reflètent alors la richesse totale PEA + CTO, chacun "
+                             "imposé selon ses propres règles.",
         "cto_method_label": "Méthode d'imposition (CTO)",
         "cto_flat": " Flat tax (30 %)",
         "cto_bareme": " Barème progressif + prélèvements sociaux",
@@ -144,6 +150,10 @@ TRANSLATIONS = {
         "download_metrics_btn": "Télécharger les métriques (CSV)",
         "compare_pea_cto_title": "PEA vs CTO",
         "tax_net_note": "Valeurs nettes de {rate:.1f} % de fiscalité sur les gains.",
+        "overflow_note": "Inclut les versements qui dépassent le plafond PEA, simulés sur un CTO "
+                         "en complément (voir la case \"Continuer les versements sur un CTO\") : "
+                         "le capital investi et la valeur finale ci-dessous cumulent les deux "
+                         "enveloppes.",
         "prob_gain_prefix": "Probabilité de gain : ",
         "years_axis": "Années",
         "date_axis": "Date",
@@ -342,6 +352,12 @@ TRANSLATIONS = {
         "pea_cap_help": "Past this cap, no further deposits can be made into the PEA (capital "
                        "already invested keeps growing). Uncheck to explore a plan without this "
                        "limit (e.g. a combined simulation with a CTO on top).",
+        "pea_overflow_checkbox": " Keep contributing to a CTO once the cap is reached",
+        "pea_overflow_help": "Simulates the rest of the contributions (same amount, same index) "
+                             "going into an ordinary brokerage account once the PEA is full, "
+                             "instead of simply stopping. The metrics and chart below then "
+                             "reflect the combined PEA + CTO wealth, each taxed under its own "
+                             "rules.",
         "cto_method_label": "Tax method (brokerage account)",
         "cto_flat": " Flat tax (30%)",
         "cto_bareme": " Progressive income tax scale + social contributions",
@@ -382,6 +398,9 @@ TRANSLATIONS = {
         "download_metrics_btn": "Download metrics (CSV)",
         "compare_pea_cto_title": "PEA vs brokerage account",
         "tax_net_note": "Values net of {rate:.1f}% tax on gains.",
+        "overflow_note": "Includes contributions past the PEA cap, simulated on a complementary "
+                         "CTO (see the \"Keep contributing to a CTO\" checkbox) : capital "
+                         "invested and final value below combine both accounts.",
         "prob_gain_prefix": "Probability of gain: ",
         "years_axis": "Years",
         "date_axis": "Date",

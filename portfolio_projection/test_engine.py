@@ -117,6 +117,26 @@ def test_cap_schedule_leaves_withdrawals_untouched():
     np.testing.assert_allclose(capped, [100.0, 50.0, 0.0, -50.0, -50.0])
 
 
+def test_overflow_schedule_is_the_complement_of_cap_schedule():
+    amounts = np.array([100.0] * 6)  # cumul : 100..600, plafond 250
+    overflow = m.overflow_schedule(amounts, cap=250.0)
+    np.testing.assert_allclose(overflow, [0.0, 0.0, 50.0, 100.0, 100.0, 100.0])
+    # La somme capped + overflow doit reconstituer exactement les versements d'origine.
+    np.testing.assert_allclose(m.cap_schedule(amounts, cap=250.0) + overflow, amounts)
+
+
+def test_overflow_schedule_zero_when_under_cap():
+    amounts = np.array([100.0] * 6)  # cumul max 600, plafond 1000 jamais atteint
+    overflow = m.overflow_schedule(amounts, cap=1000.0)
+    np.testing.assert_allclose(overflow, np.zeros(6))
+
+
+def test_overflow_schedule_ignores_withdrawals():
+    amounts = np.array([100.0, 100.0, 100.0, -50.0, -50.0])  # plafond 150, franchi au mois 2
+    overflow = m.overflow_schedule(amounts, cap=150.0)
+    np.testing.assert_allclose(overflow, [0.0, 50.0, 100.0, 0.0, 0.0])
+
+
 def test_withdrawal_schedule_grows_with_inflation():
     sched = m.withdrawal_schedule(n_months_decum=24, monthly_amount=1000.0, inflation_pct=3.0)
     assert sched[0] == 1000.0

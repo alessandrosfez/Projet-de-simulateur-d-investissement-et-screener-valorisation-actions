@@ -63,6 +63,7 @@ CONFIG_FIELDS = [
     ("apply_tax", "tax-checkbox", "value"),
     ("envelope", "envelope-radio", "value"),
     ("pea_cap", "pea-cap-checkbox", "value"),
+    ("pea_overflow", "pea-overflow-checkbox", "value"),
     ("cto_tax_method", "cto-tax-method-radio", "value"),
     ("cto_tmi", "cto-tmi-dropdown", "value"),
     ("compare_envelopes", "compare-envelopes-checkbox", "value"),
@@ -113,6 +114,14 @@ def toggle_cto_tax_method(envelope):
 
 def toggle_pea_cap_container(envelope):
     return {"display": "block"} if envelope == "pea" else {"display": "none"}
+
+
+def toggle_pea_overflow_container(pea_cap_val):
+    """La case "Continuer sur un CTO" n'a de sens que si le plafond PEA lui-même est actif (sinon
+    il n'y a jamais d'excédent à router) : la masquer dès que pea-cap-checkbox est décochée évite
+    une case visible et cochable qui ne ferait rien (route_overflow dans callbacks.py reste False
+    tant que pea_cap est None, quoi que vaille cette case)."""
+    return {"display": "block"} if (pea_cap_val and "on" in pea_cap_val) else {"display": "none"}
 
 
 def toggle_cto_tmi(method):
@@ -381,6 +390,14 @@ def build_sidebar(lang, v=None):
                     value=gv(v, "pea-cap-checkbox", ["on"]), className="mb-0",
                 ),
                 html.Div(L(lang, "pea_cap_help"), className="text-muted mb-2", style={"fontSize": "0.75rem"}),
+                html.Div([
+                    dcc.Checklist(
+                        id="pea-overflow-checkbox",
+                        options=[{"label": L(lang, "pea_overflow_checkbox"), "value": "on"}],
+                        value=gv(v, "pea-overflow-checkbox", []), className="mb-0",
+                    ),
+                    html.Div(L(lang, "pea_overflow_help"), className="text-muted mb-2", style={"fontSize": "0.75rem"}),
+                ], id="pea-overflow-container", style=toggle_pea_overflow_container(gv(v, "pea-cap-checkbox", ["on"]))),
             ], id="pea-cap-container", style=toggle_pea_cap_container(envelope)),
             html.Div([
                 dbc.Label(L(lang, "cto_method_label"), className="mb-0", style={"fontSize": "0.85rem"}),

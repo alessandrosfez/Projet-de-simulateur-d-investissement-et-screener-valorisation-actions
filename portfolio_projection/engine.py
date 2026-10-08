@@ -173,6 +173,16 @@ def cap_schedule(monthly_amounts: np.ndarray, cap: float) -> np.ndarray:
     return np.where(amounts > 0, capped_contributions, amounts)
 
 
+def overflow_schedule(monthly_amounts: np.ndarray, cap: float) -> np.ndarray:
+    """Partie des versements qui dépasse le plafond PEA (complément de cap_schedule) : ce qui
+    serait versé sur un CTO en parallèle si l'utilisateur continue d'épargner au même rythme une
+    fois le PEA plein, plutôt que d'arrêter tout versement. Les retraits ne produisent jamais de
+    surplus (seuls les versements positifs comptent pour le plafond)."""
+    amounts = np.asarray(monthly_amounts, dtype=float)
+    capped = cap_schedule(amounts, cap)
+    return np.maximum(amounts, 0) - np.maximum(capped, 0)
+
+
 def summarize(
     portfolio_value: np.ndarray, invested_capital: np.ndarray, net_returns: np.ndarray,
     lower_pct: float = 10, upper_pct: float = 90, decumulation_enabled: bool = False,

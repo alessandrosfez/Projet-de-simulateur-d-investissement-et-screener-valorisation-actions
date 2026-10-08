@@ -46,6 +46,11 @@ app.callback(
 )(layout.toggle_pea_cap_container)
 
 app.callback(
+    Output("pea-overflow-container", "style"),
+    Input("pea-cap-checkbox", "value"),
+)(layout.toggle_pea_overflow_container)
+
+app.callback(
     Output("cto-tmi-container", "style"),
     Input("cto-tax-method-radio", "value"),
 )(layout.toggle_cto_tmi)
@@ -247,6 +252,7 @@ def upload_config(contents):
     Input("tax-checkbox", "value"),
     Input("envelope-radio", "value"),
     Input("pea-cap-checkbox", "value"),
+    Input("pea-overflow-checkbox", "value"),
     Input("cto-tax-method-radio", "value"),
     Input("cto-tmi-dropdown", "value"),
     Input("compare-envelopes-checkbox", "value"),
@@ -264,8 +270,8 @@ def upload_config(contents):
 def update_tab1(indices, source, lookback_years, horizon_years, view_mode, backtest_anchor, decum_val, decumulation_years,
                  withdrawal_monthly, method, block_size, crisis_val, shock_pct, shock_duration,
                  shock_timing, shock_year, apport_constant, apport_initial, apport_final,
-                 annual_fee_pct, inflation_pct, display_mode, tax_val, envelope, pea_cap_val, cto_method, cto_tmi,
-                 compare_val, band_width, n_sims, seed, lang, palette_code, dark_mode,
+                 annual_fee_pct, inflation_pct, display_mode, tax_val, envelope, pea_cap_val, pea_overflow_val,
+                 cto_method, cto_tmi, compare_val, band_width, n_sims, seed, lang, palette_code, dark_mode,
                  objective_val, objective_amount, objective_percentile, *mu_overrides):
     lang = lang or "fr"
     palette = PALETTES.get(palette_code, PALETTE)
@@ -286,15 +292,27 @@ def update_tab1(indices, source, lookback_years, horizon_years, view_mode, backt
     inject_crisis = bool(crisis_val and "on" in crisis_val)
     apply_tax = bool(tax_val and "on" in tax_val)
     tax_rate = layout.compute_tax_rate(envelope, cto_method, cto_tmi)
+    cto_rate = layout.compute_cto_tax_rate(cto_method, cto_tmi)
     compare_envelopes = bool(compare_val and "on" in compare_val)
     display_real = display_mode == "real"
     seed = int(seed or 42)
     pea_cap = PEA_CONTRIBUTION_CAP if (envelope == "pea" and pea_cap_val and "on" in pea_cap_val) else None
+    # Ne peut être actif que si le plafond PEA lui-même l'est : sinon il n'y a jamais d'excédent à
+    # router vers un CTO (layout.toggle_pea_overflow_container masque aussi cette case à cocher
+    # dans ce cas, mais le garde ici aussi : State résiduel possible si la case a été cochée puis
+    # le plafond décoché dans la même session, le composant caché gardant sa dernière valeur).
+    route_overflow = bool(pea_cap and pea_overflow_val and "on" in pea_overflow_val)
 
-    n_months, years_axis, phase_boundary_years, schedules = build_schedules(
+    n_months, years_axis, phase_boundary_years, schedules, overflow_schedules = build_schedules(
         horizon_years, enable_decumulation, decumulation_years, withdrawal_monthly,
         inflation_pct, apport_constant, apport_initial, apport_final, pea_cap,
     )
+    # Distinct de route_overflow (intention de l'utilisateur, décide si compute_results doit même
+    # essayer) : ne sert qu'à afficher la note "valeurs combinées PEA+CTO" dans build_metric_cards,
+    # uniquement quand le plafond a réellement été atteint sur au moins une stratégie — sinon la
+    # case peut être cochée sans qu'aucun euro ne déborde jamais vers un CTO, et la note serait
+    # trompeuse (vue en test : elle s'affichait même avec un capital investi sous le plafond).
+    overflow_applied = route_overflow and any(np.any(sched > 0) for sched in overflow_schedules.values())
     lower_pct = (100 - band_width) / 2
     upper_pct = 100 - lower_pct
 
@@ -338,12 +356,14 @@ def update_tab1(indices, source, lookback_years, horizon_years, view_mode, backt
         items, years_axis, schedules, annual_fee_pct, apply_tax, tax_rate, inflation_pct, display_real,
         lower_pct, upper_pct, enable_decumulation, phase_boundary_years, lang=lang, palette=palette, dark=dark,
         backtest_items=backtest_items, backtest_anchor_date=anchor_raw, view_mode=view_mode,
+        overflow_schedules=overflow_schedules if route_overflow else None, cto_tax_rate=cto_rate,
     )
     if view_mode == "historique":
         cards = []
         table_data, table_columns, csv_data, table_tooltip_header = build_historique_metrics_outputs(historique_metrics, lang)
     else:
-        cards = build_metric_cards(all_metrics, series_by_strategy, apply_tax, tax_rate, lang=lang)
+        cards = build_metric_cards(all_metrics, series_by_strategy, apply_tax, tax_rate, lang=lang,
+                                    route_overflow=overflow_applied)
         table_data, table_columns, csv_data, table_tooltip_header = build_metrics_outputs(all_metrics, lang, lower_pct, upper_pct)
     if view_mode == "historique" and not backtest_items:
         warnings.append(L(lang, "historique_no_data"))
@@ -360,24 +380,23 @@ def update_tab1(indices, source, lookback_years, horizon_years, view_mode, backt
     compare_style = {"display": "none"}
     compare_fig = empty_fig
     if compare_envelopes and view_mode != "historique":
-        cto_rate_for_compare = layout.compute_cto_tax_rate(cto_method, cto_tmi)
         # Échéanciers dédiés à la comparaison, indépendants de celui de la simulation principale
         # ci-dessus : le CTO n'a pas de plafond légal de versements, contrairement au PEA — lui
         # appliquer le même échéancier plafonné sous-estimerait sa branche (voir
         # results.build_envelope_comparison_figure).
         pea_cap_checked = bool(pea_cap_val and "on" in pea_cap_val)
-        _, _, _, pea_schedules_for_compare = build_schedules(
+        _, _, _, pea_schedules_for_compare, _ = build_schedules(
             horizon_years, enable_decumulation, decumulation_years, withdrawal_monthly,
             inflation_pct, apport_constant, apport_initial, apport_final,
             PEA_CONTRIBUTION_CAP if pea_cap_checked else None,
         )
-        _, _, _, cto_schedules_for_compare = build_schedules(
+        _, _, _, cto_schedules_for_compare, _ = build_schedules(
             horizon_years, enable_decumulation, decumulation_years, withdrawal_monthly,
             inflation_pct, apport_constant, apport_initial, apport_final,
         )
         compare_fig = build_envelope_comparison_figure(
             items, pea_schedules_for_compare, cto_schedules_for_compare, annual_fee_pct, inflation_pct,
-            display_real, years_axis, cto_rate_for_compare, lang=lang, palette=palette, dark=dark,
+            display_real, years_axis, cto_rate, lang=lang, palette=palette, dark=dark,
         )
         compare_style = {"display": "block"}
 
@@ -569,6 +588,7 @@ _tab2_name_inputs = [Input(f"name-p{p}", "value") for p in range(N_PORTFOLIOS_MA
     Input("tax-checkbox", "value"),
     Input("envelope-radio", "value"),
     Input("pea-cap-checkbox", "value"),
+    Input("pea-overflow-checkbox", "value"),
     Input("cto-tax-method-radio", "value"),
     Input("cto-tmi-dropdown", "value"),
     Input("compare-envelopes-checkbox", "value"),
@@ -598,7 +618,8 @@ def update_tab2(n_portfolios, *args):
     (source, lookback_years, horizon_years, view_mode, backtest_anchor, decum_val, decumulation_years, withdrawal_monthly,
      method, block_size, crisis_val, shock_pct, shock_duration, shock_timing, shock_year,
      apport_constant, apport_initial, apport_final, annual_fee_pct, inflation_pct, display_mode,
-     tax_val, envelope, pea_cap_val, cto_method, cto_tmi, compare_val, band_width, n_sims, seed, lang, palette_code) = rest
+     tax_val, envelope, pea_cap_val, pea_overflow_val, cto_method, cto_tmi, compare_val, band_width, n_sims, seed,
+     lang, palette_code) = rest
     view_mode = view_mode or "prevision"
     lang = lang or "fr"
     palette = PALETTES.get(palette_code, PALETTE)
@@ -647,15 +668,27 @@ def update_tab2(n_portfolios, *args):
     inject_crisis = bool(crisis_val and "on" in crisis_val)
     apply_tax = bool(tax_val and "on" in tax_val)
     tax_rate = layout.compute_tax_rate(envelope, cto_method, cto_tmi)
+    cto_rate = layout.compute_cto_tax_rate(cto_method, cto_tmi)
     compare_envelopes = bool(compare_val and "on" in compare_val)
     display_real = display_mode == "real"
     seed = int(seed or 42)
     pea_cap = PEA_CONTRIBUTION_CAP if (envelope == "pea" and pea_cap_val and "on" in pea_cap_val) else None
+    # Ne peut être actif que si le plafond PEA lui-même l'est : sinon il n'y a jamais d'excédent à
+    # router vers un CTO (layout.toggle_pea_overflow_container masque aussi cette case à cocher
+    # dans ce cas, mais le garde ici aussi : State résiduel possible si la case a été cochée puis
+    # le plafond décoché dans la même session, le composant caché gardant sa dernière valeur).
+    route_overflow = bool(pea_cap and pea_overflow_val and "on" in pea_overflow_val)
 
-    n_months, years_axis, phase_boundary_years, schedules = build_schedules(
+    n_months, years_axis, phase_boundary_years, schedules, overflow_schedules = build_schedules(
         horizon_years, enable_decumulation, decumulation_years, withdrawal_monthly,
         inflation_pct, apport_constant, apport_initial, apport_final, pea_cap,
     )
+    # Distinct de route_overflow (intention de l'utilisateur, décide si compute_results doit même
+    # essayer) : ne sert qu'à afficher la note "valeurs combinées PEA+CTO" dans build_metric_cards,
+    # uniquement quand le plafond a réellement été atteint sur au moins une stratégie — sinon la
+    # case peut être cochée sans qu'aucun euro ne déborde jamais vers un CTO, et la note serait
+    # trompeuse (vue en test : elle s'affichait même avec un capital investi sous le plafond).
+    overflow_applied = route_overflow and any(np.any(sched > 0) for sched in overflow_schedules.values())
     lower_pct = (100 - band_width) / 2
     upper_pct = 100 - lower_pct
 
@@ -689,12 +722,14 @@ def update_tab2(n_portfolios, *args):
         items, years_axis, schedules, annual_fee_pct, apply_tax, tax_rate, inflation_pct, display_real,
         lower_pct, upper_pct, enable_decumulation, phase_boundary_years, lang=lang, palette=palette, dark=dark,
         backtest_items=backtest_items, backtest_anchor_date=anchor_raw, view_mode=view_mode,
+        overflow_schedules=overflow_schedules if route_overflow else None, cto_tax_rate=cto_rate,
     )
     if view_mode == "historique":
         cards = []
         table_data, table_columns, csv_data, table_tooltip_header = build_historique_metrics_outputs(historique_metrics, lang)
     else:
-        cards = build_metric_cards(all_metrics, series_by_strategy, apply_tax, tax_rate, lang=lang)
+        cards = build_metric_cards(all_metrics, series_by_strategy, apply_tax, tax_rate, lang=lang,
+                                    route_overflow=overflow_applied)
         table_data, table_columns, csv_data, table_tooltip_header = build_metrics_outputs(all_metrics, lang, lower_pct, upper_pct)
     if view_mode == "historique" and not backtest_items:
         tab2_warnings.append(L(lang, "historique_no_data"))
@@ -711,24 +746,23 @@ def update_tab2(n_portfolios, *args):
     compare_style = {"display": "none"}
     compare_fig = empty_fig
     if compare_envelopes and view_mode != "historique":
-        cto_rate_for_compare = layout.compute_cto_tax_rate(cto_method, cto_tmi)
         # Échéanciers dédiés à la comparaison, indépendants de celui de la simulation principale
         # ci-dessus : le CTO n'a pas de plafond légal de versements, contrairement au PEA — lui
         # appliquer le même échéancier plafonné sous-estimerait sa branche (voir
         # results.build_envelope_comparison_figure).
         pea_cap_checked = bool(pea_cap_val and "on" in pea_cap_val)
-        _, _, _, pea_schedules_for_compare = build_schedules(
+        _, _, _, pea_schedules_for_compare, _ = build_schedules(
             horizon_years, enable_decumulation, decumulation_years, withdrawal_monthly,
             inflation_pct, apport_constant, apport_initial, apport_final,
             PEA_CONTRIBUTION_CAP if pea_cap_checked else None,
         )
-        _, _, _, cto_schedules_for_compare = build_schedules(
+        _, _, _, cto_schedules_for_compare, _ = build_schedules(
             horizon_years, enable_decumulation, decumulation_years, withdrawal_monthly,
             inflation_pct, apport_constant, apport_initial, apport_final,
         )
         compare_fig = build_envelope_comparison_figure(
             items, pea_schedules_for_compare, cto_schedules_for_compare, annual_fee_pct, inflation_pct,
-            display_real, years_axis, cto_rate_for_compare, lang=lang, palette=palette, dark=dark,
+            display_real, years_axis, cto_rate, lang=lang, palette=palette, dark=dark,
         )
         compare_style = {"display": "block"}
 
