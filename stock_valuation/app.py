@@ -75,13 +75,13 @@ app.layout = dbc.Container([
                 value=True, persistence=True, persistence_type="local",
             ),
         ], width=3),
-    ], className="mt-2 align-items-start"),
+    ], className="mt-2 align-items-start app-header"),
     html.Div(layout.build_tab3("fr", {}), id="main-content-container"),
     html.Hr(className="mt-4"),
     html.Div(layout.build_footer("fr"), id="footer-container", className="text-center mb-2"),
     dcc.Interval(id="resize-kick", interval=300, n_intervals=0, max_intervals=8),
     html.Div(id="resize-kick-dummy", style={"display": "none"}),
-], fluid=True)
+], fluid=True, className="px-3 px-lg-5")
 
 
 if __name__ == "__main__":

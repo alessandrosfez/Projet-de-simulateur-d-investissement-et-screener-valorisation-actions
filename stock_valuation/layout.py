@@ -19,31 +19,84 @@ GRAPH_CONFIG = {
     ],
 }
 
-TABLE_BASE_CELL_STYLE = {"fontSize": "0.8rem", "textAlign": "left"}
+TABLE_BASE_CELL_STYLE = {"fontSize": "0.82rem", "textAlign": "left", "padding": "0.55rem 0.8rem", "minWidth": "95px"}
 
-# Nav d'ancres sticky en tête de la zone résultats (voir build_tab3) : utilise les variables
-# CSS Bootstrap (--bs-body-bg, --bs-border-color) plutôt qu'un CSS dédié dans assets/, pour
-# suivre automatiquement le mode sombre (posé via data-bs-theme, voir app.py).
-QUICK_NAV_STYLE = {
-    "position": "sticky", "top": "0", "zIndex": 1020,
-    "backgroundColor": "var(--bs-body-bg)", "borderBottom": "1px solid var(--bs-border-color)",
-    "padding": "0.5rem 0", "marginBottom": "1rem",
-}
-QUICK_NAV_LINK_STYLE = {"marginRight": "1.25rem", "fontSize": "0.85rem"}
+# Alignées à droite comme il est d'usage pour des valeurs numériques (les décimales s'alignent
+# visuellement d'une ligne à l'autre) ; le reste (Entreprise, Ticker, Secteur, Devise) garde
+# l'alignement à gauche par défaut de TABLE_BASE_CELL_STYLE. Statique (ne dépend pas du thème
+# clair/sombre) : posé directement sur le DataTable dans build_tab3, pas besoin de passer par un
+# callback.
+NUMERIC_TABLE_COLUMNS = [
+    "Prix", "P/E (trailing)", "P/E (prévisionnel)", "PEG", "EV/EBITDA", "P/B",
+    "Rendement dividende (%)", "P/E moyen 5 ans (approx.)", "Position vs historique 5 ans (percentile)",
+    "Capitalisation",
+]
+TABLE_CELL_ALIGNMENT = [{"if": {"column_id": c}, "textAlign": "right"} for c in NUMERIC_TABLE_COLUMNS]
+
+# Nav d'ancres sticky en tête de la zone résultats (voir build_tab3) : styles dans
+# assets/theme.css (.quick-nav / .quick-nav-link), qui suivent le mode sombre via l'attribut
+# data-bs-theme (posé par le clientside_callback du switch, voir app.py).
 
 
 def table_style_overrides(dark: bool):
     """(style_header, style_cell, style_data) pour un dash_table.DataTable.
     dash_table applique ses propres couleurs par défaut (JS injecté à l'exécution,
     non couvert par le thème Bootstrap) : passer explicitement ces props est le
-    seul moyen fiable de le rendre lisible en mode sombre."""
-    if not dark:
-        return {}, TABLE_BASE_CELL_STYLE, {}
-    return (
-        {"backgroundColor": "#2b2b2b", "color": "#e9ecef", "border": "1px solid #444"},
-        {**TABLE_BASE_CELL_STYLE, "backgroundColor": "#1e1e1e", "color": "#e9ecef", "border": "1px solid #444"},
-        {"backgroundColor": "#1e1e1e", "color": "#e9ecef"},
-    )
+    seul moyen fiable de le rendre lisible en mode sombre.
+
+    En-tête distinct (fond + bordure basse à l'accent) et bordures horizontales fines plutôt
+    qu'un quadrillage complet sur chaque cellule : un vrai tableau de données plutôt que la
+    grille brute de dash_table par défaut. Couleurs alignées sur assets/theme.css (--surface,
+    --surface-2, --border-soft, --accent) : dupliquées ici en dur faute de pouvoir lire des
+    variables CSS depuis Python, à garder synchronisées si la palette du thème change."""
+    if dark:
+        header_bg, header_fg, accent = "#1f2330", "#e9ecef", "#7b84ff"
+        cell_bg, cell_fg, row_border = "#171a23", "#e9ecef", "#2a2f3d"
+    else:
+        header_bg, header_fg, accent = "#f1f3f9", "#1f2430", "#636efa"
+        cell_bg, cell_fg, row_border = "#ffffff", "#1f2430", "#e4e7ef"
+    style_header = {
+        "backgroundColor": header_bg, "color": header_fg, "fontWeight": "600",
+        "borderBottom": f"2px solid {accent}", "borderTop": "none", "borderLeft": "none", "borderRight": "none",
+    }
+    style_cell = {
+        **TABLE_BASE_CELL_STYLE, "backgroundColor": cell_bg, "color": cell_fg,
+        "borderBottom": f"1px solid {row_border}", "borderTop": "none", "borderLeft": "none", "borderRight": "none",
+    }
+    style_data = {"backgroundColor": cell_bg, "color": cell_fg}
+    return style_header, style_cell, style_data
+
+
+def pe_history_conditional_style(dark: bool):
+    """style_data_conditional pour la colonne P/E (trailing), basé sur le percentile du titre vs
+    SA PROPRE histoire 5 ans, jamais un seuil générique : l'intro de l'app dit explicitement
+    qu'un P/E bas ou haut dans l'absolu ne veut rien dire, ça dépend du secteur et des
+    perspectives de croissance (voir "intro3" dans i18n.py). Vert = décoté vs sa propre histoire
+    (percentile < 20), rouge = tendu vs sa propre histoire (percentile > 80). Zone intermédiaire
+    (20-80) volontairement non colorée : voir la section "Validité du signal P/E historique"
+    (engine.pe_signal_forward_returns) pour une vérification empirique de ce signal avant de le
+    lire comme un conseil.
+
+    Référence la colonne technique "_pe_pct_for_style" (voir callbacks.render_stock_views), pas
+    directement "Position vs historique 5 ans (percentile)" : dash_table (bundle v7.4.1) n'a pas
+    d'opérateur "is not blank" utilisable ici (syntaxe rejetée côté client, qui casse le rendu
+    entier du tableau — vérifié en pratique) pour exclure les valeurs manquantes d'un filter_query
+    numérique ; sans cette exclusion, un percentile manquant (None, titre sans assez d'historique,
+    ex. Michelin) se comparait comme < 20 et se coloriait vert à tort. La colonne technique
+    substitue un None par 50 (ni < 20 ni > 80), qui retombe donc naturellement en zone neutre."""
+    style_col = "_pe_pct_for_style"
+    if dark:
+        green, red = "#173a24", "#3a1616"
+        green_fg, red_fg = "#8fd19e", "#e88a8a"
+    else:
+        green, red = "#d4edda", "#f8d7da"
+        green_fg, red_fg = "#155724", "#721c24"
+    return [
+        {"if": {"column_id": "P/E (trailing)", "filter_query": f"{{{style_col}}} < 20"},
+         "backgroundColor": green, "color": green_fg},
+        {"if": {"column_id": "P/E (trailing)", "filter_query": f"{{{style_col}}} > 80"},
+         "backgroundColor": red, "color": red_fg},
+    ]
 
 
 def peg_conditional_style(dark: bool):
@@ -132,7 +185,15 @@ def build_tab3(lang, v=None):
             options=[{"label": f" {L(lang, f'universe_{code}')}", "value": code} for code in UNIVERSE_CODES],
             value=gv(v, "universe-checklist", ["cac40"]), labelStyle={"display": "block"}, className="mb-2",
         ),
-        dbc.Button(L(lang, "load_btn"), id="btn-load-stocks", color="primary", className="mb-3"),
+        dbc.Button(L(lang, "load_btn"), id="btn-load-stocks", color="primary", className="mb-2"),
+        # Avance par petits pas pendant que load_stock_valuations tourne (voir callbacks.py) :
+        # un chargement à froid de tout un gros panier (plusieurs centaines de titres jamais mis
+        # en cache) prend par nature une bonne minute (latence Yahoo Finance, hors de notre
+        # contrôle — testé : plus de threads en parallèle n'accélère rien, le palier vient d'eux,
+        # pas de nous). Ce texte ne rend pas le chargement plus rapide, juste visiblement vivant
+        # au lieu d'un spinner figé qui donne l'impression d'un plantage.
+        html.Div(id="stocks-load-progress", className="text-muted mb-1", style={"fontSize": "0.8rem"}),
+        dcc.Interval(id="load-progress-interval", interval=500, n_intervals=0),
         html.Div(id="stocks-warning"),
         dcc.Store(id="stocks-raw-store"),
 
@@ -140,19 +201,28 @@ def build_tab3(lang, v=None):
         # d'empiler cinq gros placeholders vides à l'écran initial.
         html.Div(id="stocks-results-container", style={"display": "none"}, children=[
             html.Div([
-                html.A(L(lang, "sector_compare_title"), href="#anchor-sector", style=QUICK_NAV_LINK_STYLE),
-                html.A(L(lang, "detail_title"), href="#anchor-table", style=QUICK_NAV_LINK_STYLE),
-                html.A(L(lang, "history_title"), href="#anchor-history", style=QUICK_NAV_LINK_STYLE),
-                html.A(L(lang, "quality_title"), href="#anchor-quality", style=QUICK_NAV_LINK_STYLE),
-                html.A(L(lang, "dcf_title"), href="#anchor-dcf", style=QUICK_NAV_LINK_STYLE),
-            ], style=QUICK_NAV_STYLE),
+                html.A(L(lang, "sector_compare_title"), href="#anchor-sector", className="quick-nav-link"),
+                html.A(L(lang, "pe_backtest_title"), href="#anchor-pe-backtest", className="quick-nav-link"),
+                html.A(L(lang, "detail_title"), href="#anchor-table", className="quick-nav-link"),
+                html.A(L(lang, "history_title"), href="#anchor-history", className="quick-nav-link"),
+                html.A(L(lang, "quality_title"), href="#anchor-quality", className="quick-nav-link"),
+                html.A(L(lang, "dcf_title"), href="#anchor-dcf", className="quick-nav-link"),
+            ], className="quick-nav"),
 
-            dcc.Loading(type="circle", children=[
-                html.H5(L(lang, "sector_compare_title"), id="anchor-sector"),
+            dcc.Loading(type="circle", color="#636efa", children=[
+                html.H5(L(lang, "sector_compare_title"), id="anchor-sector", className="section-title"),
                 dbc.Row([
                     dbc.Col(dcc.Graph(id="stocks-sector-bar", config=GRAPH_CONFIG), width=6),
                     dbc.Col(dcc.Graph(id="stocks-sector-box", config=GRAPH_CONFIG), width=6),
                 ]),
+                html.P(L(lang, "sector_box_caption"), className="text-muted", style={"fontSize": "0.8rem"}),
+            ]),
+
+            html.Hr(),
+            html.H5(L(lang, "pe_backtest_title"), className="section-title", id="anchor-pe-backtest"),
+            html.P(L(lang, "pe_backtest_intro"), className="text-muted", style={"fontSize": "0.85rem"}),
+            dcc.Loading(type="circle", color="#636efa", children=[
+                html.Div(id="pe-backtest-result", children=L(lang, "pe_backtest_hint_default")),
             ]),
 
             html.Hr(),
@@ -209,29 +279,38 @@ def build_tab3(lang, v=None):
                 ),
             ], className="mb-3"),
 
-            dcc.Loading(type="circle", children=[
+            dcc.Loading(type="circle", color="#636efa", children=[
                 html.Div(id="stocks-top-cards"),
-                html.H5(L(lang, "pe_ratio_by_stock_title"), className="mt-3"),
+                html.H5(L(lang, "pe_ratio_by_stock_title"), className="section-title"),
                 dcc.Graph(id="stocks-pe-chart", config=GRAPH_CONFIG),
-                html.H5(L(lang, "detail_title"), className="mt-3", id="anchor-table"),
+                html.H5(L(lang, "detail_title"), className="section-title", id="anchor-table"),
                 html.P(L(lang, "detail_hint"), className="text-muted", style={"fontSize": "0.8rem"}),
                 dash_table.DataTable(
                     id="stocks-table",
                     sort_action="native",
                     row_selectable="single",
                     selected_rows=[],
-                    style_table={"overflowX": "auto"},
-                    style_cell={"fontSize": "0.8rem", "textAlign": "left"},
+                    # Hauteur bornée + scroll interne : condition pour que fixed_rows/fixed_columns
+                    # ci-dessous aient un sens (sans plafond, le tableau grandit avec ses lignes et
+                    # c'est la page entière qui défile — rien ne "fige" dans ce cas, dash_table n'a
+                    # de quoi figer que par rapport à SON PROPRE scroll interne).
+                    style_table={"overflowX": "auto", "overflowY": "auto", "maxHeight": "70vh", "minWidth": "100%"},
+                    style_cell=TABLE_BASE_CELL_STYLE,
+                    style_cell_conditional=TABLE_CELL_ALIGNMENT,
+                    style_header_conditional=TABLE_CELL_ALIGNMENT,
+                    fixed_rows={"headers": True},
+                    fixed_columns={"headers": True, "data": 1},
+                    tooltip_delay=0, tooltip_duration=None,
                 ),
-                html.H5(L(lang, "history_title"), className="mt-3", id="anchor-history"),
+                html.H5(L(lang, "history_title"), className="section-title", id="anchor-history"),
                 html.Div(id="stocks-pe-history-title", className="text-muted", style={"fontSize": "0.85rem"}),
                 dcc.Graph(id="stocks-pe-history-chart", config=GRAPH_CONFIG),
 
-                html.H5(L(lang, "quality_title"), className="mt-3", id="anchor-quality"),
+                html.H5(L(lang, "quality_title"), className="section-title", id="anchor-quality"),
                 html.Div(id="quality-metrics-card"),
 
                 html.Hr(),
-                html.H5(L(lang, "dcf_title"), className="mt-3", id="anchor-dcf"),
+                html.H5(L(lang, "dcf_title"), className="section-title", id="anchor-dcf"),
                 html.P(L(lang, "dcf_intro"), className="text-muted", style={"fontSize": "0.85rem"}),
                 dbc.Row([
                     dbc.Col(slider_block(L(lang, "dcf_growth_label"), "dcf-growth-slider", -10, 30, gv(v, "dcf-growth-slider", 5), step=1, tooltip_text=L(lang, "dcf_growth_help")), width=3),

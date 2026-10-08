@@ -5,6 +5,7 @@ fonctions ci-dessous ne sont pas appelées directement ailleurs, sauf les
 helpers réutilisés par layout.py lui-même.
 """
 import concurrent.futures
+import threading
 
 import dash
 import dash_bootstrap_components as dbc
@@ -17,7 +18,10 @@ import layout
 from app_instance import app
 from charts import empty_figure_with_message
 from constants import UNIVERSE_TICKERS
-from engine import compute_comparables_fair_value, compute_dcf_sensitivity_grid, compute_scenario_dcf_fair_values
+from engine import (
+    compute_comparables_fair_value, compute_dcf_sensitivity_grid, compute_scenario_dcf_fair_values,
+    pe_signal_forward_returns, summarize_pe_signal_backtest,
+)
 from i18n import L, PALETTE, PALETTE_CODES, PALETTE_NAMES, PALETTES
 from market_data import get_dcf_inputs, get_stock_pe_history, get_stock_quality_metrics, get_stock_valuation
 
@@ -82,6 +86,17 @@ def _format_dcf_amount(value, currency):
     return f"{_format_abbreviated(value)} {currency}"
 
 
+# État de progression du chargement en cours, partagé entre load_stock_valuations (qui l'écrit,
+# sur le thread du serveur de dev qui traite la requête "Charger" — threaded=True dans app.py,
+# voir ce fichier) et update_load_progress ci-dessous (qui le lit, sur un thread différent à
+# chaque tic de dcc.Interval). total=0 veut dire "rien en cours" : c'est ce que lit l'intervalle
+# la plupart du temps, pas de round-trip Dash coûteux pour autant (juste une lecture de dict sous
+# verrou). Alternative à un vrai callback "background" de Dash (qui aurait demandé une nouvelle
+# dépendance, diskcache, pour un gain purement cosmétique ici).
+_load_progress_lock = threading.Lock()
+_load_progress = {"done": 0, "total": 0}
+
+
 @app.callback(
     Output("stocks-raw-store", "data"),
     Output("stocks-warning", "children"),
@@ -99,19 +114,30 @@ def load_stock_valuations(n_clicks, universes, lang):
     for code in universes:
         tickers.update(UNIVERSE_TICKERS[code])
 
+    with _load_progress_lock:
+        _load_progress["done"] = 0
+        _load_progress["total"] = len(tickers)
+
     rows, failures = [], []
-    with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
-        future_to_stock = {executor.submit(get_stock_valuation, ticker): (name, ticker) for name, ticker in tickers.items()}
-        for future in concurrent.futures.as_completed(future_to_stock):
-            name, ticker = future_to_stock[future]
-            try:
-                data = future.result()
-            except Exception:
-                failures.append(name)
-                continue
-            data["Entreprise"] = name
-            data["Ticker"] = ticker
-            rows.append(data)
+    try:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
+            future_to_stock = {executor.submit(get_stock_valuation, ticker): (name, ticker) for name, ticker in tickers.items()}
+            for future in concurrent.futures.as_completed(future_to_stock):
+                name, ticker = future_to_stock[future]
+                try:
+                    data = future.result()
+                except Exception:
+                    failures.append(name)
+                else:
+                    data["Entreprise"] = name
+                    data["Ticker"] = ticker
+                    rows.append(data)
+                finally:
+                    with _load_progress_lock:
+                        _load_progress["done"] += 1
+    finally:
+        with _load_progress_lock:
+            _load_progress["total"] = 0
 
     warning = ""
     if failures:
@@ -119,6 +145,20 @@ def load_stock_valuations(n_clicks, universes, lang):
     if not rows:
         warning = dbc.Alert(L(lang, "no_data_fetched"), color="danger")
     return rows, warning
+
+
+@app.callback(
+    Output("stocks-load-progress", "children"),
+    Input("load-progress-interval", "n_intervals"),
+    State("lang-radio", "value"),
+)
+def update_load_progress(_n_intervals, lang):
+    lang = lang or "fr"
+    with _load_progress_lock:
+        done, total = _load_progress["done"], _load_progress["total"]
+    if total == 0:
+        return ""
+    return L(lang, "load_progress_text", done=done, total=total)
 
 
 @app.callback(
@@ -146,6 +186,61 @@ def update_watchlist_options(rows):
     return [{"label": f"{r['Entreprise']} ({r['Ticker']})", "value": r["Ticker"]} for r in rows]
 
 
+@app.callback(
+    Output("pe-backtest-result", "children"),
+    Input("stocks-raw-store", "data"),
+    Input("lang-radio", "value"),
+)
+def render_pe_backtest(rows, lang):
+    """Backtest du signal "P/E décoté/tendu vs historique propre" (voir engine.
+    pe_signal_forward_returns) : calculé sur l'ensemble du panier chargé, pas filtré par secteur
+    ni par la watchlist (même convention que le comparatif sectoriel ci-dessus). get_stock_pe_history
+    est déjà appelé pour chaque ticker pendant load_stock_valuations (calcul de pe_5y_percentile) :
+    son cache (voir market_data.cached_ttl) rend ce second appel ici gratuit, pas de nouvel appel
+    réseau."""
+    lang = lang or "fr"
+    if not rows:
+        return L(lang, "pe_backtest_hint_default")
+
+    per_stock = []
+    for row in rows:
+        pe_history = get_stock_pe_history(row["Ticker"])
+        if pe_history is None or len(pe_history) == 0:
+            continue
+        per_stock.append(pe_signal_forward_returns(pe_history.to_numpy()))
+
+    summary = summarize_pe_signal_backtest(per_stock)
+    if all(summary[bucket]["n"] == 0 for bucket in ("low", "mid", "high")):
+        return L(lang, "pe_backtest_insufficient_data")
+
+    def _card(label_key, stats):
+        if stats["n"] == 0:
+            body = [
+                html.H6(L(lang, label_key), className="card-subtitle text-muted mb-1"),
+                html.P(L(lang, "pe_backtest_no_data"), className="text-muted mb-0"),
+            ]
+        else:
+            color = "success" if stats["mean"] >= 0 else "danger"
+            body = [
+                html.H6(L(lang, label_key), className="card-subtitle text-muted mb-1"),
+                html.H5(f"{stats['mean']:+.1%}", className=f"text-{color} mb-1"),
+                html.Small(
+                    L(lang, "pe_backtest_stats_caption", median=f"{stats['median']:+.1%}", n=stats["n"]),
+                    className="text-muted",
+                ),
+            ]
+        return dbc.Col(dbc.Card(dbc.CardBody(body), className="h-100"), width=4)
+
+    return html.Div([
+        dbc.Row([
+            _card("pe_backtest_low_label", summary["low"]),
+            _card("pe_backtest_mid_label", summary["mid"]),
+            _card("pe_backtest_high_label", summary["high"]),
+        ], className="mb-2"),
+        html.P(L(lang, "pe_backtest_caveat"), className="text-muted", style={"fontSize": "0.78rem"}),
+    ])
+
+
 
 
 @app.callback(
@@ -159,6 +254,7 @@ def update_watchlist_options(rows):
     Output("stocks-table", "style_cell"),
     Output("stocks-table", "style_data"),
     Output("stocks-table", "style_data_conditional"),
+    Output("stocks-table", "tooltip_header"),
     Output("stocks-csv-store", "data"),
     Output("stocks-results-container", "style"),
     Input("stocks-raw-store", "data"),
@@ -178,11 +274,30 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, watchlist_t
     palette = PALETTES.get(palette_code, PALETTE)
     dark = bool(dark_mode)
     style_header, style_cell, style_data = layout.table_style_overrides(dark)
-    peg_style = layout.peg_conditional_style(dark)
+    conditional_style = layout.peg_conditional_style(dark) + layout.pe_history_conditional_style(dark)
+    column_label_keys = {
+        "Entreprise": "col_company", "Ticker": "col_ticker", "Secteur": "col_sector", "Devise": "col_currency",
+        "Prix": "col_price", "P/E (trailing)": "col_pe_trailing", "P/E (prévisionnel)": "col_pe_forward",
+        "PEG": "col_peg", "EV/EBITDA": "col_ev_ebitda", "P/B": "col_pb", "Rendement dividende (%)": "col_div_yield",
+        "P/E moyen 5 ans (approx.)": "col_pe_5y_mean", "Position vs historique 5 ans (percentile)": "col_pe_5y_pct",
+        "Capitalisation": "col_market_cap",
+    }
+    # tooltip_header est indexé par id de colonne (le nom technique interne, pas le libellé
+    # affiché) : survol d'un en-tête -> définition/formule. Seules les colonnes avec une clé
+    # "..._help" dans i18n.py en ont un (L() retombe sur la clé elle-même si absente, d'où le
+    # test d'égalité pour ne garder que les traductions qui existent vraiment). Construit ici
+    # (dépend seulement de lang, pas des données chargées) pour être disponible même dans la
+    # branche "rien à afficher" juste en dessous.
+    tooltip_header = {}
+    for c, label_key in column_label_keys.items():
+        help_key = f"{label_key}_help"
+        help_text = L(lang, help_key)
+        if help_text != help_key:
+            tooltip_header[c] = {"type": "text", "value": help_text}
     if not rows:
         placeholder = empty_figure_with_message(L(lang, "load_hint_placeholder"), dark=dark)
-        return (placeholder, placeholder, "", placeholder, [], [], style_header, style_cell, style_data, peg_style,
-                "", {"display": "none"})
+        return (placeholder, placeholder, "", placeholder, [], [], style_header, style_cell, style_data, conditional_style,
+                tooltip_header, "", {"display": "none"})
 
     # Noms de colonnes internes gardés stables (français) : ce sont des clés de travail, pas du
     # texte affiché : seul le libellé de colonne du tableau final ("name") est traduit plus bas.
@@ -212,11 +327,31 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, watchlist_t
             margin=dict(t=60, b=100), xaxis=dict(tickangle=-45),
         )
         for i, sector in enumerate(sector_means.index):
-            values = priced_all.loc[priced_all["Secteur"] == sector, "P/E (trailing)"]
-            sector_box.add_trace(go.Box(y=values, name=sector, marker_color=palette[i % len(palette)]))
+            sector_rows = priced_all.loc[priced_all["Secteur"] == sector]
+            # hoveron="points" (pas "boxes"/"boxes+points") : le survol de la boîte elle-même
+            # déclenche sinon un groupe de 7 bulles Plotly natives (une par statistique : min, q1,
+            # médiane, q3, max, "lower/upper fence"), DONT LE TEXTE N'EST PAS personnalisable via
+            # hovertemplate (vérifié en pratique : le hovertemplate ci-dessous est ignoré tant que
+            # "boxes" fait partie de hoveron, Plotly réaffiche son propre jargon statistique quoi
+            # qu'il arrive). En ne laissant réagir que les points individuels (une entreprise par
+            # point, boxpoints="all" pour tous les afficher, pas seulement les valeurs aberrantes),
+            # chaque survol redevient une seule bulle "Entreprise : P/E X" — la boîte reste visible
+            # comme repère visuel (quartiles), juste plus interactive pour son propre résumé.
+            sector_box.add_trace(go.Box(
+                y=sector_rows["P/E (trailing)"], name=sector, marker_color=palette[i % len(palette)],
+                boxpoints="all", pointpos=0, jitter=0.4,
+                hoveron="points",
+                text=sector_rows["Entreprise"],
+                hovertemplate="<b>%{text}</b><br>P/E : %{y:.1f}<extra></extra>",
+            ))
         sector_box.update_layout(
             template="plotly_dark" if dark else "plotly",
             title=L(lang, "sector_dist_pe_title"), showlegend=False, yaxis_title="P/E",
+            # Échelle log : un seul P/E extrême (voir ci-dessus) écrase sinon visuellement toutes
+            # les autres boîtes près de zéro, rendant leur survol imprécis (cible de quelques
+            # pixels). Toutes les valeurs comparées ici sont > 0 (filtré dans priced_all),
+            # condition nécessaire pour un axe log.
+            yaxis_type="log",
             margin=dict(t=60, b=100), xaxis=dict(tickangle=-45),
         )
 
@@ -311,20 +446,20 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, watchlist_t
         table_df[col] = table_df[col].round(2)
     table_df = table_df.sort_values("P/E (trailing)")
 
-    column_label_keys = {
-        "Entreprise": "col_company", "Ticker": "col_ticker", "Secteur": "col_sector", "Devise": "col_currency",
-        "Prix": "col_price", "P/E (trailing)": "col_pe_trailing", "P/E (prévisionnel)": "col_pe_forward",
-        "PEG": "col_peg", "EV/EBITDA": "col_ev_ebitda", "P/B": "col_pb", "Rendement dividende (%)": "col_div_yield",
-        "P/E moyen 5 ans (approx.)": "col_pe_5y_mean", "Position vs historique 5 ans (percentile)": "col_pe_5y_pct",
-        "Capitalisation": "col_market_cap",
-    }
     columns = [{"name": L(lang, column_label_keys.get(c, c)), "id": c} for c in table_df.columns]
     csv_data = table_df.to_csv(index=False)
+    # Colonne technique, absente de `columns` donc jamais affichée, mais présente dans `data` :
+    # dash_table l'utilise quand même pour évaluer le filter_query de pe_history_conditional_style.
+    # Nécessaire parce que ce filter_query ne peut pas tester directement "valeur manquante" (voir
+    # layout.pe_history_conditional_style) : un NaN substitué par 50 (ni < 20 ni > 80) retombe
+    # naturellement dans la zone neutre non coloriée, sans fausse coloration verte/rouge.
+    table_df["_pe_pct_for_style"] = table_df["Position vs historique 5 ans (percentile)"].fillna(50)
     # NaN -> None : sinon un JSON NaN (invalide) part vers le DataTable et s'affiche mal.
     table_df = table_df.astype(object).where(pd.notnull(table_df), None)
 
     return (sector_bar, sector_box, cards_row, fig, table_df.to_dict("records"), columns,
-            style_header, style_cell, style_data, peg_style, csv_data, {"display": "block"})
+            style_header, style_cell, style_data, conditional_style, tooltip_header, csv_data,
+            {"display": "block"})
 
 
 @app.callback(

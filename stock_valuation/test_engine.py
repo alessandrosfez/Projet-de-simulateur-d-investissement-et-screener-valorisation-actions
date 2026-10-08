@@ -172,3 +172,55 @@ def test_compute_comparables_fair_value_none_when_own_pe_missing_or_zero():
 
 def test_compute_comparables_fair_value_none_when_peer_median_missing():
     assert m.compute_comparables_fair_value(price=100.0, own_pe=10.0, peer_median_pe=None) is None
+
+
+# ---------- Backtest du signal P/E historique ----------
+
+def test_compute_pe_percentile_series_nan_before_min_history():
+    series = np.arange(1.0, 11.0)  # longueur 10
+    percentiles = m.compute_pe_percentile_series(series, min_history=5)
+    assert np.all(np.isnan(percentiles[:5]))
+    assert not np.any(np.isnan(percentiles[5:]))
+
+
+def test_compute_pe_percentile_series_strictly_increasing_series_approaches_100th_percentile():
+    series = np.arange(1.0, 11.0)
+    percentiles = m.compute_pe_percentile_series(series, min_history=5)
+    # Chaque nouveau point est un nouveau maximum de sa fenêtre (les t éléments précédents, sur
+    # une fenêtre de longueur t+1, sont tous strictement inférieurs) : percentile = 100*t/(t+1),
+    # jamais exactement 100 pour une fenêtre finie.
+    t = np.arange(5, 10)
+    np.testing.assert_allclose(percentiles[5:], 100.0 * t / (t + 1))
+
+
+def test_pe_signal_forward_returns_classifies_and_computes_forward_return():
+    series = np.array([1.0, 2.0, 3.0, 4.0, 5.0, 1.0, 10.0, 2.0, 3.0, 4.0])
+    low, mid, high = m.pe_signal_forward_returns(series, forward_periods=3, min_history=5)
+    # t=5 (valeur 1.0, minimum de la fenêtre -> percentile 0, "bas") : rendement vers t=8 (3.0).
+    assert low == pytest.approx([3.0 / 1.0 - 1])
+    # t=6 (valeur 10.0, maximum de la fenêtre -> percentile ~85.7, "haut") : rendement vers t=9 (4.0).
+    assert high == pytest.approx([4.0 / 10.0 - 1])
+    assert mid == []
+
+
+def test_pe_signal_forward_returns_empty_when_series_too_short():
+    series = np.arange(1.0, 6.0)  # longueur 5
+    low, mid, high = m.pe_signal_forward_returns(series, forward_periods=3, min_history=5)
+    assert low == mid == high == []
+
+
+def test_summarize_pe_signal_backtest_pools_across_stocks():
+    per_stock = [
+        ([0.1, 0.3], [], [-0.1]),
+        ([0.2], [0.0], []),
+    ]
+    summary = m.summarize_pe_signal_backtest(per_stock)
+    assert summary["low"]["n"] == 3
+    assert summary["low"]["mean"] == pytest.approx((0.1 + 0.3 + 0.2) / 3)
+    assert summary["mid"]["n"] == 1
+    assert summary["high"]["n"] == 1
+
+
+def test_summarize_pe_signal_backtest_empty_bucket_has_none_mean():
+    summary = m.summarize_pe_signal_backtest([([], [], [])])
+    assert summary["low"] == {"n": 0, "mean": None, "median": None}

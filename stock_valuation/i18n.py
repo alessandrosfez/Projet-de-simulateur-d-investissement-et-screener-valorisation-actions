@@ -40,9 +40,10 @@ TRANSLATIONS = {
                  "chargement raisonnable).",
         "intro_more_toggle": "ⓘ En savoir plus (éligibilité PEA, limites du P/E, contenu du tableau)",
         "intro2": "📌 Le PEA n'accepte que des actions de sociétés domiciliées dans l'UE/EEE (ou via "
-                 "certains ETF/trackers pour le reste du monde) : les valeurs allemandes et une partie "
-                 "des françaises y sont éligibles, mais pas les actions britanniques ou américaines "
-                 "listées ici. Celles-ci relèvent d'un compte-titres ordinaire (CTO).",
+                 "certains ETF/trackers pour le reste du monde) : les valeurs françaises, allemandes, "
+                 "néerlandaises, espagnoles et italiennes y sont éligibles, mais pas les actions "
+                 "britanniques, suisses ou américaines listées ici. Celles-ci relèvent d'un "
+                 "compte-titres ordinaire (CTO).",
         "intro3": "⚠️ Un P/E bas ne veut pas dire \"sous-évalué\" ni un P/E haut \"survalorisé\" : cela "
                  "dépend fortement du secteur (tech vs énergie par ex.) et des perspectives de "
                  "croissance. Le comparatif par secteur ci-dessous, et le filtre sur un secteur unique, "
@@ -60,12 +61,41 @@ TRANSLATIONS = {
         "universe_dax40": "DAX 40 (Allemagne)",
         "universe_ftse100": "FTSE 100 (Royaume-Uni, sélection)",
         "universe_us": "Actions américaines (sélection de grandes capitalisations)",
+        "universe_aex": "AEX (Pays-Bas, sélection)",
+        "universe_ibex35": "IBEX 35 (Espagne, sélection)",
+        "universe_ftsemib": "FTSE MIB (Italie, sélection)",
+        "universe_smi": "SMI (Suisse, sélection)",
         "load_btn": "Charger / actualiser les données",
+        "load_progress_text": "{done} / {total} chargées...",
         "select_market_warning": "Sélectionne au moins un marché.",
         "no_data_fetched": "Aucune donnée récupérée. Vérifie ta connexion ou réessaie plus tard.",
         "unavailable_tickers": "Données indisponibles pour : {names} (ticker à vérifier ou données non "
                               "fournies par Yahoo Finance).",
         "sector_compare_title": "Comparatif par secteur",
+        "pe_backtest_title": "Validité du signal P/E historique",
+        "pe_backtest_intro": "Les cartes \"décotées/tendues vs historique\" plus bas reposent sur "
+                             "une heuristique : un P/E bas par rapport à l'historique propre du "
+                             "titre serait un signal positif. Ce qui suit vérifie si ça s'est "
+                             "historiquement confirmé sur le panier chargé : rendement à 1 an "
+                             "selon que le P/E d'un titre était bas, moyen ou haut par rapport à "
+                             "SA PROPRE histoire au moment considéré (jamais par rapport à une "
+                             "donnée future : voir le détail du calcul plus bas).",
+        "pe_backtest_hint_default": "Charge des valeurs pour voir ce backtest.",
+        "pe_backtest_insufficient_data": "Pas assez d'historique de P/E sur ce panier pour un "
+                                         "backtest exploitable.",
+        "pe_backtest_low_label": "P/E bas (percentile < 20 %)",
+        "pe_backtest_mid_label": "P/E moyen (20e-80e percentile)",
+        "pe_backtest_high_label": "P/E haut (percentile > 80 %)",
+        "pe_backtest_no_data": "Aucune observation sur ce panier.",
+        "pe_backtest_stats_caption": "Médiane {median} · n={n}",
+        "pe_backtest_caveat": "Rendement à 1 an (52 semaines) suivant chaque point, calculé sur "
+                             "le P/E implicite de chaque titre (approximatif : BPA supposé "
+                             "constant, voir plus haut), regroupés par tranche de percentile vs "
+                             "l'historique propre à chaque titre à cette date. Les fenêtres se "
+                             "chevauchent (un même titre contribue plusieurs points proches dans "
+                             "le temps) : n est un ordre de grandeur, pas un nombre "
+                             "d'observations indépendantes — à lire comme une tendance, pas une "
+                             "preuve statistique.",
         "sector_filter_label": "Filtrer sur un secteur (optionnel, comparaison plus équitable)",
         "sector_all": "Tous les secteurs",
         "screening_filters_label": "Filtres de sélection (optionnel)",
@@ -107,6 +137,9 @@ TRANSLATIONS = {
         "axis_pe_avg": "P/E moyen",
         "sector_avg_pe_title": "P/E moyen par secteur",
         "sector_dist_pe_title": "Distribution du P/E par secteur",
+        "sector_box_caption": "À droite : chaque point est une action du secteur (survole pour son "
+                              "nom et son P/E). La boîte situe la moitié centrale des valeurs "
+                              "autour de la médiane, les traits l'étendue typique du reste.",
         "pe_by_stock_chart_title": "P/E Ratio (trailing) : du moins cher au plus cher",
         "basket_avg_annotation": "Moyenne du panier",
         "col_company": "Entreprise",
@@ -123,6 +156,27 @@ TRANSLATIONS = {
         "col_pe_5y_mean": "P/E moyen 5 ans (approx.)",
         "col_pe_5y_pct": "Position vs historique 5 ans (percentile)",
         "col_market_cap": "Capitalisation",
+        "col_pe_trailing_help": "Cours / bénéfice par action des 12 derniers mois glissants. Combien "
+                                "d'années de bénéfice actuel le marché paie pour l'action.",
+        "col_pe_forward_help": "Cours / bénéfice par action estimé pour l'exercice à venir (consensus "
+                               "des analystes). Anticipe la croissance ou le recul des bénéfices, "
+                               "contrairement au P/E trailing qui ne regarde que le passé.",
+        "col_peg_help": "P/E (trailing) / taux de croissance annuel attendu des bénéfices (%). Rapporte "
+                        "le P/E à la croissance : un P/E élevé peut être justifié par une forte "
+                        "croissance (PEG proche de 1), ou au contraire trop cher payé pour cette "
+                        "croissance (PEG élevé).",
+        "col_ev_ebitda_help": "Valeur d'entreprise (capitalisation + dette nette) / EBITDA (résultat "
+                              "avant intérêts, impôts, dépréciation et amortissement). Moins sensible "
+                              "que le P/E aux différences de structure de dette ou de politique "
+                              "d'amortissement entre entreprises.",
+        "col_pb_help": "Cours / valeur comptable par action (capitaux propres / nombre d'actions). "
+                      "Compare le prix payé à l'actif net de l'entreprise selon ses comptes.",
+        "col_div_yield_help": "Dividende annuel versé / cours de l'action. Le revenu issu du dividende "
+                              "seul, sans tenir compte d'une éventuelle plus-value ou moins-value.",
+        "col_pe_5y_mean_help": "Moyenne du P/E implicite sur les 5 dernières années (prix historique / "
+                               "BPA actuel, approximatif : voir le détail du calcul plus bas).",
+        "col_pe_5y_pct_help": "Position du P/E actuel dans la distribution de son propre P/E sur 5 ans : "
+                              "0 = jamais aussi bas sur la période, 100 = jamais aussi haut.",
         "dcf_title": "Estimation DCF (flux de trésorerie actualisés)",
         "dcf_intro": "Valorisation intrinsèque de l'action sélectionnée ci-dessus, à partir de son "
                      "free cash flow récent (moyenne des 3 derniers exercices clos quand "
@@ -194,9 +248,9 @@ TRANSLATIONS = {
                  "to keep loading times reasonable).",
         "intro_more_toggle": "ⓘ Learn more (PEA eligibility, P/E limitations, table contents)",
         "intro2": "📌 A PEA only accepts shares of companies domiciled in the EU/EEA (or via certain "
-                 "ETFs/trackers for the rest of the world): German stocks and some French ones are "
-                 "eligible, but not the British or American stocks listed here. Those belong in an "
-                 "ordinary brokerage account (CTO).",
+                 "ETFs/trackers for the rest of the world): French, German, Dutch, Spanish and "
+                 "Italian stocks are eligible, but not the British, Swiss or American stocks listed "
+                 "here. Those belong in an ordinary brokerage account (CTO).",
         "intro3": "⚠️ A low P/E doesn't mean \"undervalued\" and a high P/E doesn't mean \"overvalued\": "
                  "it depends heavily on the sector (tech vs energy, for instance) and growth prospects. "
                  "The sector comparison below, and the single-sector filter, allow for a fairer "
@@ -213,12 +267,40 @@ TRANSLATIONS = {
         "universe_dax40": "DAX 40 (Germany)",
         "universe_ftse100": "FTSE 100 (UK, selection)",
         "universe_us": "US stocks (large-cap selection)",
+        "universe_aex": "AEX (Netherlands, selection)",
+        "universe_ibex35": "IBEX 35 (Spain, selection)",
+        "universe_ftsemib": "FTSE MIB (Italy, selection)",
+        "universe_smi": "SMI (Switzerland, selection)",
         "load_btn": "Load / refresh data",
+        "load_progress_text": "{done} / {total} loaded...",
         "select_market_warning": "Select at least one market.",
         "no_data_fetched": "No data retrieved. Check your connection or try again later.",
         "unavailable_tickers": "Data unavailable for: {names} (check the ticker or data not provided by "
                               "Yahoo Finance).",
         "sector_compare_title": "Sector comparison",
+        "pe_backtest_title": "Historical P/E signal validity",
+        "pe_backtest_intro": "The \"discounted/stretched vs history\" cards further down rely on "
+                             "a heuristic : a low P/E relative to the stock's own history would "
+                             "be a positive signal. What follows checks whether that has "
+                             "historically held on the loaded basket : 1-year return depending "
+                             "on whether a stock's P/E was low, mid, or high relative to ITS OWN "
+                             "history at that point in time (never relative to future data : see "
+                             "the calculation detail below).",
+        "pe_backtest_hint_default": "Load some stocks to see this backtest.",
+        "pe_backtest_insufficient_data": "Not enough P/E history on this basket for a usable "
+                                         "backtest.",
+        "pe_backtest_low_label": "Low P/E (< 20th percentile)",
+        "pe_backtest_mid_label": "Mid P/E (20th-80th percentile)",
+        "pe_backtest_high_label": "High P/E (> 80th percentile)",
+        "pe_backtest_no_data": "No observations on this basket.",
+        "pe_backtest_stats_caption": "Median {median} · n={n}",
+        "pe_backtest_caveat": "1-year (52-week) return following each point, computed on each "
+                             "stock's implied P/E (approximate : EPS assumed constant, see "
+                             "above), grouped by percentile band vs each stock's own history at "
+                             "that date. Windows overlap (a single stock contributes several "
+                             "nearby points in time) : n is an order of magnitude, not a count of "
+                             "independent observations — read this as a trend, not statistical "
+                             "proof.",
         "sector_filter_label": "Filter by sector (optional, fairer comparison)",
         "sector_all": "All sectors",
         "screening_filters_label": "Screening filters (optional)",
@@ -260,6 +342,9 @@ TRANSLATIONS = {
         "axis_pe_avg": "Average P/E",
         "sector_avg_pe_title": "Average P/E by sector",
         "sector_dist_pe_title": "P/E distribution by sector",
+        "sector_box_caption": "On the right: each dot is a stock in the sector (hover for its name "
+                              "and P/E). The box marks the central half of the values around the "
+                              "median, the whiskers the typical range of the rest.",
         "pe_by_stock_chart_title": "P/E Ratio (trailing): cheapest to most expensive",
         "basket_avg_annotation": "Basket average",
         "col_company": "Company",
@@ -276,6 +361,26 @@ TRANSLATIONS = {
         "col_pe_5y_mean": "5-year average P/E (approx.)",
         "col_pe_5y_pct": "Position vs 5-year history (percentile)",
         "col_market_cap": "Market cap",
+        "col_pe_trailing_help": "Price / earnings per share over the trailing 12 months. How many "
+                                "years of current earnings the market is paying for the stock.",
+        "col_pe_forward_help": "Price / estimated earnings per share for the upcoming fiscal year "
+                               "(analyst consensus). Anticipates earnings growth or decline, unlike "
+                               "the trailing P/E which only looks at the past.",
+        "col_peg_help": "Trailing P/E / expected annual earnings growth rate (%). Relates the P/E to "
+                        "growth: a high P/E can be justified by strong growth (PEG near 1), or "
+                        "conversely too expensive for that growth (high PEG).",
+        "col_ev_ebitda_help": "Enterprise value (market cap + net debt) / EBITDA (earnings before "
+                              "interest, taxes, depreciation and amortization). Less sensitive than "
+                              "the P/E to differences in debt structure or amortization policy "
+                              "between companies.",
+        "col_pb_help": "Price / book value per share (equity / shares outstanding). Compares the "
+                      "price paid to the company's net assets per its accounts.",
+        "col_div_yield_help": "Annual dividend paid / share price. The income from the dividend "
+                              "alone, not accounting for any capital gain or loss.",
+        "col_pe_5y_mean_help": "Average implied P/E over the trailing 5 years (historical price / "
+                               "current EPS, approximate: see the calculation detail below).",
+        "col_pe_5y_pct_help": "Where the current P/E sits within its own 5-year P/E distribution: "
+                              "0 = never as low over the period, 100 = never as high.",
         "dcf_title": "DCF estimate (discounted cash flow)",
         "dcf_intro": "Intrinsic valuation of the stock selected above, based on its recent free "
                      "cash flow (averaged over the last 3 closed fiscal years when available, "

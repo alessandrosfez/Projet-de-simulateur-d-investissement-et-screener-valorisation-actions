@@ -137,3 +137,82 @@ def compute_comparables_fair_value(price: float, own_pe: float, peer_median_pe: 
     if not price or not own_pe or own_pe <= 0 or not peer_median_pe or peer_median_pe <= 0:
         return None
     return price * (peer_median_pe / own_pe)
+
+
+# ============================================================
+# Backtest du signal "P/E décoté/tendu vs son propre historique 5 ans" : ce signal est déjà
+# affiché dans l'UI (cartes "5 les plus décotées/tendues vs leur propre historique 5 ans") comme
+# une heuristique ; ces fonctions vérifient empiriquement si un P/E bas vs historique a
+# effectivement précédé un meilleur rendement qu'un P/E haut, sur le panier chargé.
+# ============================================================
+
+def compute_pe_percentile_series(series: np.ndarray, min_history: int = 52) -> np.ndarray:
+    """Percentile (0-100) de chaque point au sein de SA SEULE fenêtre passée (expanding window,
+    series[:t+1]) : le percentile au point t n'utilise jamais une valeur future, pour ne pas
+    biaiser le backtest par anticipation. Les min_history premiers points (pas assez d'historique
+    pour un percentile qui veuille dire quelque chose) valent NaN."""
+    n = len(series)
+    out = np.full(n, np.nan)
+    for t in range(min_history, n):
+        window = series[: t + 1]
+        out[t] = 100.0 * float((window < series[t]).mean())
+    return out
+
+
+def pe_signal_forward_returns(pe_series: np.ndarray, forward_periods: int = 52, min_history: int = 52,
+                               low_percentile: float = 20.0, high_percentile: float = 80.0):
+    """Classe chaque point assez documenté (percentile connu, voir compute_pe_percentile_series)
+    selon que son P/E était bas (percentile < low_percentile), moyen, ou haut (percentile >
+    high_percentile) vs son propre historique à cette date, puis calcule son rendement sur les
+    forward_periods pas suivants.
+
+    Calculé directement sur pe_series plutôt que sur une série de prix séparée : sous
+    l'hypothèse de BPA constant déjà posée par market_data.get_stock_pe_history (qui produit
+    cette série), le P/E est proportionnel au prix, donc le rendement relatif du P/E EST le
+    rendement relatif du prix implicite — inutile de dupliquer la série de prix pour ce calcul.
+
+    Renvoie (low_returns, mid_returns, high_returns), trois listes de floats (rendements, ex. 0.1
+    pour +10%). Liste vide si pe_series est trop courte pour produire un seul point exploitable
+    (il faut au moins min_history + forward_periods observations)."""
+    n = len(pe_series)
+    if n <= min_history + forward_periods:
+        return [], [], []
+    percentiles = compute_pe_percentile_series(pe_series, min_history)
+    low, mid, high = [], [], []
+    for t in range(n - forward_periods):
+        pct = percentiles[t]
+        if np.isnan(pct):
+            continue
+        forward_return = float(pe_series[t + forward_periods] / pe_series[t] - 1)
+        if pct < low_percentile:
+            low.append(forward_return)
+        elif pct > high_percentile:
+            high.append(forward_return)
+        else:
+            mid.append(forward_return)
+    return low, mid, high
+
+
+def summarize_pe_signal_backtest(per_stock_returns) -> dict:
+    """Agrège les triplets (low, mid, high) de plusieurs titres (voir pe_signal_forward_returns)
+    en un résumé poolé sur tout le panier : {"low": {...}, "mid": {...}, "high": {...}}, chacun
+    {"n": int, "mean": float|None, "median": float|None}. n vaut 0 et mean/median valent None
+    quand la tranche est vide (aucun point classé dedans sur l'ensemble du panier).
+
+    Le pooling augmente la taille d'échantillon affichée, mais ces observations se chevauchent
+    dans le temps (fenêtres glissantes d'un même titre) et ne sont donc pas indépendantes : n est
+    un ordre de grandeur, pas un vrai nombre de tirages indépendants — à ne pas lire comme une
+    significativité statistique classique."""
+    low_all, mid_all, high_all = [], [], []
+    for low, mid, high in per_stock_returns:
+        low_all.extend(low)
+        mid_all.extend(mid)
+        high_all.extend(high)
+
+    def _stats(values):
+        if not values:
+            return {"n": 0, "mean": None, "median": None}
+        arr = np.array(values)
+        return {"n": len(arr), "mean": float(arr.mean()), "median": float(np.median(arr))}
+
+    return {"low": _stats(low_all), "mid": _stats(mid_all), "high": _stats(high_all)}

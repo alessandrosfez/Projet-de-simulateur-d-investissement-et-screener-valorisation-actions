@@ -1,0 +1,123 @@
+/* Thème "dashboard pro" : typographie, cartes, en-têtes de section, nav d'ancres, boutons et
+   tableau. Les couleurs de signal (PEG, P/E vs historique) restent gérées en Python
+   (layout.peg_conditional_style / pe_history_conditional_style) : ce fichier ne touche qu'au
+   chrome de l'appli, pas aux données affichées. Chargé automatiquement par Dash (dossier
+   assets/), après la feuille Bootstrap -> peut surcharger ses classes sans !important partout.
+
+   --accent reprend PALETTE[0] (i18n.py) : le même violet-bleu sert à la fois pour l'UI (boutons,
+   liens, accents de section) et pour la première série de chaque graphique, pour que l'appli se
+   lise comme un seul système plutôt que deux habillages superposés. */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+    --accent: #636efa;
+    --accent-contrast: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f1f3f9;
+    --page-bg: #f7f8fb;
+    --border-soft: #e4e7ef;
+    --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 16px rgba(15, 23, 42, 0.05);
+}
+
+[data-bs-theme="dark"] {
+    --accent: #7b84ff;
+    --accent-contrast: #ffffff;
+    --surface: #171a23;
+    --surface-2: #1f2330;
+    --page-bg: #0e1016;
+    --border-soft: #2a2f3d;
+    --shadow-card: none;
+}
+
+html { scroll-behavior: smooth; }
+
+.app-header {
+    padding-bottom: 1.25rem;
+    margin-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-soft);
+}
+
+body {
+    font-family: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--page-bg) !important;
+    transition: background-color .2s ease;
+}
+
+h1, h2, h3, h4, h5, h6 { font-family: "Inter", sans-serif; font-weight: 600; letter-spacing: -0.01em; }
+
+/* -------- En-têtes de section (H5 ⟶ className="section-title") -------- */
+.section-title {
+    position: relative;
+    padding-left: 0.85rem;
+    margin-top: 2.25rem !important;
+    margin-bottom: 1rem !important;
+    font-weight: 600;
+}
+.section-title::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0.1em; bottom: 0.1em;
+    width: 4px;
+    border-radius: 2px;
+    background: var(--accent);
+}
+
+/* -------- Nav d'ancres sticky -------- */
+.quick-nav {
+    position: sticky; top: 0; z-index: 1020;
+    display: flex; flex-wrap: wrap; gap: 0.25rem;
+    background: var(--page-bg);
+    border-bottom: 1px solid var(--border-soft);
+    padding: 0.6rem 0; margin-bottom: 1.25rem;
+}
+.quick-nav-link {
+    padding: 0.35rem 0.85rem;
+    border-radius: 999px;
+    font-size: 0.82rem;
+    font-weight: 500;
+    color: var(--bs-secondary-color, #6c757d);
+    text-decoration: none;
+    transition: background-color .15s ease, color .15s ease;
+    white-space: nowrap;
+}
+.quick-nav-link:hover {
+    background: var(--surface-2);
+    color: var(--accent);
+}
+
+/* -------- Cartes -------- */
+.card {
+    background-color: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-radius: 14px;
+    box-shadow: var(--shadow-card);
+    transition: transform .15s ease, box-shadow .15s ease;
+}
+.card:hover { transform: translateY(-1px); }
+
+/* -------- Boutons -------- */
+.btn { border-radius: 8px; font-weight: 500; }
+.btn-primary {
+    background-color: var(--accent); border-color: var(--accent);
+}
+.btn-primary:hover, .btn-primary:focus {
+    background-color: var(--accent); border-color: var(--accent);
+    filter: brightness(1.08);
+}
+.btn-link { color: var(--accent); }
+
+/* -------- Tableau (dash_table) -------- */
+/* Les couleurs de fond/texte restent posées en Python (style_header/style_cell/style_data,
+   plus forte spécificité inline) : ici uniquement la forme (coins arrondis, survol de ligne). */
+.dash-spreadsheet-container {
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--border-soft);
+}
+.dash-spreadsheet-container .dash-spreadsheet-inner tr:hover td {
+    background-color: var(--surface-2) !important;
+}
+
+/* -------- Liens -------- */
+a { color: var(--accent); }
