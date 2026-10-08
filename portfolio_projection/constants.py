@@ -30,6 +30,10 @@ N_PORTFOLIOS_MAX = 4
 PEA_TAX_RATE = 0.172
 CTO_FLAT_TAX_RATE = 0.30
 
+# Plafond légal des versements sur un PEA (hors gains, hors PEA-PME) : au-delà, plus aucun
+# versement n'est possible, mais le capital déjà investi continue de fructifier normalement.
+PEA_CONTRIBUTION_CAP = 150_000
+
 # Points de départ réels proposés pour la trajectoire du mode historique (voir
 # results._backtest_trajectory) : au lieu de toujours prendre tout l'historique de calibration
 # téléchargé ("recent"), on peut ancrer la trajectoire au début d'une crise connue pour voir "qu'a

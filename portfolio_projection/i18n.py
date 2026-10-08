@@ -99,6 +99,10 @@ TRANSLATIONS = {
         "envelope_label": "Enveloppe",
         "envelope_pea": " PEA",
         "envelope_cto": " Compte-titres ordinaire (CTO)",
+        "pea_cap_checkbox": " Appliquer le plafond légal des versements PEA ({cap})",
+        "pea_cap_help": "Au-delà de ce plafond, plus aucun versement n'est possible sur le PEA "
+                       "(le capital déjà investi continue de fructifier). Décoche pour explorer un "
+                       "plan sans cette limite (ex. simulation combinée avec un CTO en complément).",
         "cto_method_label": "Méthode d'imposition (CTO)",
         "cto_flat": " Flat tax (30 %)",
         "cto_bareme": " Barème progressif + prélèvements sociaux",
@@ -334,6 +338,10 @@ TRANSLATIONS = {
         "envelope_label": "Account type",
         "envelope_pea": " PEA",
         "envelope_cto": " Ordinary brokerage account (CTO)",
+        "pea_cap_checkbox": " Apply the PEA legal contribution cap ({cap})",
+        "pea_cap_help": "Past this cap, no further deposits can be made into the PEA (capital "
+                       "already invested keeps growing). Uncheck to explore a plan without this "
+                       "limit (e.g. a combined simulation with a CTO on top).",
         "cto_method_label": "Tax method (brokerage account)",
         "cto_flat": " Flat tax (30%)",
         "cto_bareme": " Progressive income tax scale + social contributions",

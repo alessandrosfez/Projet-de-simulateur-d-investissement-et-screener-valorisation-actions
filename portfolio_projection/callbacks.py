@@ -17,7 +17,7 @@ from dash import Input, Output, State, dcc, html
 import layout
 from app_instance import app
 from charts import make_correlation_heatmap, make_sequence_risk_figure
-from constants import BACKTEST_ANCHORS, N_PORTFOLIOS_MAX, TICKER_KEYS, TICKERS
+from constants import BACKTEST_ANCHORS, N_PORTFOLIOS_MAX, PEA_CONTRIBUTION_CAP, TICKER_KEYS, TICKERS
 from engine import inject_shock, simulate_index_returns, simulate_portfolio_asset_returns, suggest_optimal_weights
 from i18n import L, PALETTE, PALETTE_CODES, PALETTE_NAMES, PALETTES
 from market_data import get_aligned_returns, get_monthly_returns
@@ -39,6 +39,11 @@ app.callback(
     Output("cto-tax-method-container", "style"),
     Input("envelope-radio", "value"),
 )(layout.toggle_cto_tax_method)
+
+app.callback(
+    Output("pea-cap-container", "style"),
+    Input("envelope-radio", "value"),
+)(layout.toggle_pea_cap_container)
 
 app.callback(
     Output("cto-tmi-container", "style"),
@@ -241,6 +246,7 @@ def upload_config(contents):
     Input("display-radio", "value"),
     Input("tax-checkbox", "value"),
     Input("envelope-radio", "value"),
+    Input("pea-cap-checkbox", "value"),
     Input("cto-tax-method-radio", "value"),
     Input("cto-tmi-dropdown", "value"),
     Input("compare-envelopes-checkbox", "value"),
@@ -258,7 +264,7 @@ def upload_config(contents):
 def update_tab1(indices, source, lookback_years, horizon_years, view_mode, backtest_anchor, decum_val, decumulation_years,
                  withdrawal_monthly, method, block_size, crisis_val, shock_pct, shock_duration,
                  shock_timing, shock_year, apport_constant, apport_initial, apport_final,
-                 annual_fee_pct, inflation_pct, display_mode, tax_val, envelope, cto_method, cto_tmi,
+                 annual_fee_pct, inflation_pct, display_mode, tax_val, envelope, pea_cap_val, cto_method, cto_tmi,
                  compare_val, band_width, n_sims, seed, lang, palette_code, dark_mode,
                  objective_val, objective_amount, objective_percentile, *mu_overrides):
     lang = lang or "fr"
@@ -283,10 +289,11 @@ def update_tab1(indices, source, lookback_years, horizon_years, view_mode, backt
     compare_envelopes = bool(compare_val and "on" in compare_val)
     display_real = display_mode == "real"
     seed = int(seed or 42)
+    pea_cap = PEA_CONTRIBUTION_CAP if (envelope == "pea" and pea_cap_val and "on" in pea_cap_val) else None
 
     n_months, years_axis, phase_boundary_years, schedules = build_schedules(
         horizon_years, enable_decumulation, decumulation_years, withdrawal_monthly,
-        inflation_pct, apport_constant, apport_initial, apport_final,
+        inflation_pct, apport_constant, apport_initial, apport_final, pea_cap,
     )
     lower_pct = (100 - band_width) / 2
     upper_pct = 100 - lower_pct
@@ -354,9 +361,23 @@ def update_tab1(indices, source, lookback_years, horizon_years, view_mode, backt
     compare_fig = empty_fig
     if compare_envelopes and view_mode != "historique":
         cto_rate_for_compare = layout.compute_cto_tax_rate(cto_method, cto_tmi)
+        # Échéanciers dédiés à la comparaison, indépendants de celui de la simulation principale
+        # ci-dessus : le CTO n'a pas de plafond légal de versements, contrairement au PEA — lui
+        # appliquer le même échéancier plafonné sous-estimerait sa branche (voir
+        # results.build_envelope_comparison_figure).
+        pea_cap_checked = bool(pea_cap_val and "on" in pea_cap_val)
+        _, _, _, pea_schedules_for_compare = build_schedules(
+            horizon_years, enable_decumulation, decumulation_years, withdrawal_monthly,
+            inflation_pct, apport_constant, apport_initial, apport_final,
+            PEA_CONTRIBUTION_CAP if pea_cap_checked else None,
+        )
+        _, _, _, cto_schedules_for_compare = build_schedules(
+            horizon_years, enable_decumulation, decumulation_years, withdrawal_monthly,
+            inflation_pct, apport_constant, apport_initial, apport_final,
+        )
         compare_fig = build_envelope_comparison_figure(
-            items, schedules, annual_fee_pct, inflation_pct, display_real, years_axis, cto_rate_for_compare,
-            lang=lang, palette=palette, dark=dark,
+            items, pea_schedules_for_compare, cto_schedules_for_compare, annual_fee_pct, inflation_pct,
+            display_real, years_axis, cto_rate_for_compare, lang=lang, palette=palette, dark=dark,
         )
         compare_style = {"display": "block"}
 
@@ -547,6 +568,7 @@ _tab2_name_inputs = [Input(f"name-p{p}", "value") for p in range(N_PORTFOLIOS_MA
     Input("display-radio", "value"),
     Input("tax-checkbox", "value"),
     Input("envelope-radio", "value"),
+    Input("pea-cap-checkbox", "value"),
     Input("cto-tax-method-radio", "value"),
     Input("cto-tmi-dropdown", "value"),
     Input("compare-envelopes-checkbox", "value"),
@@ -576,7 +598,7 @@ def update_tab2(n_portfolios, *args):
     (source, lookback_years, horizon_years, view_mode, backtest_anchor, decum_val, decumulation_years, withdrawal_monthly,
      method, block_size, crisis_val, shock_pct, shock_duration, shock_timing, shock_year,
      apport_constant, apport_initial, apport_final, annual_fee_pct, inflation_pct, display_mode,
-     tax_val, envelope, cto_method, cto_tmi, compare_val, band_width, n_sims, seed, lang, palette_code) = rest
+     tax_val, envelope, pea_cap_val, cto_method, cto_tmi, compare_val, band_width, n_sims, seed, lang, palette_code) = rest
     view_mode = view_mode or "prevision"
     lang = lang or "fr"
     palette = PALETTES.get(palette_code, PALETTE)
@@ -628,10 +650,11 @@ def update_tab2(n_portfolios, *args):
     compare_envelopes = bool(compare_val and "on" in compare_val)
     display_real = display_mode == "real"
     seed = int(seed or 42)
+    pea_cap = PEA_CONTRIBUTION_CAP if (envelope == "pea" and pea_cap_val and "on" in pea_cap_val) else None
 
     n_months, years_axis, phase_boundary_years, schedules = build_schedules(
         horizon_years, enable_decumulation, decumulation_years, withdrawal_monthly,
-        inflation_pct, apport_constant, apport_initial, apport_final,
+        inflation_pct, apport_constant, apport_initial, apport_final, pea_cap,
     )
     lower_pct = (100 - band_width) / 2
     upper_pct = 100 - lower_pct
@@ -689,9 +712,23 @@ def update_tab2(n_portfolios, *args):
     compare_fig = empty_fig
     if compare_envelopes and view_mode != "historique":
         cto_rate_for_compare = layout.compute_cto_tax_rate(cto_method, cto_tmi)
+        # Échéanciers dédiés à la comparaison, indépendants de celui de la simulation principale
+        # ci-dessus : le CTO n'a pas de plafond légal de versements, contrairement au PEA — lui
+        # appliquer le même échéancier plafonné sous-estimerait sa branche (voir
+        # results.build_envelope_comparison_figure).
+        pea_cap_checked = bool(pea_cap_val and "on" in pea_cap_val)
+        _, _, _, pea_schedules_for_compare = build_schedules(
+            horizon_years, enable_decumulation, decumulation_years, withdrawal_monthly,
+            inflation_pct, apport_constant, apport_initial, apport_final,
+            PEA_CONTRIBUTION_CAP if pea_cap_checked else None,
+        )
+        _, _, _, cto_schedules_for_compare = build_schedules(
+            horizon_years, enable_decumulation, decumulation_years, withdrawal_monthly,
+            inflation_pct, apport_constant, apport_initial, apport_final,
+        )
         compare_fig = build_envelope_comparison_figure(
-            items, schedules, annual_fee_pct, inflation_pct, display_real, years_axis, cto_rate_for_compare,
-            lang=lang, palette=palette, dark=dark,
+            items, pea_schedules_for_compare, cto_schedules_for_compare, annual_fee_pct, inflation_pct,
+            display_real, years_axis, cto_rate_for_compare, lang=lang, palette=palette, dark=dark,
         )
         compare_style = {"display": "block"}
 

@@ -11,7 +11,7 @@ from dash import html
 
 from constants import PEA_TAX_RATE
 from engine import (
-    apply_fee, apply_social_tax, compute_objective_contribution, constant_schedule,
+    apply_fee, apply_social_tax, cap_schedule, compute_objective_contribution, constant_schedule,
     progressive_schedule, returns_to_dca, rolling_backtest_final_values, summarize, summarize_historique,
     to_display_values, withdrawal_schedule,
 )
@@ -20,7 +20,9 @@ from i18n import L, PALETTE
 
 
 def build_schedules(horizon_years, enable_decumulation, decumulation_years, withdrawal_monthly,
-                     inflation_pct, apport_constant, apport_initial, apport_final):
+                     inflation_pct, apport_constant, apport_initial, apport_final, pea_cap=None):
+    """pea_cap : plafond légal des versements PEA (150 000 €) à appliquer aux échéanciers, ou None
+    pour ne pas plafonner (CTO, ou utilisateur qui a décoché l'option — voir engine.cap_schedule)."""
     n_months_accum = horizon_years * 12
     n_months_decum = decumulation_years * 12 if enable_decumulation else 0
     n_months = n_months_accum + n_months_decum
@@ -33,7 +35,8 @@ def build_schedules(horizon_years, enable_decumulation, decumulation_years, with
         ("constant", constant_schedule(n_months_accum, apport_constant)),
         ("progressive", progressive_schedule(n_months_accum, apport_initial, apport_final)),
     ]:
-        schedules[strat_name] = np.concatenate([accum, -withdrawals]) if enable_decumulation else accum
+        schedule = np.concatenate([accum, -withdrawals]) if enable_decumulation else accum
+        schedules[strat_name] = cap_schedule(schedule, pea_cap) if pea_cap else schedule
     return n_months, years_axis, phase_boundary_years, schedules
 
 
@@ -173,22 +176,29 @@ def build_metric_cards(all_metrics, series_by_strategy, apply_tax, tax_rate, lan
     return blocks
 
 
-def build_envelope_comparison_figure(items, schedules, annual_fee_pct, inflation_pct, display_real,
-                                      years_axis, cto_tax_rate, lang="fr", palette=None, dark=False):
+def build_envelope_comparison_figure(items, pea_schedules, cto_schedules, annual_fee_pct, inflation_pct,
+                                      display_real, years_axis, cto_tax_rate, lang="fr", palette=None, dark=False):
     """Compare, pour chaque item/stratégie déjà simulé, la valeur finale médiane nette sous PEA
     (17,2 %) et sous CTO (taux fourni, flat tax ou barème + prélèvements sociaux). Réutilise les
     rendements déjà simulés : pas de nouvelle simulation Monte Carlo, juste deux fiscalités appliquées
-    au même tirage aléatoire."""
+    au même tirage aléatoire.
+
+    pea_schedules et cto_schedules sont deux échéanciers distincts (mêmes clés de stratégie
+    "constant"/"progressive") plutôt qu'un seul partagé : le CTO n'a pas de plafond légal de
+    versements, contrairement au PEA (voir engine.cap_schedule) — leur donner le même échéancier
+    plafonné sous-estimerait silencieusement la branche CTO de la comparaison dès que le plafond
+    PEA est actif."""
     palette = palette or PALETTE
     labels, pea_values, cto_values = [], [], []
     for label, monthly_returns in items:
-        for strat_name, schedule in schedules.items():
+        for strat_name in pea_schedules:
             net_returns = apply_fee(monthly_returns, annual_fee_pct)
-            portfolio_value, invested_capital = returns_to_dca(net_returns, schedule)
-            pea_value = apply_social_tax(portfolio_value, invested_capital, True, PEA_TAX_RATE)
-            cto_value = apply_social_tax(portfolio_value, invested_capital, True, cto_tax_rate)
-            pea_value, _ = to_display_values(pea_value, invested_capital, years_axis, inflation_pct, display_real)
-            cto_value, _ = to_display_values(cto_value, invested_capital, years_axis, inflation_pct, display_real)
+            pea_portfolio_value, pea_invested = returns_to_dca(net_returns, pea_schedules[strat_name])
+            cto_portfolio_value, cto_invested = returns_to_dca(net_returns, cto_schedules[strat_name])
+            pea_value = apply_social_tax(pea_portfolio_value, pea_invested, True, PEA_TAX_RATE)
+            cto_value = apply_social_tax(cto_portfolio_value, cto_invested, True, cto_tax_rate)
+            pea_value, _ = to_display_values(pea_value, pea_invested, years_axis, inflation_pct, display_real)
+            cto_value, _ = to_display_values(cto_value, cto_invested, years_axis, inflation_pct, display_real)
             labels.append(f"{label} : {L(lang, f'schedule_{strat_name}')}")
             pea_values.append(float(np.percentile(pea_value[:, -1], 50)))
             cto_values.append(float(np.percentile(cto_value[:, -1], 50)))

@@ -98,6 +98,25 @@ def test_returns_to_dca_floors_at_zero_on_withdrawal():
     assert value[0, 2] == 0.0  # reste plafonné, pas de solde négatif
 
 
+def test_cap_schedule_noop_when_cumulative_stays_under_cap():
+    amounts = np.array([100.0] * 6)  # cumul max 600
+    capped = m.cap_schedule(amounts, cap=1000.0)
+    np.testing.assert_allclose(capped, amounts)
+
+
+def test_cap_schedule_clips_crossing_month_then_zeroes_the_rest():
+    amounts = np.array([100.0] * 6)  # cumul : 100, 200, ..., 600
+    capped = m.cap_schedule(amounts, cap=250.0)
+    np.testing.assert_allclose(capped, [100.0, 100.0, 50.0, 0.0, 0.0, 0.0])
+    assert capped.sum() == 250.0
+
+
+def test_cap_schedule_leaves_withdrawals_untouched():
+    amounts = np.array([100.0, 100.0, 100.0, -50.0, -50.0])  # cumul contributions : 300, plafond 150
+    capped = m.cap_schedule(amounts, cap=150.0)
+    np.testing.assert_allclose(capped, [100.0, 50.0, 0.0, -50.0, -50.0])
+
+
 def test_withdrawal_schedule_grows_with_inflation():
     sched = m.withdrawal_schedule(n_months_decum=24, monthly_amount=1000.0, inflation_pct=3.0)
     assert sched[0] == 1000.0

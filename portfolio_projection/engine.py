@@ -159,6 +159,20 @@ def progressive_schedule(n_months: int, start_amount: float, end_amount: float) 
     return np.linspace(start_amount, end_amount, n_months)
 
 
+def cap_schedule(monthly_amounts: np.ndarray, cap: float) -> np.ndarray:
+    """Plafonne un échéancier de versements au cumul `cap` (ex: plafond légal PEA, 150 000 €) :
+    le dernier versement qui franchirait le plafond est réduit à pile ce qu'il reste de marge, et
+    tous les suivants tombent à 0 — le capital continue de fructifier après, mais plus personne ne
+    peut abonder. Les retraits (montants négatifs, phase de décumulation) ne sont jamais affectés :
+    seul le cumul des apports positifs compte pour le plafond."""
+    amounts = np.asarray(monthly_amounts, dtype=float)
+    contributions = np.maximum(amounts, 0)
+    cumulative_before = np.cumsum(contributions) - contributions
+    headroom = np.clip(cap - cumulative_before, 0, None)
+    capped_contributions = np.minimum(contributions, headroom)
+    return np.where(amounts > 0, capped_contributions, amounts)
+
+
 def summarize(
     portfolio_value: np.ndarray, invested_capital: np.ndarray, net_returns: np.ndarray,
     lower_pct: float = 10, upper_pct: float = 90, decumulation_enabled: bool = False,

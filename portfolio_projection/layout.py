@@ -9,7 +9,8 @@ import dash_bootstrap_components as dbc
 from dash import dash_table, dcc, html
 
 from constants import (
-    BACKTEST_ANCHOR_KEYS, CTO_FLAT_TAX_RATE, N_PORTFOLIOS_MAX, PEA_TAX_RATE, TICKER_KEYS, TICKERS, ETF_NAMES,
+    BACKTEST_ANCHOR_KEYS, CTO_FLAT_TAX_RATE, N_PORTFOLIOS_MAX, PEA_CONTRIBUTION_CAP, PEA_TAX_RATE,
+    TICKER_KEYS, TICKERS, ETF_NAMES,
 )
 from i18n import L
 
@@ -61,6 +62,7 @@ CONFIG_FIELDS = [
     ("display_radio", "display-radio", "value"),
     ("apply_tax", "tax-checkbox", "value"),
     ("envelope", "envelope-radio", "value"),
+    ("pea_cap", "pea-cap-checkbox", "value"),
     ("cto_tax_method", "cto-tax-method-radio", "value"),
     ("cto_tmi", "cto-tmi-dropdown", "value"),
     ("compare_envelopes", "compare-envelopes-checkbox", "value"),
@@ -107,6 +109,10 @@ def compute_tax_rate(envelope: str, cto_method: str, cto_tmi) -> float:
 
 def toggle_cto_tax_method(envelope):
     return {"display": "block"} if envelope == "cto" else {"display": "none"}
+
+
+def toggle_pea_cap_container(envelope):
+    return {"display": "block"} if envelope == "pea" else {"display": "none"}
 
 
 def toggle_cto_tmi(method):
@@ -368,6 +374,14 @@ def build_sidebar(lang, v=None):
                 ],
                 value=envelope, labelStyle={"display": "block"}, className="mb-1",
             ),
+            html.Div([
+                dcc.Checklist(
+                    id="pea-cap-checkbox",
+                    options=[{"label": L(lang, "pea_cap_checkbox", cap=f"{PEA_CONTRIBUTION_CAP:,.0f} €".replace(",", " ")), "value": "on"}],
+                    value=gv(v, "pea-cap-checkbox", ["on"]), className="mb-0",
+                ),
+                html.Div(L(lang, "pea_cap_help"), className="text-muted mb-2", style={"fontSize": "0.75rem"}),
+            ], id="pea-cap-container", style=toggle_pea_cap_container(envelope)),
             html.Div([
                 dbc.Label(L(lang, "cto_method_label"), className="mb-0", style={"fontSize": "0.85rem"}),
                 dcc.RadioItems(
