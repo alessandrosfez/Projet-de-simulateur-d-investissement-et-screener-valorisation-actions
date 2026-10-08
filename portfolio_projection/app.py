@@ -65,7 +65,7 @@ app.clientside_callback(
 # Construit après l'import de callbacks : build_sidebar()/build_tabs() appellent des helpers
 # (update_tax_label(), toggle_etf_info()...) qui doivent déjà être enregistrés comme callbacks.
 app.layout = dbc.Container([
-    html.Link(id="theme-stylesheet", rel="stylesheet", href=dbc.themes.BOOTSTRAP),
+    html.Link(id="theme-stylesheet", rel="stylesheet", href=dbc.themes.DARKLY),
     dbc.Row([
         dbc.Col(html.Div(layout.build_header_text("fr"), id="header-text-container"), width=9),
         dbc.Col([
@@ -85,7 +85,7 @@ app.layout = dbc.Container([
             ),
             dbc.Switch(
                 id="dark-mode-switch", label=L("fr", "dark_mode_label"),
-                value=False, persistence=True, persistence_type="local",
+                value=True, persistence=True, persistence_type="local",
             ),
         ], width=3),
     ], className="mt-2 align-items-start"),

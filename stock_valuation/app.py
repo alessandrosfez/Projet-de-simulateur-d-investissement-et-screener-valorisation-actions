@@ -52,7 +52,7 @@ app.clientside_callback(
 # être enregistrés comme callbacks. Pas de sidebar (contrairement à portfolio_projection) :
 # un seul outil, tous ses contrôles sont dans le corps de la page ; pleine largeur.
 app.layout = dbc.Container([
-    html.Link(id="theme-stylesheet", rel="stylesheet", href=dbc.themes.BOOTSTRAP),
+    html.Link(id="theme-stylesheet", rel="stylesheet", href=dbc.themes.DARKLY),
     dbc.Row([
         dbc.Col(html.Div(layout.build_header_text("fr"), id="header-text-container"), width=9),
         dbc.Col([
@@ -72,7 +72,7 @@ app.layout = dbc.Container([
             ),
             dbc.Switch(
                 id="dark-mode-switch", label=L("fr", "dark_mode_label"),
-                value=False, persistence=True, persistence_type="local",
+                value=True, persistence=True, persistence_type="local",
             ),
         ], width=3),
     ], className="mt-2 align-items-start"),
