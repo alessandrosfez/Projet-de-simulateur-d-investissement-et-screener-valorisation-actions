@@ -38,6 +38,7 @@ TRANSLATIONS = {
                  "composition officielle exacte et complète des indices, notamment pour le FTSE 100 et "
                  "les actions américaines où seul un échantillon est inclus pour garder un temps de "
                  "chargement raisonnable).",
+        "intro_more_toggle": "ⓘ En savoir plus (éligibilité PEA, limites du P/E, contenu du tableau)",
         "intro2": "📌 Le PEA n'accepte que des actions de sociétés domiciliées dans l'UE/EEE (ou via "
                  "certains ETF/trackers pour le reste du monde) : les valeurs allemandes et une partie "
                  "des françaises y sont éligibles, mais pas les actions britanniques ou américaines "
@@ -67,6 +68,13 @@ TRANSLATIONS = {
         "sector_compare_title": "Comparatif par secteur",
         "sector_filter_label": "Filtrer sur un secteur (optionnel, comparaison plus équitable)",
         "sector_all": "Tous les secteurs",
+        "screening_filters_label": "Filtres de sélection (optionnel)",
+        "filter_pe_max_label": "P/E max",
+        "filter_peg_max_label": "PEG max",
+        "filter_div_min_label": "Rendement dividende min (%)",
+        "watchlist_label": "Valeurs suivies (watchlist)",
+        "watchlist_placeholder": "Ajouter des valeurs à ta watchlist...",
+        "watchlist_only_label": "N'afficher que ma watchlist",
         "pe_ratio_by_stock_title": "P/E Ratio par valeur",
         "detail_title": "Détail",
         "detail_hint": "Clique sur une ligne pour voir l'évolution de son P/E sur 5 ans ci-dessous.",
@@ -108,6 +116,8 @@ TRANSLATIONS = {
         "col_price": "Prix",
         "col_pe_trailing": "P/E (trailing)",
         "col_pe_forward": "P/E (prévisionnel)",
+        "col_peg": "PEG",
+        "col_ev_ebitda": "EV/EBITDA",
         "col_pb": "P/B",
         "col_div_yield": "Rendement dividende (%)",
         "col_pe_5y_mean": "P/E moyen 5 ans (approx.)",
@@ -182,6 +192,7 @@ TRANSLATIONS = {
                  "hand-maintained selections in the code (not the exact, full official index "
                  "composition, notably for the FTSE 100 and US stocks where only a sample is included "
                  "to keep loading times reasonable).",
+        "intro_more_toggle": "ⓘ Learn more (PEA eligibility, P/E limitations, table contents)",
         "intro2": "📌 A PEA only accepts shares of companies domiciled in the EU/EEA (or via certain "
                  "ETFs/trackers for the rest of the world): German stocks and some French ones are "
                  "eligible, but not the British or American stocks listed here. Those belong in an "
@@ -210,6 +221,13 @@ TRANSLATIONS = {
         "sector_compare_title": "Sector comparison",
         "sector_filter_label": "Filter by sector (optional, fairer comparison)",
         "sector_all": "All sectors",
+        "screening_filters_label": "Screening filters (optional)",
+        "filter_pe_max_label": "Max P/E",
+        "filter_peg_max_label": "Max PEG",
+        "filter_div_min_label": "Min dividend yield (%)",
+        "watchlist_label": "Watchlist",
+        "watchlist_placeholder": "Add stocks to your watchlist...",
+        "watchlist_only_label": "Show only my watchlist",
         "pe_ratio_by_stock_title": "P/E Ratio by stock",
         "detail_title": "Detail",
         "detail_hint": "Click a row to see its 5-year P/E history below.",
@@ -251,6 +269,8 @@ TRANSLATIONS = {
         "col_price": "Price",
         "col_pe_trailing": "P/E (trailing)",
         "col_pe_forward": "P/E (forward)",
+        "col_peg": "PEG",
+        "col_ev_ebitda": "EV/EBITDA",
         "col_pb": "P/B",
         "col_div_yield": "Dividend yield (%)",
         "col_pe_5y_mean": "5-year average P/E (approx.)",

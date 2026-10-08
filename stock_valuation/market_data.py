@@ -107,7 +107,7 @@ def get_stock_pe_history(ticker: str) -> pd.Series:
 
 @cached_ttl(3600)
 def get_stock_valuation(ticker: str) -> dict:
-    """Prix et ratios de valorisation courants d'une action (P/E, P/B, rendement du
+    """Prix et ratios de valorisation courants d'une action (P/E, PEG, P/B, rendement du
     dividende), plus sa position par rapport à son propre P/E historique sur 5 ans
     (voir get_stock_pe_history)."""
     info = _get_ticker_info(ticker)
@@ -127,6 +127,12 @@ def get_stock_valuation(ticker: str) -> dict:
         "price": info.get("currentPrice") or info.get("regularMarketPrice"),
         "trailing_pe": trailing_pe,
         "forward_pe": info.get("forwardPE"),
+        # `or` serait piégeux ici : un trailingPegRatio légitimement égal à 0.0 (croissance
+        # estimée nulle) serait pris pour une valeur manquante et silencieusement remplacé par
+        # pegRatio. Repli explicite sur None uniquement.
+        "peg_ratio": (info.get("trailingPegRatio") if info.get("trailingPegRatio") is not None
+                      else info.get("pegRatio")),
+        "ev_to_ebitda": info.get("enterpriseToEbitda"),
         "price_to_book": info.get("priceToBook"),
         "dividend_yield": info.get("dividendYield"),
         "market_cap": info.get("marketCap"),

@@ -137,6 +137,18 @@ def update_sector_filter_options(rows, lang):
 
 
 @app.callback(
+    Output("watchlist-dropdown", "options"),
+    Input("stocks-raw-store", "data"),
+)
+def update_watchlist_options(rows):
+    if not rows:
+        return []
+    return [{"label": f"{r['Entreprise']} ({r['Ticker']})", "value": r["Ticker"]} for r in rows]
+
+
+
+
+@app.callback(
     Output("stocks-sector-bar", "figure"),
     Output("stocks-sector-box", "figure"),
     Output("stocks-top-cards", "children"),
@@ -146,21 +158,31 @@ def update_sector_filter_options(rows, lang):
     Output("stocks-table", "style_header"),
     Output("stocks-table", "style_cell"),
     Output("stocks-table", "style_data"),
+    Output("stocks-table", "style_data_conditional"),
     Output("stocks-csv-store", "data"),
+    Output("stocks-results-container", "style"),
     Input("stocks-raw-store", "data"),
     Input("sector-filter", "value"),
+    Input("filter-pe-max", "value"),
+    Input("filter-peg-max", "value"),
+    Input("filter-div-min", "value"),
+    Input("watchlist-dropdown", "value"),
+    Input("watchlist-only-switch", "value"),
     Input("lang-radio", "value"),
     Input("palette-dropdown", "value"),
     Input("dark-mode-switch", "value"),
 )
-def render_stock_views(rows, sector_value, lang, palette_code, dark_mode):
+def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, watchlist_tickers, watchlist_only,
+                        lang, palette_code, dark_mode):
     lang = lang or "fr"
     palette = PALETTES.get(palette_code, PALETTE)
     dark = bool(dark_mode)
     style_header, style_cell, style_data = layout.table_style_overrides(dark)
+    peg_style = layout.peg_conditional_style(dark)
     if not rows:
         placeholder = empty_figure_with_message(L(lang, "load_hint_placeholder"), dark=dark)
-        return placeholder, placeholder, "", placeholder, [], [], style_header, style_cell, style_data, ""
+        return (placeholder, placeholder, "", placeholder, [], [], style_header, style_cell, style_data, peg_style,
+                "", {"display": "none"})
 
     # Noms de colonnes internes gardés stables (français) : ce sont des clés de travail, pas du
     # texte affiché : seul le libellé de colonne du tableau final ("name") est traduit plus bas.
@@ -168,6 +190,7 @@ def render_stock_views(rows, sector_value, lang, palette_code, dark_mode):
     df = df.rename(columns={
         "sector": "Secteur", "currency": "Devise", "price": "Prix",
         "trailing_pe": "P/E (trailing)", "forward_pe": "P/E (prévisionnel)",
+        "peg_ratio": "PEG", "ev_to_ebitda": "EV/EBITDA",
         "price_to_book": "P/B", "dividend_yield": "Rendement dividende (%)",
         "market_cap": "Capitalisation",
         "pe_5y_mean": "P/E moyen 5 ans (approx.)", "pe_5y_percentile": "Position vs historique 5 ans (percentile)",
@@ -197,8 +220,20 @@ def render_stock_views(rows, sector_value, lang, palette_code, dark_mode):
             margin=dict(t=60, b=100), xaxis=dict(tickangle=-45),
         )
 
-    # --- Détail (cartes, graphique, tableau) : filtré sur le secteur choisi ---
+    # --- Détail (cartes, graphique, tableau) : filtré sur le secteur choisi, puis sur les
+    # filtres de sélection et la watchlist (ces derniers n'affectent jamais le comparatif
+    # sectoriel ci-dessus, calculé sur l'ensemble chargé). Une valeur sans donnée sur le critère
+    # filtré (NaN) est exclue plutôt que gardée par défaut : on ne peut pas garantir qu'elle
+    # respecte le seuil.
     detail_df = df if sector_value == "all" else df[df["Secteur"] == sector_value]
+    if pe_max not in (None, ""):
+        detail_df = detail_df[detail_df["P/E (trailing)"] <= float(pe_max)]
+    if peg_max not in (None, "") and "PEG" in detail_df.columns:
+        detail_df = detail_df[detail_df["PEG"] <= float(peg_max)]
+    if div_min not in (None, "") and "Rendement dividende (%)" in detail_df.columns:
+        detail_df = detail_df[detail_df["Rendement dividende (%)"] >= float(div_min)]
+    if watchlist_only and "only" in watchlist_only and watchlist_tickers:
+        detail_df = detail_df[detail_df["Ticker"].isin(watchlist_tickers)]
     priced = detail_df.dropna(subset=["P/E (trailing)"]).copy()
     priced = priced[priced["P/E (trailing)"] > 0]
 
@@ -262,13 +297,16 @@ def render_stock_views(rows, sector_value, lang, palette_code, dark_mode):
         margin=dict(t=60, b=120), xaxis=dict(tickangle=-60),
     )
 
-    table_df = detail_df[[
+    # reindex plutôt qu'un simple df[[...]] : tolère une colonne absente (ex. cache disque écrit
+    # par une version antérieure du code, avant l'ajout d'un champ) en la remplissant de NaN plutôt
+    # que de lever une KeyError.
+    table_df = detail_df.reindex(columns=[
         "Entreprise", "Ticker", "Secteur", "Devise", "Prix", "P/E (trailing)", "P/E (prévisionnel)",
-        "P/B", "Rendement dividende (%)",
+        "PEG", "EV/EBITDA", "P/B", "Rendement dividende (%)",
         "P/E moyen 5 ans (approx.)", "Position vs historique 5 ans (percentile)", "Capitalisation",
-    ]].copy()
+    ]).copy()
     table_df["Capitalisation"] = table_df["Capitalisation"].map(_format_market_cap)
-    for col in ["Prix", "P/E (trailing)", "P/E (prévisionnel)", "P/B", "Rendement dividende (%)",
+    for col in ["Prix", "P/E (trailing)", "P/E (prévisionnel)", "PEG", "EV/EBITDA", "P/B", "Rendement dividende (%)",
                 "P/E moyen 5 ans (approx.)", "Position vs historique 5 ans (percentile)"]:
         table_df[col] = table_df[col].round(2)
     table_df = table_df.sort_values("P/E (trailing)")
@@ -276,7 +314,7 @@ def render_stock_views(rows, sector_value, lang, palette_code, dark_mode):
     column_label_keys = {
         "Entreprise": "col_company", "Ticker": "col_ticker", "Secteur": "col_sector", "Devise": "col_currency",
         "Prix": "col_price", "P/E (trailing)": "col_pe_trailing", "P/E (prévisionnel)": "col_pe_forward",
-        "P/B": "col_pb", "Rendement dividende (%)": "col_div_yield",
+        "PEG": "col_peg", "EV/EBITDA": "col_ev_ebitda", "P/B": "col_pb", "Rendement dividende (%)": "col_div_yield",
         "P/E moyen 5 ans (approx.)": "col_pe_5y_mean", "Position vs historique 5 ans (percentile)": "col_pe_5y_pct",
         "Capitalisation": "col_market_cap",
     }
@@ -286,7 +324,7 @@ def render_stock_views(rows, sector_value, lang, palette_code, dark_mode):
     table_df = table_df.astype(object).where(pd.notnull(table_df), None)
 
     return (sector_bar, sector_box, cards_row, fig, table_df.to_dict("records"), columns,
-            style_header, style_cell, style_data, csv_data)
+            style_header, style_cell, style_data, peg_style, csv_data, {"display": "block"})
 
 
 @app.callback(
@@ -344,6 +382,16 @@ def update_pe_history_chart(selected_rows, lang, palette_code, dark_mode, virtua
     prevent_initial_call=True,
 )
 def toggle_dcf_scenarios(n_clicks, is_open):
+    return not is_open
+
+
+@app.callback(
+    Output("intro-details-collapse", "is_open"),
+    Input("btn-toggle-intro-details", "n_clicks"),
+    State("intro-details-collapse", "is_open"),
+    prevent_initial_call=True,
+)
+def toggle_intro_details(n_clicks, is_open):
     return not is_open
 
 
