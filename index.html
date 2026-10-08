@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Outils PEA & Compte-Titres</title>
+<style>
+    :root {
+        color-scheme: dark;
+        --bg: #121212;
+        --card-bg: #1e1e1e;
+        --card-border: #333;
+        --text: #e9ecef;
+        --text-muted: #9aa0a6;
+        --accent: #636efa;
+        --ok: #28a745;
+        --pending: #e0a93e;
+        --down: #dc3545;
+    }
+    * { box-sizing: border-box; }
+    body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 3rem 1.5rem;
+    }
+    h1 { margin: 0 0 0.4rem; font-size: 1.8rem; }
+    p.subtitle { color: var(--text-muted); margin: 0 0 2.5rem; text-align: center; max-width: 640px; }
+    .cards {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1.5rem;
+        width: 100%;
+        max-width: 860px;
+    }
+    .card {
+        display: block;
+        background: var(--card-bg);
+        border: 1px solid var(--card-border);
+        border-radius: 10px;
+        padding: 1.5rem;
+        text-decoration: none;
+        color: var(--text);
+        transition: border-color 0.15s ease, transform 0.15s ease;
+    }
+    .card:hover { border-color: var(--accent); transform: translateY(-2px); }
+    .card h2 { margin: 0 0 0.5rem; font-size: 1.15rem; }
+    .card p { margin: 0 0 1rem; color: var(--text-muted); font-size: 0.9rem; line-height: 1.5; }
+    .status { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
+    .dot { width: 0.6rem; height: 0.6rem; border-radius: 50%; background: var(--pending); flex: none; }
+    .dot.ok { background: var(--ok); }
+    .dot.down { background: var(--down); }
+    .status.ok .label { color: var(--ok); }
+    .status.down .label { color: var(--down); }
+    footer { margin-top: 3rem; color: var(--text-muted); font-size: 0.8rem; text-align: center; max-width: 640px; }
+</style>
+</head>
+<body>
+    <h1>Outils PEA & Compte-Titres</h1>
+    <p class="subtitle">
+        Deux outils indépendants, même discipline quantitative : l'un répond à
+        <em>combien épargner</em>, l'autre à <em>quoi acheter</em>. Chacun tourne dans son
+        propre onglet.
+    </p>
+
+    <div class="cards">
+        <a class="card" id="card-projection" href="http://localhost:8050" target="_blank" rel="noopener">
+            <h2>📈 Projection PEA & Compte-Titres</h2>
+            <p>
+                Simulation Monte Carlo d'un plan d'épargne (par indice ou portefeuille pondéré) :
+                quelle trajectoire de capital attendre, avec quelle incertitude.
+            </p>
+            <div class="status" id="status-projection">
+                <span class="dot"></span><span class="label">Vérification...</span>
+            </div>
+        </a>
+
+        <a class="card" id="card-valuation" href="http://localhost:8051" target="_blank" rel="noopener">
+            <h2>🔎 Valorisation d'actions</h2>
+            <p>
+                Écran de valorisation (P/E sectoriel, PEG, DCF, comparables) : une fois le montant
+                à investir décidé, sur quels titres et à quel prix.
+            </p>
+            <div class="status" id="status-valuation">
+                <span class="dot"></span><span class="label">Vérification...</span>
+            </div>
+        </a>
+    </div>
+
+    <footer>
+        Si un statut reste bloqué sur « indisponible » plus de 30 secondes après avoir lancé
+        <code>python run_both.py</code>, regarde les logs dans le terminal : l'outil correspondant
+        a probablement rencontré une erreur au démarrage.
+    </footer>
+
+<script>
+// Vérifie périodiquement si chaque app répond, pour que l'état affiché ici reflète ce que
+// run_both.py sait déjà côté terminal (prêt / toujours en train de démarrer / plantée) sans avoir
+// à aller consulter les logs. fetch en mode "no-cors" : on ne lit jamais la réponse (origine
+// différente, cross-port), seul le fait que la promesse se résolve ou échoue nous intéresse.
+const targets = [
+    { id: "projection", url: "http://localhost:8050" },
+    { id: "valuation", url: "http://localhost:8051" },
+];
+
+async function checkOne(target) {
+    const statusEl = document.getElementById(`status-${target.id}`);
+    const dot = statusEl.querySelector(".dot");
+    const label = statusEl.querySelector(".label");
+    try {
+        await fetch(target.url, { mode: "no-cors", cache: "no-store" });
+        dot.className = "dot ok";
+        statusEl.className = "status ok";
+        label.textContent = "Prêt";
+        return true;
+    } catch {
+        dot.className = "dot down";
+        statusEl.className = "status down";
+        label.textContent = "Indisponible pour l'instant";
+        return false;
+    }
+}
+
+function checkAll() {
+    targets.forEach(checkOne);
+}
+
+checkAll();
+setInterval(checkAll, 2000);
+</script>
+</body>
+</html>

@@ -38,9 +38,11 @@ python run_both.py
 ```
 
 Lance les deux outils en parallèle (http://localhost:8050 et
-http://localhost:8051), Ctrl+C pour tout arrêter. Pur confort de
-lancement : `run_both.py` ne crée aucun lien entre les deux projets, il se
-contente de démarrer deux processus indépendants.
+http://localhost:8051) et ouvre `index.html`, une page d'accueil statique
+avec un lien vers chacun (et leur statut de démarrage en direct) ; Ctrl+C
+pour tout arrêter. Pur confort de lancement : `run_both.py` et `index.html`
+ne créent aucun lien entre les deux projets, qui restent deux process Dash
+indépendants — juste un point d'entrée commun.
 
 Pour lancer un seul des deux (ou via Docker), voir le README du dossier
 correspondant.
