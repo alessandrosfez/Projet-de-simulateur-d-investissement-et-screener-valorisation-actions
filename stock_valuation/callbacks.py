@@ -19,11 +19,14 @@ from app_instance import app
 from charts import empty_figure_with_message
 from constants import UNIVERSE_TICKERS
 from engine import (
+    annualized_return, annualized_volatility, compute_comparables_ev_ebitda_fair_value,
     compute_comparables_fair_value, compute_dcf_sensitivity_grid, compute_scenario_dcf_fair_values,
-    pe_signal_forward_returns, summarize_pe_signal_backtest,
+    max_drawdown, pe_signal_forward_returns, sharpe_ratio, summarize_pe_signal_backtest,
 )
 from i18n import L, PALETTE, PALETTE_CODES, PALETTE_NAMES, PALETTES
-from market_data import get_dcf_inputs, get_stock_pe_history, get_stock_quality_metrics, get_stock_valuation
+from market_data import (
+    get_dcf_inputs, get_stock_pe_history, get_stock_price_history, get_stock_quality_metrics, get_stock_valuation,
+)
 
 # ============================================================
 # Habillage global (langue, palette, thème) : identique dans l'esprit à
@@ -97,6 +100,24 @@ _load_progress_lock = threading.Lock()
 _load_progress = {"done": 0, "total": 0}
 
 
+def _load_full_stock_data(ticker):
+    """get_stock_valuation + qualité + rendement/risque réalisés, en un seul dict par ticker : les
+    trois alimentent le score composite (voir render_stock_views), qui a besoin de ces métriques
+    pour TOUTES les actions chargées, pas seulement la ligne sélectionnée (contrairement à
+    update_quality_metrics/update_track_record, lazy sur la ligne sélectionnée). Soumis au même
+    ThreadPoolExecutor que get_stock_valuation ci-dessous : triple à peu près les appels yfinance
+    par ticker au premier chargement à froid, accepté pour avoir un score sur tout le tableau."""
+    data = get_stock_valuation(ticker)
+    data.update(get_stock_quality_metrics(ticker))
+    prices = get_stock_price_history(ticker)
+    returns = prices.pct_change().dropna().to_numpy() if len(prices) > 1 else np.array([])
+    data["cagr"] = annualized_return(returns)
+    data["volatility"] = annualized_volatility(returns)
+    data["max_drawdown"] = max_drawdown(returns)
+    data["sharpe"] = sharpe_ratio(data["cagr"], data["volatility"])
+    return data
+
+
 @app.callback(
     Output("stocks-raw-store", "data"),
     Output("stocks-warning", "children"),
@@ -121,7 +142,7 @@ def load_stock_valuations(n_clicks, universes, lang):
     rows, failures = [], []
     try:
         with concurrent.futures.ThreadPoolExecutor(max_workers=15) as executor:
-            future_to_stock = {executor.submit(get_stock_valuation, ticker): (name, ticker) for name, ticker in tickers.items()}
+            future_to_stock = {executor.submit(_load_full_stock_data, ticker): (name, ticker) for name, ticker in tickers.items()}
             for future in concurrent.futures.as_completed(future_to_stock):
                 name, ticker = future_to_stock[future]
                 try:
@@ -262,13 +283,14 @@ def render_pe_backtest(rows, lang):
     Input("filter-pe-max", "value"),
     Input("filter-peg-max", "value"),
     Input("filter-div-min", "value"),
+    Input("filter-score-min", "value"),
     Input("watchlist-dropdown", "value"),
     Input("watchlist-only-switch", "value"),
     Input("lang-radio", "value"),
     Input("palette-dropdown", "value"),
     Input("dark-mode-switch", "value"),
 )
-def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, watchlist_tickers, watchlist_only,
+def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, watchlist_tickers, watchlist_only,
                         lang, palette_code, dark_mode):
     lang = lang or "fr"
     palette = PALETTES.get(palette_code, PALETTE)
@@ -276,11 +298,11 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, watchlist_t
     style_header, style_cell, style_data = layout.table_style_overrides(dark)
     conditional_style = layout.peg_conditional_style(dark) + layout.pe_history_conditional_style(dark)
     column_label_keys = {
-        "Entreprise": "col_company", "Ticker": "col_ticker", "Secteur": "col_sector", "Devise": "col_currency",
-        "Prix": "col_price", "P/E (trailing)": "col_pe_trailing", "P/E (prévisionnel)": "col_pe_forward",
-        "PEG": "col_peg", "EV/EBITDA": "col_ev_ebitda", "P/B": "col_pb", "Rendement dividende (%)": "col_div_yield",
-        "P/E moyen 5 ans (approx.)": "col_pe_5y_mean", "Position vs historique 5 ans (percentile)": "col_pe_5y_pct",
-        "Capitalisation": "col_market_cap",
+        "Entreprise": "col_company", "Ticker": "col_ticker", "Score": "col_score", "Secteur": "col_sector",
+        "Devise": "col_currency", "Prix": "col_price", "P/E (trailing)": "col_pe_trailing",
+        "P/E (prévisionnel)": "col_pe_forward", "PEG": "col_peg", "EV/EBITDA": "col_ev_ebitda", "P/B": "col_pb",
+        "Rendement dividende (%)": "col_div_yield", "P/E moyen 5 ans (approx.)": "col_pe_5y_mean",
+        "Position vs historique 5 ans (percentile)": "col_pe_5y_pct", "Capitalisation": "col_market_cap",
     }
     # tooltip_header est indexé par id de colonne (le nom technique interne, pas le libellé
     # affiché) : survol d'un en-tête -> définition/formule. Seules les colonnes avec une clé
@@ -310,6 +332,29 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, watchlist_t
         "market_cap": "Capitalisation",
         "pe_5y_mean": "P/E moyen 5 ans (approx.)", "pe_5y_percentile": "Position vs historique 5 ans (percentile)",
     })
+
+    # --- Score composite : calculé sur l'ensemble CHARGÉ (df), jamais sur detail_df (filtré par
+    # secteur/filtres/watchlist plus bas) -- sinon le score d'une action changerait juste parce que
+    # l'utilisateur modifie un filtre sans rapport, même principe que le comparatif sectoriel
+    # ci-dessous. Trois piliers également pondérés, chacun une moyenne de rangs percentiles (0-100,
+    # 100 = meilleur) au sein de l'univers chargé : valorisation (P/E et PEG, plus bas = meilleur,
+    # valeurs négatives/nulles exclues car elles signalent des pertes, pas une décote), qualité
+    # (ROIC et marge nette, plus haut = meilleur), track record (Sharpe réalisé, qui combine déjà
+    # rendement et risque, pas besoin de re-classer CAGR/volatilité séparément). Une action sans
+    # aucune des trois données a un score NaN -> "N/A" à l'affichage (voir plus bas).
+    pe_valid = df["P/E (trailing)"].where(df["P/E (trailing)"] > 0)
+    peg_valid = df["PEG"].where(df["PEG"] > 0) if "PEG" in df.columns else pd.Series(dtype=float, index=df.index)
+    valuation_pillar = pd.concat([
+        pe_valid.rank(pct=True, ascending=False) * 100,
+        peg_valid.rank(pct=True, ascending=False) * 100,
+    ], axis=1).mean(axis=1, skipna=True)
+    quality_pillar = pd.concat([
+        df.get("roic", pd.Series(dtype=float, index=df.index)).rank(pct=True, ascending=True) * 100,
+        df.get("profit_margin", pd.Series(dtype=float, index=df.index)).rank(pct=True, ascending=True) * 100,
+    ], axis=1).mean(axis=1, skipna=True)
+    track_record_pillar = df.get("sharpe", pd.Series(dtype=float, index=df.index)).rank(pct=True, ascending=True) * 100
+    df["Score"] = pd.concat([valuation_pillar, quality_pillar, track_record_pillar], axis=1).mean(axis=1, skipna=True)
+
     priced_all = df.dropna(subset=["P/E (trailing)"]).copy()
     priced_all = priced_all[priced_all["P/E (trailing)"] > 0]
 
@@ -367,6 +412,8 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, watchlist_t
         detail_df = detail_df[detail_df["PEG"] <= float(peg_max)]
     if div_min not in (None, "") and "Rendement dividende (%)" in detail_df.columns:
         detail_df = detail_df[detail_df["Rendement dividende (%)"] >= float(div_min)]
+    if score_min not in (None, "") and "Score" in detail_df.columns:
+        detail_df = detail_df[detail_df["Score"] >= float(score_min)]
     if watchlist_only and "only" in watchlist_only and watchlist_tickers:
         detail_df = detail_df[detail_df["Ticker"].isin(watchlist_tickers)]
     priced = detail_df.dropna(subset=["P/E (trailing)"]).copy()
@@ -436,13 +483,13 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, watchlist_t
     # par une version antérieure du code, avant l'ajout d'un champ) en la remplissant de NaN plutôt
     # que de lever une KeyError.
     table_df = detail_df.reindex(columns=[
-        "Entreprise", "Ticker", "Secteur", "Devise", "Prix", "P/E (trailing)", "P/E (prévisionnel)",
+        "Entreprise", "Ticker", "Score", "Secteur", "Devise", "Prix", "P/E (trailing)", "P/E (prévisionnel)",
         "PEG", "EV/EBITDA", "P/B", "Rendement dividende (%)",
         "P/E moyen 5 ans (approx.)", "Position vs historique 5 ans (percentile)", "Capitalisation",
     ]).copy()
     table_df["Capitalisation"] = table_df["Capitalisation"].map(_format_market_cap)
-    for col in ["Prix", "P/E (trailing)", "P/E (prévisionnel)", "PEG", "EV/EBITDA", "P/B", "Rendement dividende (%)",
-                "P/E moyen 5 ans (approx.)", "Position vs historique 5 ans (percentile)"]:
+    for col in ["Score", "Prix", "P/E (trailing)", "P/E (prévisionnel)", "PEG", "EV/EBITDA", "P/B",
+                "Rendement dividende (%)", "P/E moyen 5 ans (approx.)", "Position vs historique 5 ans (percentile)"]:
         table_df[col] = table_df[col].round(2)
     table_df = table_df.sort_values("P/E (trailing)")
 
@@ -585,6 +632,49 @@ def update_quality_metrics(selected_rows, lang, virtual_data):
 
 
 @app.callback(
+    Output("track-record-card", "children"),
+    Input("stocks-table", "derived_virtual_selected_rows"),
+    Input("lang-radio", "value"),
+    State("stocks-table", "derived_virtual_data"),
+)
+def update_track_record(selected_rows, lang, virtual_data):
+    lang = lang or "fr"
+    if not selected_rows or not virtual_data:
+        return html.Div(L(lang, "track_record_hint_default"), className="text-muted")
+
+    row = virtual_data[selected_rows[0]]
+    ticker = row["Ticker"]
+    prices = get_stock_price_history(ticker)
+    returns = prices.pct_change().dropna().to_numpy() if len(prices) > 1 else np.array([])
+
+    cagr = annualized_return(returns)
+    volatility = annualized_volatility(returns)
+    drawdown = max_drawdown(returns)
+    sharpe = sharpe_ratio(cagr, volatility)
+
+    if len(returns) == 0:
+        return html.Div(L(lang, "track_record_hint_default"), className="text-muted")
+
+    def stat(label_key, value, suffix=""):
+        text = f"{value:.1f}{suffix}" if value is not None else "N/A"
+        return dbc.Col([
+            html.Small(L(lang, label_key), className="text-muted d-block"),
+            html.H6(text),
+        ], width=3, className="mb-2")
+
+    stats = [
+        stat("track_record_cagr_label", cagr * 100 if cagr is not None else None, " %"),
+        stat("track_record_volatility_label", volatility * 100 if volatility is not None else None, " %"),
+        stat("track_record_max_drawdown_label", drawdown * 100 if drawdown is not None else None, " %"),
+        stat("track_record_sharpe_label", sharpe),
+    ]
+    return html.Div([
+        dbc.Card(dbc.CardBody(dbc.Row(stats))),
+        html.Small(L(lang, "track_record_methodology_hint"), className="text-muted d-block mt-1"),
+    ])
+
+
+@app.callback(
     Output("dcf-result", "children"),
     Output("dcf-chart", "figure"),
     Input("stocks-table", "derived_virtual_selected_rows"),
@@ -674,6 +764,24 @@ def update_dcf(selected_rows, growth_pct, discount_pct, terminal_growth_pct, hor
         if comp_fair_value is not None:
             comp_hint = L(lang, "comp_hint", n=len(peer_pes), sector=sector, peer_pe=peer_median_pe, own_pe=own_pe)
 
+    own_ev_ebitda = row.get("EV/EBITDA")
+    peer_ev_ebitdas = [
+        r["EV/EBITDA"] for r in virtual_data
+        if r.get("Ticker") != ticker and r.get("Secteur") == sector
+        and r.get("EV/EBITDA") and r["EV/EBITDA"] > 0
+    ]
+    comp_ev_fair_value = None
+    comp_ev_hint = L(lang, "comp_ev_insufficient_peers")
+    if len(peer_ev_ebitdas) >= 3:
+        peer_median_ev_ebitda = float(np.median(peer_ev_ebitdas))
+        comp_ev_fair_value = compute_comparables_ev_ebitda_fair_value(
+            inputs.get("enterprise_value"), inputs.get("ev_to_ebitda"), peer_median_ev_ebitda,
+            inputs["total_debt"], inputs["total_cash"], inputs["shares_outstanding"],
+        )
+        if comp_ev_fair_value is not None:
+            comp_ev_hint = L(lang, "comp_ev_hint", n=len(peer_ev_ebitdas), sector=sector,
+                              peer_ev_ebitda=peer_median_ev_ebitda, own_ev_ebitda=own_ev_ebitda)
+
     # Détail pédagogique du calcul (repliable) : montre le cheminement complet plutôt que le seul
     # résultat, pour que "pourquoi ce chiffre ?" se réponde en dépliant au lieu de devoir redemander.
     detail_children = []
@@ -748,12 +856,20 @@ def update_dcf(selected_rows, growth_pct, discount_pct, terminal_growth_pct, hor
             className="mb-2",
         ))
     if comp_fair_value is not None:
-        detail_children.append(html.H6("Comparables", className="mt-2"))
+        detail_children.append(html.H6("Comparables (P/E)", className="mt-2"))
         detail_children.append(html.P(
             L(lang, "comp_detail_formula", n=len(peer_pes),
               price=f"{price:,.2f} {currency}".replace(",", " "),
               peer_pe=f"{peer_median_pe:.1f}x", own_pe=f"{own_pe:.1f}x",
               comp_fair_value=f"{comp_fair_value:,.2f} {currency}".replace(",", " ")),
+            className="mb-0",
+        ))
+    if comp_ev_fair_value is not None:
+        detail_children.append(html.H6("Comparables (EV/EBITDA)", className="mt-2"))
+        detail_children.append(html.P(
+            L(lang, "comp_ev_detail_formula", n=len(peer_ev_ebitdas),
+              peer_ev_ebitda=f"{peer_median_ev_ebitda:.1f}x", own_ev_ebitda=f"{own_ev_ebitda:.1f}x",
+              comp_ev_fair_value=f"{comp_ev_fair_value:,.2f} {currency}".replace(",", " ")),
             className="mb-0",
         ))
 
@@ -783,6 +899,11 @@ def update_dcf(selected_rows, growth_pct, discount_pct, terminal_growth_pct, hor
             html.Small(L(lang, "comp_fair_value_label"), className="text-muted d-block"),
             html.H5(f"{comp_fair_value:,.2f} {currency}".replace(",", " ")),
         ]))
+    if comp_ev_fair_value is not None:
+        stat_cols.append(dbc.Col([
+            html.Small(L(lang, "comp_ev_fair_value_label"), className="text-muted d-block"),
+            html.H5(f"{comp_ev_fair_value:,.2f} {currency}".replace(",", " ")),
+        ]))
     stat_cols.append(
         dbc.Col([html.Small(L(lang, "dcf_current_price_label"), className="text-muted d-block"),
                  html.H5(f"{price:,.2f} {currency}".replace(",", " ") if price else "N/A")]),
@@ -797,6 +918,7 @@ def update_dcf(selected_rows, growth_pct, discount_pct, terminal_growth_pct, hor
         card_children.append(dbc.Alert(dcf_blocked_msg, color="warning", className="py-2 mb-2"))
     card_children.append(dbc.Row(stat_cols))
     card_children.append(html.Small(comp_hint, className="text-muted d-block mt-2"))
+    card_children.append(html.Small(comp_ev_hint, className="text-muted d-block"))
     if detail_children:
         card_children.append(html.Details([
             html.Summary(L(lang, "dcf_detail_summary"), className="text-muted mt-2",
@@ -848,6 +970,10 @@ def update_dcf(selected_rows, growth_pct, discount_pct, terminal_growth_pct, hor
         bar_labels.append(L(lang, "comp_fair_value_label"))
         bar_values.append(comp_fair_value)
         bar_colors.append(palette[2 % len(palette)])
+    if comp_ev_fair_value is not None:
+        bar_labels.append(L(lang, "comp_ev_fair_value_label"))
+        bar_values.append(comp_ev_fair_value)
+        bar_colors.append(palette[6 % len(palette)])
     bar_labels.append(L(lang, "dcf_current_price_label"))
     bar_values.append(price or 0)
     bar_colors.append(palette[1 % len(palette)])

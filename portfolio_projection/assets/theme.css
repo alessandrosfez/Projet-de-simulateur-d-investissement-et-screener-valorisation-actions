@@ -1,0 +1,116 @@
+/* Thème "dashboard pro" (porté depuis stock_valuation/assets/theme.css, voir ce fichier pour le
+   contexte complet) : typographie, panneau latéral, onglets, accordéon, boutons et tableau. Les
+   couleurs du dark_mode.css existant (DataTable, Dropdown, tooltips) restent en place : ce
+   fichier ne touche qu'au chrome autour, pas aux composants déjà couverts.
+
+   --accent reprend la même valeur que stock_valuation pour que les deux apps du toolkit PEA se
+   lisent comme un seul système visuel. Le mode sombre de cette app bascule via la classe
+   "dark-mode" sur <body> ET l'attribut data-bs-theme sur <html> (voir le clientside_callback de
+   dark-mode-switch dans app.py) : on peut donc réutiliser le même sélecteur [data-bs-theme="dark"]
+   que stock_valuation plutôt que .dark-mode. */
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+:root {
+    --accent: #636efa;
+    --accent-contrast: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f1f3f9;
+    --page-bg: #f7f8fb;
+    --border-soft: #e4e7ef;
+    --shadow-card: 0 1px 2px rgba(15, 23, 42, 0.04), 0 6px 16px rgba(15, 23, 42, 0.05);
+}
+
+[data-bs-theme="dark"] {
+    --accent: #7b84ff;
+    --accent-contrast: #ffffff;
+    --surface: #171a23;
+    --surface-2: #1f2330;
+    --page-bg: #0e1016;
+    --border-soft: #2a2f3d;
+    --shadow-card: none;
+}
+
+body {
+    font-family: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--page-bg) !important;
+    transition: background-color .2s ease;
+}
+
+h1, h2, h3, h4, h5, h6 { font-family: "Inter", sans-serif; font-weight: 600; letter-spacing: -0.01em; }
+
+.app-header {
+    padding-bottom: 1.25rem;
+    margin-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-soft);
+}
+
+/* -------- En-têtes de section (H5 ⟶ className="section-title") -------- */
+.section-title {
+    position: relative;
+    padding-left: 0.85rem;
+    margin-top: 2.25rem !important;
+    margin-bottom: 1rem !important;
+    font-weight: 600;
+}
+.section-title::before {
+    content: "";
+    position: absolute;
+    left: 0; top: 0.1em; bottom: 0.1em;
+    width: 4px;
+    border-radius: 2px;
+    background: var(--accent);
+}
+
+/* -------- Panneau latéral (sidebar-col, className="sidebar-panel") -------- */
+.sidebar-panel {
+    background-color: var(--surface);
+    border-right: 1px solid var(--border-soft);
+}
+
+/* -------- Accordéon (sections de la sidebar) -------- */
+.accordion-flush .accordion-item { border-bottom: 1px solid var(--border-soft); }
+.accordion-button { font-weight: 500; }
+.accordion-button:not(.collapsed) {
+    color: var(--accent);
+    background-color: var(--surface-2);
+}
+.accordion-button:focus { box-shadow: 0 0 0 0.15rem color-mix(in srgb, var(--accent) 35%, transparent); }
+
+/* -------- Onglets principaux (main-tabs) -------- */
+.nav-tabs .nav-link.active {
+    color: var(--accent);
+    border-color: var(--border-soft) var(--border-soft) var(--surface);
+    font-weight: 600;
+}
+.nav-tabs .nav-link:hover { border-color: var(--border-soft); }
+.tab-content {
+    background-color: var(--surface);
+    border: 1px solid var(--border-soft);
+    border-top: none;
+    border-radius: 0 0 14px 14px;
+    box-shadow: var(--shadow-card);
+}
+
+/* -------- Boutons -------- */
+.btn { border-radius: 8px; font-weight: 500; }
+.btn-primary {
+    background-color: var(--accent); border-color: var(--accent);
+}
+.btn-primary:hover, .btn-primary:focus {
+    background-color: var(--accent); border-color: var(--accent);
+    filter: brightness(1.08);
+}
+.btn-link { color: var(--accent); }
+
+/* -------- Tableau (dash_table) -------- */
+/* Couleurs posées en Python (table_style_overrides, plus forte spécificité inline) : ici
+   uniquement la forme (coins arrondis). */
+.dash-spreadsheet-container {
+    border-radius: 10px;
+    overflow: hidden;
+    border: 1px solid var(--border-soft);
+}
+
+/* -------- Liens -------- */
+a { color: var(--accent); }

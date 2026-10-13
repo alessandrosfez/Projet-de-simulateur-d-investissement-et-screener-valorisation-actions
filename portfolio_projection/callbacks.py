@@ -5,7 +5,9 @@ fonctions ci-dessous ne sont pas appelées directement ailleurs, sauf les
 helpers d'affichage conditionnel réutilisés par layout.py lui-même.
 """
 import base64
+import io
 import json
+import time
 
 import dash
 import dash_bootstrap_components as dbc
@@ -15,16 +17,22 @@ import plotly.graph_objects as go
 from dash import Input, Output, State, dcc, html
 
 import layout
+import portfolio_db
+import portfolio_engine
 from app_instance import app
 from charts import make_correlation_heatmap, make_sequence_risk_figure
 from constants import BACKTEST_ANCHORS, N_PORTFOLIOS_MAX, PEA_CONTRIBUTION_CAP, TICKER_KEYS, TICKERS
 from engine import inject_shock, simulate_index_returns, simulate_portfolio_asset_returns, suggest_optimal_weights
 from i18n import L, PALETTE, PALETTE_CODES, PALETTE_NAMES, PALETTES
-from market_data import get_aligned_returns, get_monthly_returns
+from market_data import (
+    get_aligned_returns, get_aligned_returns_for_tickers, get_current_price, get_daily_price_history,
+    get_monthly_returns, resolve_isin_to_ticker,
+)
 from results import (
     build_envelope_comparison_figure, build_historique_metrics_outputs, build_metric_cards,
-    build_metrics_outputs, build_schedules, build_sequence_risk_series, compute_results,
-    render_objective_result, render_rolling_backtest_result,
+    build_metrics_outputs, build_portfolio_totals_cards, build_rebalancing_table_data, build_real_vs_simulated_figure,
+    build_schedules, build_sequence_risk_series, compute_results, render_objective_result,
+    render_rolling_backtest_result,
 )
 
 # ============================================================
@@ -467,8 +475,17 @@ def update_correlation_and_suggestions(source, lookback_years, lang, shrinkage_p
 
     shrinkage = (shrinkage_pct if shrinkage_pct is not None else 50) / 100
     heatmap = make_correlation_heatmap(aligned.corr(), lang=lang, dark=dark)
+    # La grille exhaustive de suggest_optimal_weights est combinatoire en step_pct et en nombre
+    # d'actifs (compositions de 100/step_pct en k parts) : à pas fixe de 5, 6 actifs prennent ~1s
+    # et 7 actifs ~4s (mesuré), un ralentissement perceptible à CHAQUE rendu de cet onglet (pas
+    # seulement au clic) puisque `universe` ci-dessus est toujours la totalité de TICKERS, jamais
+    # un sous-ensemble choisi par l'utilisateur. Un pas plus large au-delà de 5 actifs garde le
+    # calcul sous ~0.25s quel que soit l'univers, au prix d'une granularité de suggestion plus
+    # grossière (10% au lieu de 5%) -- un compromis acceptable pour une simple proposition de
+    # départ, affinable ensuite à la main via les curseurs de pondération.
+    step_pct = 5 if len(aligned.columns) <= 5 else 10
     sharpe_w, vol_w, rp_w = suggest_optimal_weights(
-        aligned, step_pct=5, shrinkage=shrinkage, mu_override_pct=list(mu_overrides),
+        aligned, step_pct=step_pct, shrinkage=shrinkage, mu_override_pct=list(mu_overrides),
     )
     sharpe_display = html.Ul([html.Li(f"{k}: {v:.0f}%") for k, v in sharpe_w.items()]) if sharpe_w else ""
     vol_display = html.Ul([html.Li(f"{k}: {v:.0f}%") for k, v in vol_w.items()]) if vol_w else ""
@@ -797,3 +814,403 @@ def download_tab2(n_clicks, csv_data):
     if not csv_data:
         raise dash.exceptions.PreventUpdate
     return dcc.send_string(csv_data, "projection_pea_metriques_portefeuille.csv")
+
+
+# ============================================================
+# 10. CALLBACKS :onglet 3 (portefeuille réel)
+# ============================================================
+# Seul endroit de l'appli où des callbacks ont un effet de bord en écriture (insertion/suppression
+# en base, voir portfolio_db.py) : tous les autres callbacks de ce fichier sont de purs
+# lecture/calcul/rendu. Pattern retenu : chaque callback d'écriture écrit en base puis incrémente
+# "tab3-refresh-trigger" (horodatage, toujours différent -> toujours un "vrai" changement côté
+# Dash), qu'un unique callback de lecture/rendu consomme pour tout recalculer depuis la base. Sans
+# ce détour par un Store, relier directement la suppression de ligne d'un tableau (son propre prop
+# "data" en Input) au rendu de CE MÊME tableau (son prop "data" en Output) créerait une dépendance
+# circulaire refusée par Dash.
+
+
+def _validated_ticker(ticker: str):
+    """None si le ticker est vide ou si aucun prix n'est disponible pour lui (typo, délisting) --
+    sert de garde-fou à la saisie plutôt que de laisser une valeur invalide entrer en base et
+    échouer silencieusement plus tard dans la reconstruction de la courbe de valeur."""
+    ticker = (ticker or "").strip().upper()
+    if not ticker:
+        return None, None
+    price = get_current_price(ticker)
+    return (ticker, price) if price is not None else (ticker, None)
+
+
+_CSV_ERROR_TO_FORM_ERROR_KEY = {
+    "missing_ticker": "form_error_invalid_ticker",
+    "missing_date": "form_error_missing_field",
+    "invalid_date": "form_error_missing_field",
+    "missing_amount": "form_error_missing_field",
+    "invalid_amount": "form_error_invalid_amount",
+}
+
+
+@app.callback(
+    Output("tab3-refresh-trigger", "data", allow_duplicate=True),
+    Output("tab3-tx-form-error", "children"),
+    Input("tab3-btn-add-tx", "n_clicks"),
+    State("tab3-tx-ticker-input", "value"),
+    State("tab3-tx-date-input", "date"),
+    State("tab3-tx-amount-input", "value"),
+    State("tab3-tx-price-input", "value"),
+    State("tab3-tx-fee-input", "value"),
+    State("lang-radio", "value"),
+    prevent_initial_call=True,
+)
+def add_transaction(n_clicks, ticker, date, amount, price, fee, lang):
+    lang = lang or "fr"
+    ticker, ticker_price = _validated_ticker(ticker)
+    if not ticker or ticker_price is None:
+        return dash.no_update, L(lang, "form_error_invalid_ticker", ticker=ticker or "")
+    # Même validation structurelle que l'import CSV (voir portfolio_engine.validate_transactions_rows),
+    # appliquée à une unique ligne -- une seule source de vérité pour "qu'est-ce qu'une transaction
+    # valide", que la donnée arrive du formulaire ou d'un fichier.
+    row_df = pd.DataFrame([{"ticker": ticker, "date": date, "amount_eur": amount, "price": price, "fee_eur": fee}])
+    valid_rows, errors = portfolio_engine.validate_transactions_rows(row_df)
+    if errors:
+        return dash.no_update, L(lang, _CSV_ERROR_TO_FORM_ERROR_KEY[errors[0][1]])
+    row = valid_rows[0]
+    portfolio_db.insert_transaction(row["ticker"], row["date"], row["amount_eur"], row["price"], row["fee_eur"])
+    return time.time(), ""
+
+
+@app.callback(
+    Output("tab3-refresh-trigger", "data", allow_duplicate=True),
+    Output("tab3-div-form-error", "children"),
+    Input("tab3-btn-add-div", "n_clicks"),
+    State("tab3-div-ticker-input", "value"),
+    State("tab3-div-date-input", "date"),
+    State("tab3-div-amount-input", "value"),
+    State("lang-radio", "value"),
+    prevent_initial_call=True,
+)
+def add_dividend(n_clicks, ticker, date, amount, lang):
+    lang = lang or "fr"
+    ticker, ticker_price = _validated_ticker(ticker)
+    if not ticker or ticker_price is None:
+        return dash.no_update, L(lang, "form_error_invalid_ticker", ticker=ticker or "")
+    row_df = pd.DataFrame([{"ticker": ticker, "date": date, "amount_eur": amount}])
+    valid_rows, errors = portfolio_engine.validate_dividends_rows(row_df)
+    if errors:
+        return dash.no_update, L(lang, _CSV_ERROR_TO_FORM_ERROR_KEY[errors[0][1]])
+    row = valid_rows[0]
+    portfolio_db.insert_dividend(row["ticker"], row["date"], row["amount_eur"])
+    return time.time(), ""
+
+
+@app.callback(
+    Output("tab3-refresh-trigger", "data", allow_duplicate=True),
+    Output("tab3-weight-form-error", "children"),
+    Input("tab3-btn-add-weight", "n_clicks"),
+    State("tab3-weight-ticker-input", "value"),
+    State("tab3-weight-pct-input", "value"),
+    State("lang-radio", "value"),
+    prevent_initial_call=True,
+)
+def add_weight(n_clicks, ticker, weight_pct, lang):
+    lang = lang or "fr"
+    ticker, ticker_price = _validated_ticker(ticker)
+    if not ticker or ticker_price is None:
+        return dash.no_update, L(lang, "form_error_invalid_ticker", ticker=ticker or "")
+    if weight_pct is None:
+        return dash.no_update, L(lang, "form_error_missing_field")
+    if float(weight_pct) < 0:
+        return dash.no_update, L(lang, "form_error_invalid_amount")
+    portfolio_db.upsert_target_weight(ticker, float(weight_pct))
+    return time.time(), ""
+
+
+@app.callback(
+    Output("tab3-refresh-trigger", "data", allow_duplicate=True),
+    Output("tab3-csv-import-result", "children"),
+    Input("tab3-upload-csv", "contents"),
+    State("lang-radio", "value"),
+    prevent_initial_call=True,
+)
+def import_csv(contents, lang):
+    lang = lang or "fr"
+    if contents is None:
+        raise dash.exceptions.PreventUpdate
+    _content_type, content_string = contents.split(",", 1)
+    decoded = base64.b64decode(content_string)
+    try:
+        df = pd.read_csv(io.StringIO(decoded.decode("utf-8")))
+    except Exception:
+        return dash.no_update, L(lang, "csv_import_unreadable_file")
+
+    kind = portfolio_engine.detect_csv_kind(df)
+    if kind is None:
+        return dash.no_update, L(lang, "csv_import_unknown_format")
+
+    unresolved_isins = []
+    if kind == "trade_republic":
+        # Trade Republic identifie les instruments par ISIN (colonne "symbol"), pas par ticker
+        # boursier : résolution réseau avant de pouvoir réutiliser le même chemin que le schéma
+        # maison (get_current_price attend un ticker Yahoo, pas un ISIN).
+        raw_rows, errors = portfolio_engine.extract_trade_republic_buys(df)
+        unique_isins = sorted({r["isin"] for r in raw_rows})
+        isin_to_ticker = {isin: resolve_isin_to_ticker(isin) for isin in unique_isins}
+        unresolved_isins = [isin for isin, ticker in isin_to_ticker.items() if ticker is None]
+        valid_rows = [
+            {"ticker": isin_to_ticker[r["isin"]], "date": r["date"], "amount_eur": r["amount_eur"],
+             "price": r["price"], "fee_eur": r["fee_eur"]}
+            for r in raw_rows if isin_to_ticker[r["isin"]] is not None
+        ]
+        kind = "transactions"  # même chemin d'insertion que le schéma maison à partir d'ici
+    else:
+        valid_rows, errors = (
+            portfolio_engine.validate_transactions_rows(df) if kind == "transactions"
+            else portfolio_engine.validate_dividends_rows(df)
+        )
+
+    # Tickers validés un par un (uniques), pas ligne par ligne : la plupart des imports répètent
+    # une poignée de tickers, et get_current_price est caché (cached_ttl) -- évite des appels
+    # réseau redondants pour un fichier de centaines de lignes sur quelques titres.
+    unique_tickers = sorted({row["ticker"] for row in valid_rows})
+    invalid_tickers = [t for t in unique_tickers if get_current_price(t) is None]
+    insertable_rows = [row for row in valid_rows if row["ticker"] not in invalid_tickers]
+    skipped_for_ticker = len(valid_rows) - len(insertable_rows)
+
+    if not insertable_rows:
+        return dash.no_update, L(lang, "csv_import_no_valid_rows")
+
+    if kind == "transactions":
+        n_inserted = portfolio_db.insert_transactions_bulk(
+            [(r["ticker"], r["date"], r["amount_eur"], r["price"], r["fee_eur"]) for r in insertable_rows]
+        )
+    else:
+        n_inserted = portfolio_db.insert_dividends_bulk(
+            [(r["ticker"], r["date"], r["amount_eur"]) for r in insertable_rows]
+        )
+
+    messages = [html.Div(L(lang, "csv_import_success", n=n_inserted))]
+    details = [L(lang, f"csv_error_{code}", line=line) for line, code in errors]
+    details += [f"{t} ({L(lang, 'csv_import_invalid_ticker_reason')})" for t in invalid_tickers]
+    details += [f"{isin} ({L(lang, 'csv_import_unresolved_isin_reason')})" for isin in unresolved_isins]
+    n_skipped = len(errors) + skipped_for_ticker + len(unresolved_isins)
+    if details:
+        messages.append(html.Div(L(lang, "csv_import_skipped", n=n_skipped, details="; ".join(details))))
+    return time.time(), html.Div(messages)
+
+
+@app.callback(
+    Output("tab3-download-tx-template", "data"),
+    Input("tab3-btn-download-tx-template", "n_clicks"),
+    prevent_initial_call=True,
+)
+def send_transactions_template(n_clicks):
+    return dcc.send_string("ticker,date,amount_eur,price,fee_eur\nMC.PA,2024-01-15,1000.0,650.0,5.0\n",
+                            "modele_transactions.csv")
+
+
+@app.callback(
+    Output("tab3-download-div-template", "data"),
+    Input("tab3-btn-download-div-template", "n_clicks"),
+    prevent_initial_call=True,
+)
+def send_dividends_template(n_clicks):
+    return dcc.send_string("ticker,date,amount_eur\nMC.PA,2024-12-01,20.0\n", "modele_dividendes.csv")
+
+
+@app.callback(
+    Output("tab3-refresh-trigger", "data", allow_duplicate=True),
+    Input("tab3-tx-table", "data"),
+    prevent_initial_call=True,
+)
+def delete_removed_transactions(table_data):
+    current_ids = set(portfolio_db.get_transactions()["id"].tolist())
+    submitted_ids = {row["id"] for row in (table_data or []) if "id" in row}
+    removed = current_ids - submitted_ids
+    if not removed:
+        raise dash.exceptions.PreventUpdate
+    for row_id in removed:
+        portfolio_db.delete_transaction(int(row_id))
+    return time.time()
+
+
+@app.callback(
+    Output("tab3-refresh-trigger", "data", allow_duplicate=True),
+    Input("tab3-div-table", "data"),
+    prevent_initial_call=True,
+)
+def delete_removed_dividends(table_data):
+    current_ids = set(portfolio_db.get_dividends()["id"].tolist())
+    submitted_ids = {row["id"] for row in (table_data or []) if "id" in row}
+    removed = current_ids - submitted_ids
+    if not removed:
+        raise dash.exceptions.PreventUpdate
+    for row_id in removed:
+        portfolio_db.delete_dividend(int(row_id))
+    return time.time()
+
+
+@app.callback(
+    Output("tab3-refresh-trigger", "data", allow_duplicate=True),
+    Input("tab3-weights-table", "data"),
+    prevent_initial_call=True,
+)
+def delete_removed_weights(table_data):
+    current_tickers = set(portfolio_db.get_target_weights()["ticker"].tolist())
+    submitted_tickers = {row["ticker"] for row in (table_data or []) if "ticker" in row}
+    removed = current_tickers - submitted_tickers
+    if not removed:
+        raise dash.exceptions.PreventUpdate
+    for ticker in removed:
+        portfolio_db.delete_target_weight(ticker)
+    return time.time()
+
+
+@app.callback(
+    Output("tab3-totals-cards", "children"),
+    Output("tab3-real-pace-display", "children"),
+    Output("tab3-real-vs-sim-graph", "figure"),
+    Output("tab3-rebalancing-table", "data"),
+    Output("tab3-rebalancing-table", "columns"),
+    Output("tab3-rebalancing-table", "style_header"),
+    Output("tab3-rebalancing-table", "style_cell"),
+    Output("tab3-rebalancing-table", "style_data"),
+    Output("tab3-rebalancing-warning", "children"),
+    Output("tab3-weights-table", "data"),
+    Output("tab3-weights-table", "style_header"),
+    Output("tab3-weights-table", "style_cell"),
+    Output("tab3-weights-table", "style_data"),
+    Output("tab3-tx-table", "data"),
+    Output("tab3-tx-table", "style_header"),
+    Output("tab3-tx-table", "style_cell"),
+    Output("tab3-tx-table", "style_data"),
+    Output("tab3-div-table", "data"),
+    Output("tab3-div-table", "style_header"),
+    Output("tab3-div-table", "style_cell"),
+    Output("tab3-div-table", "style_data"),
+    Output("tab3-tx-ticker-input", "options"),
+    Output("tab3-div-ticker-input", "options"),
+    Output("tab3-weight-ticker-input", "options"),
+    Input("tab3-refresh-trigger", "data"),
+    Input("lang-radio", "value"),
+    Input("dark-mode-switch", "value"),
+    Input("lookback-slider", "value"),
+    Input("method-radio", "value"),
+    Input("n-sims-slider", "value"),
+    Input("seed-input", "value"),
+)
+def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed):
+    lang = lang or "fr"
+    dark = bool(dark_mode)
+    style_header, style_cell, style_data = layout.table_style_overrides(dark)
+    table_styles = (style_header, style_cell, style_data)
+
+    transactions = portfolio_db.get_transactions()
+    dividends = portfolio_db.get_dividends()
+    target_weights = portfolio_db.get_target_weights()
+
+    holdings = portfolio_engine.reconstruct_holdings(transactions)
+    current_values = pd.Series(dtype=float)
+    price_histories = {}
+    if not holdings.empty:
+        first_date = pd.to_datetime(transactions["date"]).min().strftime("%Y-%m-%d")
+        for _, row in holdings.iterrows():
+            ticker = row["ticker"]
+            price = get_current_price(ticker)
+            if price is not None:
+                current_values[ticker] = row["quantity"] * price
+            history = get_daily_price_history(ticker, first_date)
+            if not history.empty:
+                price_histories[ticker] = history
+
+    current_value_total = float(current_values.sum()) if not current_values.empty else 0.0
+    totals = portfolio_engine.compute_totals(transactions, dividends, current_value_total)
+    totals_cards = build_portfolio_totals_cards(totals, lang)
+
+    real_series = portfolio_engine.reconstruct_equity_curve(transactions, price_histories)
+
+    rebalancing_df = portfolio_engine.compute_rebalancing_plan(target_weights, current_values)
+    rebalancing_data, rebalancing_columns = build_rebalancing_table_data(rebalancing_df, lang)
+    rebalancing_warning = ""
+    if target_weights.empty:
+        # Sans pondération cible, le tableau lui-même n'a ni data ni columns (voir
+        # build_rebalancing_table_data) et ne s'affiche donc pas du tout -- un texte explicite ici
+        # évite que la section ait l'air cassée/vide sans raison apparente.
+        rebalancing_warning = html.Div(L(lang, "rebalancing_no_weights_hint"), className="text-muted")
+    elif abs(target_weights["weight_pct"].sum() - 100) > 1:
+        rebalancing_warning = dbc.Alert(
+            L(lang, "rebalancing_weights_not_100_warning"), color="warning", className="py-1 px-2 mb-2",
+        )
+
+    empty_fig = go.Figure()
+    empty_fig.update_layout(template="plotly_dark" if dark else "plotly")
+    real_vs_sim_fig = empty_fig
+
+    monthly_amounts = portfolio_engine.monthly_contribution_schedule(transactions)
+    real_pace_display = (
+        L(lang, "real_pace_label", amount=f"{monthly_amounts.mean():,.0f}".replace(",", " "))
+        if not monthly_amounts.empty else L(lang, "real_pace_no_data")
+    )
+    if not monthly_amounts.empty and not holdings.empty and not current_values.empty:
+        tickers = list(holdings["ticker"])
+        try:
+            aligned = get_aligned_returns_for_tickers(tickers, lookback_years or 10)
+        except Exception:
+            aligned = pd.DataFrame()
+
+        if not aligned.empty and list(aligned.columns) == tickers:
+            weights_vec = current_values.reindex(tickers).fillna(0.0).to_numpy()
+            total_w = weights_vec.sum()
+            if total_w > 0:
+                weights_vec = weights_vec / total_w
+                n_months = len(monthly_amounts)
+                asset_returns = simulate_portfolio_asset_returns(
+                    aligned, n_months, n_sims or 500, seed or 42, method or "bootstrap",
+                )
+                portfolio_returns = asset_returns @ weights_vec
+                real_vs_sim_fig = build_real_vs_simulated_figure(
+                    portfolio_returns, monthly_amounts.values, monthly_amounts.index, real_series,
+                    annual_fee_pct=0.0, lower_pct=10, upper_pct=90, lang=lang, palette=PALETTE, dark=dark,
+                )
+        elif not real_series.empty:
+            # Historique insuffisant pour aligner tous les tickers détenus (voir
+            # get_aligned_returns_for_tickers) : on affiche quand même la courbe réelle seule,
+            # plutôt que rien, la comparaison simulée n'étant qu'un complément.
+            real_vs_sim_fig.add_trace(go.Scatter(
+                x=real_series.index, y=real_series.values, mode="lines",
+                name=L(lang, "real_equity_trace"), line=dict(color=PALETTE[0], width=2),
+            ))
+            real_vs_sim_fig.update_layout(
+                title=dict(text=L(lang, "real_vs_simulated_chart_title"), font=dict(size=14)),
+                xaxis_title=L(lang, "date_axis"), yaxis_title=L(lang, "value_axis"), margin=dict(t=60),
+            )
+
+    weights_data = target_weights.to_dict("records")
+    tx_data = transactions.to_dict("records")
+    div_data = dividends.to_dict("records")
+    ticker_options = [{"label": t, "value": t} for t in portfolio_engine.known_tickers(
+        transactions, dividends, target_weights,
+    )]
+
+    return (
+        totals_cards, real_pace_display, real_vs_sim_fig,
+        rebalancing_data, rebalancing_columns, *table_styles, rebalancing_warning,
+        weights_data, *table_styles,
+        tx_data, *table_styles,
+        div_data, *table_styles,
+        ticker_options, ticker_options, ticker_options,
+    )
+
+
+@app.callback(
+    Output("apport-constant-slider", "value", allow_duplicate=True),
+    Input("tab3-btn-use-real-pace", "n_clicks"),
+    prevent_initial_call=True,
+)
+def apply_real_pace_to_simulator(n_clicks):
+    # apport-constant-slider est dans CONFIG_FIELDS (layout.py) et upload_config y écrit déjà avec
+    # allow_duplicate=True -- pas de conflit. Survit à un changement de langue : CONFIG_FIELDS
+    # alimente les State de rebuild_on_language_change, dont gv() relit la valeur courante du
+    # curseur, pas un défaut codé en dur (voir layout.build_sidebar).
+    schedule = portfolio_engine.monthly_contribution_schedule(portfolio_db.get_transactions())
+    if schedule.empty:
+        raise dash.exceptions.PreventUpdate
+    return portfolio_engine.clamp_to_slider(float(schedule.mean()), 100, 1000, 10)

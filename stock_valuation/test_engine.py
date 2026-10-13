@@ -174,6 +174,53 @@ def test_compute_comparables_fair_value_none_when_peer_median_missing():
     assert m.compute_comparables_fair_value(price=100.0, own_pe=10.0, peer_median_pe=None) is None
 
 
+# ---------- Comparables EV/EBITDA ----------
+
+def test_compute_comparables_ev_ebitda_fair_value_same_multiple_returns_current_price():
+    # Si le multiple des pairs == le sien, le résultat doit redonner exactement market_cap/shares,
+    # c'est-à-dire le prix courant : enterprise_value = market_cap + debt - cash par construction
+    # (voir market_data.get_dcf_inputs), donc ebitda * meme_multiple revient à enterprise_value.
+    market_cap, total_debt, total_cash, shares = 8_000.0, 500.0, 200.0, 100.0
+    enterprise_value = market_cap + total_debt - total_cash
+    ev_to_ebitda = 12.0
+    result = m.compute_comparables_ev_ebitda_fair_value(
+        enterprise_value, ev_to_ebitda, peer_median_ev_ebitda=ev_to_ebitda,
+        total_debt=total_debt, total_cash=total_cash, shares_outstanding=shares,
+    )
+    assert result == pytest.approx(market_cap / shares)
+
+
+def test_compute_comparables_ev_ebitda_fair_value_higher_peer_multiple_increases_value():
+    base = m.compute_comparables_ev_ebitda_fair_value(
+        enterprise_value=8300.0, ev_to_ebitda=10.0, peer_median_ev_ebitda=10.0,
+        total_debt=500.0, total_cash=200.0, shares_outstanding=100.0,
+    )
+    higher = m.compute_comparables_ev_ebitda_fair_value(
+        enterprise_value=8300.0, ev_to_ebitda=10.0, peer_median_ev_ebitda=15.0,
+        total_debt=500.0, total_cash=200.0, shares_outstanding=100.0,
+    )
+    assert higher > base
+
+
+def test_compute_comparables_ev_ebitda_fair_value_none_when_own_multiple_missing_or_zero():
+    assert m.compute_comparables_ev_ebitda_fair_value(
+        8300.0, None, 10.0, 500.0, 200.0, 100.0) is None
+    assert m.compute_comparables_ev_ebitda_fair_value(
+        8300.0, 0.0, 10.0, 500.0, 200.0, 100.0) is None
+
+
+def test_compute_comparables_ev_ebitda_fair_value_none_when_peer_median_missing():
+    assert m.compute_comparables_ev_ebitda_fair_value(
+        8300.0, 10.0, None, 500.0, 200.0, 100.0) is None
+
+
+def test_compute_comparables_ev_ebitda_fair_value_none_when_shares_missing_or_zero():
+    assert m.compute_comparables_ev_ebitda_fair_value(
+        8300.0, 10.0, 10.0, 500.0, 200.0, None) is None
+    assert m.compute_comparables_ev_ebitda_fair_value(
+        8300.0, 10.0, 10.0, 500.0, 200.0, 0.0) is None
+
+
 # ---------- Backtest du signal P/E historique ----------
 
 def test_compute_pe_percentile_series_nan_before_min_history():
@@ -224,3 +271,49 @@ def test_summarize_pe_signal_backtest_pools_across_stocks():
 def test_summarize_pe_signal_backtest_empty_bucket_has_none_mean():
     summary = m.summarize_pe_signal_backtest([([], [], [])])
     assert summary["low"] == {"n": 0, "mean": None, "median": None}
+
+
+# ---------- Track record (rendement/risque réalisés) ----------
+
+def test_annualized_return_constant_monthly_return_matches_closed_form():
+    # +1%/mois pendant 12 mois : CAGR = 1.01**12 - 1, pas 12*1% (intérêts composés).
+    returns = np.full(12, 0.01)
+    assert m.annualized_return(returns) == pytest.approx(1.01 ** 12 - 1)
+
+
+def test_annualized_return_empty_series_is_none():
+    assert m.annualized_return(np.array([])) is None
+
+
+def test_annualized_volatility_single_point_is_none():
+    assert m.annualized_volatility(np.array([0.05])) is None
+
+
+def test_annualized_volatility_scales_by_sqrt_periods():
+    returns = np.array([0.01, -0.01, 0.02, -0.02, 0.01, -0.01])
+    expected = np.std(returns, ddof=1) * np.sqrt(12)
+    assert m.annualized_volatility(returns, periods_per_year=12) == pytest.approx(expected)
+
+
+def test_max_drawdown_v_shaped_series():
+    # +10% (nouveau plus haut) puis -50% : le drawdown se mesure par rapport à CE plus haut.
+    # Une chute dès le tout premier point ne compterait pas (rien dans la série avant lui ne sert
+    # de référence) -- cohérent avec l'absence de point de départ "base 1.0" explicite.
+    returns = np.array([0.10, -0.5, 0.0])
+    assert m.max_drawdown(returns) == pytest.approx(0.55 / 1.1 - 1)
+
+
+def test_max_drawdown_empty_series_is_none():
+    assert m.max_drawdown(np.array([])) is None
+
+
+def test_sharpe_ratio_none_when_volatility_zero():
+    assert m.sharpe_ratio(0.08, 0.0) is None
+
+
+def test_sharpe_ratio_none_when_return_missing():
+    assert m.sharpe_ratio(None, 0.1) is None
+
+
+def test_sharpe_ratio_basic_computation():
+    assert m.sharpe_ratio(0.10, 0.2, risk_free_rate=0.02) == pytest.approx((0.10 - 0.02) / 0.2)

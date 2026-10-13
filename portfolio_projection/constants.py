@@ -11,6 +11,9 @@ TICKERS = {
     # réplique bien le TOPIX et sert de source "etf").
     "Japon (TOPIX)": {"indice": "^N225", "etf": "PTPXE.PA"},
     "MSCI Emerging Markets": {"indice": "EEM", "etf": "PAEEM.PA"},
+    "CAC 40": {"indice": "^FCHI", "etf": "CAC.PA"},
+    "MSCI World": {"indice": "URTH", "etf": "CW8.PA"},
+    "Nasdaq 100": {"indice": "^NDX", "etf": "PUST.PA"},
 }
 
 ETF_NAMES = {
@@ -18,6 +21,13 @@ ETF_NAMES = {
     "ETZ.PA": "BNP Paribas Easy Stoxx Europe 600 UCITS ETF (TER 0.19%)",
     "PTPXE.PA": "Amundi PEA Japon (TOPIX) UCITS ETF EUR Acc",
     "PAEEM.PA": "Amundi PEA Emergent (MSCI EM) ESG Transition UCITS ETF",
+    # Seul ETF "Dist" (distribuant) de cet univers, les autres sont tous "Acc" (capitalisants) :
+    # pas d'équivalent Acc PEA-éligible trouvé pour le CAC 40 pur (hors variante ESG, qui suit un
+    # indice différent). Reste éligible PEA, les dividendes sont juste versés en cash plutôt que
+    # réinvestis automatiquement.
+    "CAC.PA": "Amundi CAC 40 UCITS ETF Dist (TER 0.25%)",
+    "CW8.PA": "Amundi MSCI World Swap UCITS ETF EUR Acc (TER 0.38%)",
+    "PUST.PA": "Amundi PEA Nasdaq-100 UCITS ETF Acc (TER 0.30%)",
 }
 
 TICKER_KEYS = list(TICKERS.keys())

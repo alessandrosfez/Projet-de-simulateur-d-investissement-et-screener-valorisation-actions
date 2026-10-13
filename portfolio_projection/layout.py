@@ -8,6 +8,8 @@ callbacks Dash. Ce module ne dépend jamais de callbacks.py ni de l'instance
 import dash_bootstrap_components as dbc
 from dash import dash_table, dcc, html
 
+import portfolio_db
+import portfolio_engine
 from constants import (
     BACKTEST_ANCHOR_KEYS, CTO_FLAT_TAX_RATE, N_PORTFOLIOS_MAX, PEA_CONTRIBUTION_CAP, PEA_TAX_RATE,
     TICKER_KEYS, TICKERS, ETF_NAMES,
@@ -229,7 +231,7 @@ def gv(v, cid, default):
 
 def build_sidebar(lang, v=None):
     v = v or {}
-    source = gv(v, "source-radio", "indice")
+    source = gv(v, "source-radio", "etf")
     decum_val = gv(v, "decumulation-checkbox", [])
     method = gv(v, "method-radio", "normal")
     crisis_val = gv(v, "crisis-checkbox", [])
@@ -522,7 +524,7 @@ def build_tab1(lang, v=None):
         ),
         html.Div(id="tab1-warning"),
         dcc.Loading(type="circle", children=[
-            html.H5(L(lang, "trajectories_title"), id="tab1-trajectories-title"),
+            html.H5(L(lang, "trajectories_title"), id="tab1-trajectories-title", className="section-title"),
             html.Div([
                 html.Div(dcc.Graph(id="tab1-graph-const", config=GRAPH_CONFIG),
                          id="tab1-graph-const-container", style={"flex": "1", "minWidth": "0"}),
@@ -532,14 +534,14 @@ def build_tab1(lang, v=None):
             html.Div(id="tab1-metric-cards"),
             html.Div(id="tab1-objective-result", className="mt-2"),
             html.Div(id="tab1-rolling-backtest-result", className="mt-2"),
-            html.H5(L(lang, "metrics_title"), id="tab1-metrics-title", className="mt-3"),
+            html.H5(L(lang, "metrics_title"), id="tab1-metrics-title", className="section-title"),
             dash_table.DataTable(id="tab1-metrics-table", style_table={"overflowX": "auto"}, style_cell={"fontSize": "0.8rem", "textAlign": "left"}, tooltip_delay=0, tooltip_duration=None),
             html.Div([
-                html.H5(L(lang, "compare_pea_cto_title"), className="mt-3"),
+                html.H5(L(lang, "compare_pea_cto_title"), className="section-title"),
                 dcc.Graph(id="tab1-envelope-compare-chart", config=GRAPH_CONFIG),
             ], id="tab1-envelope-compare-container", style={"display": "none"}),
             html.Div([
-                html.H5(L(lang, "sequence_risk_title"), className="mt-3"),
+                html.H5(L(lang, "sequence_risk_title"), className="section-title"),
                 html.P(L(lang, "sequence_risk_intro"), className="text-muted", style={"fontSize": "0.8rem"}),
                 dcc.Graph(id="tab1-sequence-risk-chart", config=GRAPH_CONFIG),
             ], id="tab1-sequence-risk-container", style={"display": "none"}),
@@ -584,10 +586,10 @@ def build_tab2(lang, v=None):
         html.Div(id="tab2-warning"),
 
         dcc.Loading(type="circle", children=[
-            html.H5(L(lang, "corr_title")),
+            html.H5(L(lang, "corr_title"), className="section-title"),
             dcc.Graph(id="tab2-corr-heatmap", config=GRAPH_CONFIG),
 
-            html.H5(L(lang, "suggested_weights_title")),
+            html.H5(L(lang, "suggested_weights_title"), className="section-title"),
             dbc.Button(L(lang, "weights_explain_toggle"), id="btn-toggle-weights-explain",
                        color="link", size="sm", className="p-0 mb-2"),
             dbc.Collapse([
@@ -621,7 +623,7 @@ def build_tab2(lang, v=None):
         dcc.Store(id="rp-weights-store"),
 
         dcc.Loading(type="circle", children=[
-            html.H5(L(lang, "trajectories_title"), id="tab2-trajectories-title"),
+            html.H5(L(lang, "trajectories_title"), id="tab2-trajectories-title", className="section-title"),
             html.Div([
                 html.Div(dcc.Graph(id="tab2-graph-const", config=GRAPH_CONFIG),
                          id="tab2-graph-const-container", style={"flex": "1", "minWidth": "0"}),
@@ -631,14 +633,14 @@ def build_tab2(lang, v=None):
             html.Div(id="tab2-metric-cards"),
             html.Div(id="tab2-objective-result", className="mt-2"),
             html.Div(id="tab2-rolling-backtest-result", className="mt-2"),
-            html.H5(L(lang, "metrics_title_portfolio"), id="tab2-metrics-title", className="mt-3"),
+            html.H5(L(lang, "metrics_title_portfolio"), id="tab2-metrics-title", className="section-title"),
             dash_table.DataTable(id="tab2-metrics-table", style_table={"overflowX": "auto"}, style_cell={"fontSize": "0.8rem", "textAlign": "left"}, tooltip_delay=0, tooltip_duration=None),
             html.Div([
-                html.H5(L(lang, "compare_pea_cto_title"), className="mt-3"),
+                html.H5(L(lang, "compare_pea_cto_title"), className="section-title"),
                 dcc.Graph(id="tab2-envelope-compare-chart", config=GRAPH_CONFIG),
             ], id="tab2-envelope-compare-container", style={"display": "none"}),
             html.Div([
-                html.H5(L(lang, "sequence_risk_title"), className="mt-3"),
+                html.H5(L(lang, "sequence_risk_title"), className="section-title"),
                 html.P(L(lang, "sequence_risk_intro"), className="text-muted", style={"fontSize": "0.8rem"}),
                 dcc.Graph(id="tab2-sequence-risk-chart", config=GRAPH_CONFIG),
             ], id="tab2-sequence-risk-container", style={"display": "none"}),
@@ -665,4 +667,159 @@ def build_tabs(lang, v=None, active_tab="tab-par-indice"):
     return dbc.Tabs([
         dbc.Tab(build_tab1(lang, v), label=L(lang, "tab_par_indice"), tab_id="tab-par-indice"),
         dbc.Tab(build_tab2(lang, v), label=L(lang, "tab_portefeuille"), tab_id="tab-portefeuille"),
+        dbc.Tab(build_tab3(lang), label=L(lang, "tab_portefeuille_reel"), tab_id="tab-portefeuille-reel"),
     ], id="main-tabs", active_tab=active_tab or "tab-par-indice")
+
+
+# ---------- Onglet 3 : portefeuille réel ----------
+# État entièrement en base (portfolio_db.py), pas dans TAB_STATE_FIELDS/CONFIG_FIELDS : un
+# changement de langue ou un import/export JSON de config ne restaure donc rien ici (il n'y a
+# rien à restaurer), le re-rendu se fait en re-interrogeant la base (voir callbacks.py).
+def build_tab3(lang):
+    # Les 3 tableaux éditables (tx/dividendes/pondérations) sont pré-remplis avec le contenu RÉEL
+    # de la base dès la construction du layout, plutôt que de laisser data vide par défaut : ce
+    # composant est reconstruit à chaque changement de langue (voir rebuild_on_language_change dans
+    # callbacks.py, qui remplace tabs-container en entier), et les callbacks de suppression
+    # (delete_removed_*) interprètent un data vide comme "toutes les lignes ont été supprimées" --
+    # sans ce pré-remplissage, un simple changement de langue viderait la base.
+    transactions_df = portfolio_db.get_transactions()
+    dividends_df = portfolio_db.get_dividends()
+    weights_df = portfolio_db.get_target_weights()
+    tx_data = transactions_df.to_dict("records")
+    div_data = dividends_df.to_dict("records")
+    weights_data = weights_df.to_dict("records")
+    ticker_options = [{"label": t, "value": t} for t in portfolio_engine.known_tickers(
+        transactions_df, dividends_df, weights_df,
+    )]
+
+    def ticker_dropdown(dropdown_id, placeholder):
+        # dcc.Dropdown plutôt qu'un simple texte libre : reproposer un ticker déjà utilisé en un
+        # clic. Reste "creatable" côté client (voir le clientside_callback dans app.py qui ajoute
+        # le texte tapé aux options à la volée) : un ticker encore jamais vu reste saisissable,
+        # cette app accepte n'importe quel ticker, pas seulement ceux déjà connus.
+        return dcc.Dropdown(
+            id=dropdown_id, options=ticker_options, placeholder=placeholder,
+            clearable=True, searchable=True, style={"width": "160px", "fontSize": "0.85rem"},
+        )
+
+    # style={"width": "...px"} explicite sur chaque input : .form-control (width:100%) dans une
+    # Col width="auto" sans largeur propre se réduit sinon à quasi rien (l'input n'a aucun contenu
+    # intrinsèque pour calculer la largeur de sa colonne "auto" -- bug constaté en pratique, le
+    # placeholder devenait illisible, tronqué à son seul premier caractère).
+    tx_form = dbc.Row([
+        dbc.Col(ticker_dropdown("tab3-tx-ticker-input", L(lang, "tx_ticker_label")), width="auto"),
+        dbc.Col(dcc.DatePickerSingle(id="tab3-tx-date-input", display_format="YYYY-MM-DD",
+                                      placeholder=L(lang, "tx_date_label")), width="auto"),
+        dbc.Col(dcc.Input(id="tab3-tx-amount-input", type="number", placeholder=L(lang, "tx_amount_label"),
+                           className="form-control form-control-sm", style={"width": "110px"}), width="auto"),
+        dbc.Col(dcc.Input(id="tab3-tx-price-input", type="number", placeholder=L(lang, "tx_price_label"),
+                           className="form-control form-control-sm", style={"width": "110px"}), width="auto"),
+        dbc.Col(dcc.Input(id="tab3-tx-fee-input", type="number", placeholder=L(lang, "tx_fee_label"),
+                           className="form-control form-control-sm", style={"width": "90px"}), width="auto"),
+        dbc.Col(dbc.Button(L(lang, "btn_add_transaction"), id="tab3-btn-add-tx", color="primary", size="sm"),
+                width="auto"),
+    ], className="mb-2 gx-2 align-items-center")
+
+    div_form = dbc.Row([
+        dbc.Col(ticker_dropdown("tab3-div-ticker-input", L(lang, "div_ticker_label")), width="auto"),
+        dbc.Col(dcc.DatePickerSingle(id="tab3-div-date-input", display_format="YYYY-MM-DD",
+                                      placeholder=L(lang, "div_date_label")), width="auto"),
+        dbc.Col(dcc.Input(id="tab3-div-amount-input", type="number", placeholder=L(lang, "div_amount_label"),
+                           className="form-control form-control-sm", style={"width": "110px"}), width="auto"),
+        dbc.Col(dbc.Button(L(lang, "btn_add_dividend"), id="tab3-btn-add-div", color="primary", size="sm"),
+                width="auto"),
+    ], className="mb-2 gx-2 align-items-center")
+
+    weight_form = dbc.Row([
+        dbc.Col(ticker_dropdown("tab3-weight-ticker-input", L(lang, "weight_ticker_label")), width="auto"),
+        dbc.Col(dcc.Input(id="tab3-weight-pct-input", type="number", placeholder=L(lang, "weight_pct_label"),
+                           className="form-control form-control-sm", style={"width": "150px"}), width="auto"),
+        dbc.Col(dbc.Button(L(lang, "btn_add_weight"), id="tab3-btn-add-weight", color="secondary", size="sm"),
+                width="auto"),
+    ], className="mb-2 gx-2 align-items-center")
+
+    # Format maison uniquement (ticker,date,amount_eur,price,fee_eur / ticker,date,amount_eur) :
+    # un format d'export Trade Republic a été envisagé mais aucune spec fiable de ses en-têtes n'a
+    # pu être trouvée (fonctionnalité récente, avril 2026) -- plutôt que deviner et risquer un
+    # mauvais import de vraies données financières, il est reporté à quand un vrai export pourra
+    # être montré. detect_csv_kind (portfolio_engine.py) distingue les deux schémas maison par
+    # leurs colonnes, un seul bouton d'import suffit donc pour les deux.
+    csv_import_block = html.Div([
+        dcc.Upload(
+            id="tab3-upload-csv",
+            children=html.Div(L(lang, "csv_upload_placeholder")),
+            style={
+                "width": "100%", "padding": "10px", "borderWidth": "1px", "borderStyle": "dashed",
+                "borderRadius": "5px", "textAlign": "center", "fontSize": "0.8rem",
+            },
+        ),
+        html.Div(id="tab3-csv-import-result", className="mt-1", style={"fontSize": "0.8rem"}),
+        dbc.Row([
+            dbc.Col(dbc.Button(L(lang, "btn_download_tx_template"), id="tab3-btn-download-tx-template",
+                                color="link", size="sm", className="p-0"), width="auto"),
+            dbc.Col(dbc.Button(L(lang, "btn_download_div_template"), id="tab3-btn-download-div-template",
+                                color="link", size="sm", className="p-0"), width="auto"),
+        ], className="mt-1 gx-3"),
+        dcc.Download(id="tab3-download-tx-template"),
+        dcc.Download(id="tab3-download-div-template"),
+    ], className="mb-3")
+
+    return html.Div([
+        html.Div(id="tab3-totals-cards"),
+        html.Div([
+            html.Span(id="tab3-real-pace-display", className="text-muted d-block mb-1", style={"fontSize": "0.85rem"}),
+            dbc.Button(L(lang, "btn_use_real_pace"), id="tab3-btn-use-real-pace", color="link", size="sm",
+                       className="p-0"),
+        ], className="mb-3"),
+
+        html.H5(L(lang, "section_real_vs_simulated"), className="section-title", id="anchor-tab3-chart"),
+        dcc.Loading(type="circle", children=[dcc.Graph(id="tab3-real-vs-sim-graph", config=GRAPH_CONFIG)]),
+
+        html.H5(L(lang, "section_rebalancing"), className="section-title", id="anchor-tab3-rebalancing"),
+        html.Small(L(lang, "rebalancing_hint"), className="text-muted d-block mb-2"),
+        html.Div(id="tab3-rebalancing-warning"),
+        dash_table.DataTable(id="tab3-rebalancing-table", style_cell=TABLE_BASE_CELL_STYLE),
+
+        html.H5(L(lang, "section_target_weights"), className="section-title", id="anchor-tab3-weights"),
+        weight_form,
+        html.Div(id="tab3-weight-form-error", className="text-danger mb-2", style={"fontSize": "0.8rem"}),
+        dash_table.DataTable(
+            id="tab3-weights-table", row_deletable=True, style_cell=TABLE_BASE_CELL_STYLE,
+            data=weights_data,
+            columns=[
+                {"name": L(lang, "weight_ticker_label"), "id": "ticker"},
+                {"name": L(lang, "weight_pct_label"), "id": "weight_pct"},
+            ],
+        ),
+
+        html.H5(L(lang, "section_log_transaction"), className="section-title", id="anchor-tab3-tx"),
+        csv_import_block,
+        tx_form,
+        html.Div(id="tab3-tx-form-error", className="text-danger mb-2", style={"fontSize": "0.8rem"}),
+        dash_table.DataTable(
+            id="tab3-tx-table", row_deletable=True, style_cell=TABLE_BASE_CELL_STYLE,
+            data=tx_data,
+            columns=[
+                {"name": L(lang, "tx_col_ticker"), "id": "ticker"},
+                {"name": L(lang, "tx_col_date"), "id": "date"},
+                {"name": L(lang, "tx_col_amount"), "id": "amount_eur"},
+                {"name": L(lang, "tx_col_price"), "id": "price"},
+                {"name": L(lang, "tx_col_fee"), "id": "fee_eur"},
+            ],
+        ),
+
+        html.H5(L(lang, "section_log_dividend"), className="section-title", id="anchor-tab3-div"),
+        div_form,
+        html.Div(id="tab3-div-form-error", className="text-danger mb-2", style={"fontSize": "0.8rem"}),
+        dash_table.DataTable(
+            id="tab3-div-table", row_deletable=True, style_cell=TABLE_BASE_CELL_STYLE,
+            data=div_data,
+            columns=[
+                {"name": L(lang, "div_col_ticker"), "id": "ticker"},
+                {"name": L(lang, "div_col_date"), "id": "date"},
+                {"name": L(lang, "div_col_amount"), "id": "amount_eur"},
+            ],
+        ),
+
+        dcc.Store(id="tab3-refresh-trigger", data=0),
+    ], className="p-3")

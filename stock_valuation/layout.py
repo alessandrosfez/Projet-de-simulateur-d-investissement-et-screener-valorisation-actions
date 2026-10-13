@@ -128,7 +128,7 @@ def peg_conditional_style(dark: bool):
 # moins à un changement de langue en cours de session, comme le reste de ces champs.
 TAB_STATE_FIELDS = [
     ("universe-checklist", "value"), ("sector-filter", "value"),
-    ("filter-pe-max", "value"), ("filter-peg-max", "value"), ("filter-div-min", "value"),
+    ("filter-pe-max", "value"), ("filter-peg-max", "value"), ("filter-div-min", "value"), ("filter-score-min", "value"),
     ("watchlist-dropdown", "value"), ("watchlist-only-switch", "value"),
     ("dcf-growth-slider", "value"), ("dcf-discount-slider", "value"),
     ("dcf-terminal-growth-slider", "value"), ("dcf-horizon-slider", "value"),
@@ -206,6 +206,7 @@ def build_tab3(lang, v=None):
                 html.A(L(lang, "detail_title"), href="#anchor-table", className="quick-nav-link"),
                 html.A(L(lang, "history_title"), href="#anchor-history", className="quick-nav-link"),
                 html.A(L(lang, "quality_title"), href="#anchor-quality", className="quick-nav-link"),
+                html.A(L(lang, "track_record_title"), href="#anchor-track-record", className="quick-nav-link"),
                 html.A(L(lang, "dcf_title"), href="#anchor-dcf", className="quick-nav-link"),
             ], className="quick-nav"),
 
@@ -238,17 +239,27 @@ def build_tab3(lang, v=None):
                 dbc.Col([
                     dbc.Label(L(lang, "filter_pe_max_label"), className="mb-0", style={"fontSize": "0.8rem"}),
                     dcc.Input(id="filter-pe-max", type="number", min=0, step=1, value=gv(v, "filter-pe-max", None),
-                               placeholder="—", className="form-control form-control-sm"),
+                               placeholder="—", className="form-control form-control-sm", style={"width": "80px"},
+                               persistence=True, persistence_type="local"),
                 ], width="auto"),
                 dbc.Col([
                     dbc.Label(L(lang, "filter_peg_max_label"), className="mb-0", style={"fontSize": "0.8rem"}),
                     dcc.Input(id="filter-peg-max", type="number", min=0, step=0.1, value=gv(v, "filter-peg-max", None),
-                               placeholder="—", className="form-control form-control-sm"),
+                               placeholder="—", className="form-control form-control-sm", style={"width": "80px"},
+                               persistence=True, persistence_type="local"),
                 ], width="auto"),
                 dbc.Col([
                     dbc.Label(L(lang, "filter_div_min_label"), className="mb-0", style={"fontSize": "0.8rem"}),
                     dcc.Input(id="filter-div-min", type="number", min=0, step=0.5, value=gv(v, "filter-div-min", None),
-                               placeholder="—", className="form-control form-control-sm"),
+                               placeholder="—", className="form-control form-control-sm", style={"width": "90px"},
+                               persistence=True, persistence_type="local"),
+                ], width="auto"),
+                dbc.Col([
+                    dbc.Label(L(lang, "filter_score_min_label"), className="mb-0", style={"fontSize": "0.8rem"}),
+                    dcc.Input(id="filter-score-min", type="number", min=0, max=100, step=1,
+                               value=gv(v, "filter-score-min", None),
+                               placeholder="—", className="form-control form-control-sm", style={"width": "80px"},
+                               persistence=True, persistence_type="local"),
                 ], width="auto"),
             ], className="mb-3 gx-4"),
 
@@ -308,6 +319,9 @@ def build_tab3(lang, v=None):
 
                 html.H5(L(lang, "quality_title"), className="section-title", id="anchor-quality"),
                 html.Div(id="quality-metrics-card"),
+
+                html.H5(L(lang, "track_record_title"), className="section-title", id="anchor-track-record"),
+                html.Div(id="track-record-card"),
 
                 html.Hr(),
                 html.H5(L(lang, "dcf_title"), className="section-title", id="anchor-dcf"),

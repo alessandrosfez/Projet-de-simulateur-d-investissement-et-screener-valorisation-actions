@@ -76,6 +76,39 @@ def make_band_figure(series, years_axis, title, lang="fr", palette=None, investe
     return fig
 
 
+def make_actual_vs_simulated_figure(real_dates, real_values, sim_dates, sim_median, sim_p_low, sim_p_high,
+                                     invested_capital, lang="fr", palette=None, dark: bool = False):
+    """Portefeuille réel (courbe pleine, valeur de marché reconstruite depuis les transactions) vs
+    ce que le même échéancier de versements aurait donné sous le moteur Monte Carlo existant
+    (bande de percentiles) -- les deux sur un axe de vraies dates calendaires. Pas une variante de
+    make_band_figure : ses modes "historique"/"prevision" sont volontairement mutuellement
+    exclusifs (sémantiques d'axe différentes), alors qu'ici la courbe réelle et la bande simulée
+    doivent apparaître ENSEMBLE sur le même axe calendaire -- un besoin différent, pas un troisième
+    mode à ajouter à une fonction déjà chargée."""
+    palette = palette or PALETTE
+    real_color, sim_color = palette[0], palette[1 % len(palette)]
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=sim_dates, y=sim_p_high, mode="lines", line=dict(width=0),
+                              showlegend=False, hoverinfo="skip"))
+    fig.add_trace(go.Scatter(x=sim_dates, y=sim_p_low, mode="lines", line=dict(width=0),
+                              fill="tonexty", fillcolor=hex_to_rgba(sim_color, 0.15),
+                              showlegend=False, hoverinfo="skip"))
+    fig.add_trace(go.Scatter(x=sim_dates, y=sim_median, mode="lines", name=L(lang, "simulated_median_trace"),
+                              line=dict(color=sim_color, dash="dash")))
+    fig.add_trace(go.Scatter(x=real_dates, y=real_values, mode="lines", name=L(lang, "real_equity_trace"),
+                              line=dict(color=real_color, width=2)))
+    fig.add_trace(go.Scatter(x=sim_dates, y=invested_capital, mode="lines",
+                              name=L(lang, "invested_capital_trace"),
+                              line=dict(color="gray", dash="dot")))
+    fig.update_layout(
+        template="plotly_dark" if dark else "plotly",
+        title=dict(text=L(lang, "real_vs_simulated_chart_title"), font=dict(size=14)),
+        xaxis_title=L(lang, "date_axis"), yaxis_title=L(lang, "value_axis"),
+        hovermode="x unified", legend=dict(font=dict(size=9)), margin=dict(t=60),
+    )
+    return fig
+
+
 def make_sequence_risk_figure(shock_years, final_values, invested_capital, lang="fr", palette=None,
                                dark: bool = False):
     """Nuage de points : valeur finale du portefeuille (une simulation Monte Carlo = un point) vs

@@ -15,7 +15,7 @@ Prérequis : pip install -r requirements.txt
 import os
 
 import dash_bootstrap_components as dbc
-from dash import Input, Output, dcc, html
+from dash import Input, Output, State, dcc, html
 
 import callbacks  # noqa: F401 (l'import enregistre les callbacks sur `app`)
 import layout
@@ -61,6 +61,35 @@ app.clientside_callback(
     prevent_initial_call=True,
 )
 
+# Rend les 3 menus déroulants ticker de l'onglet "portefeuille réel" "creatable" : un dcc.Dropdown
+# n'accepte normalement que les valeurs présentes dans `options`, hors cette app accepte n'importe
+# quel ticker, pas seulement ceux déjà vus (voir layout.build_tab3) -- ce callback ajoute le texte
+# tapé à la volée aux options dès qu'il ne s'y trouve pas déjà, pour qu'il devienne sélectionnable.
+# Entièrement côté client (pas d'aller-retour serveur à chaque frappe) ; coexiste avec
+# callbacks.refresh_tab3, qui réécrit les mêmes `options` depuis la base à chaque rafraîchissement
+# (allow_duplicate=True des deux côtés, aucune dépendance circulaire : les deux ont des Inputs
+# différents).
+_CREATABLE_TICKER_DROPDOWN_JS = """
+function(search_value, current_options) {
+    if (!search_value) { return window.dash_clientside.no_update; }
+    const ticker = search_value.trim().toUpperCase();
+    if (!ticker) { return window.dash_clientside.no_update; }
+    const options = current_options || [];
+    if (options.some(function(opt) { return opt.value === ticker; })) {
+        return window.dash_clientside.no_update;
+    }
+    return options.concat([{label: ticker, value: ticker}]);
+}
+"""
+for _dropdown_id in ("tab3-tx-ticker-input", "tab3-div-ticker-input", "tab3-weight-ticker-input"):
+    app.clientside_callback(
+        _CREATABLE_TICKER_DROPDOWN_JS,
+        Output(_dropdown_id, "options", allow_duplicate=True),
+        Input(_dropdown_id, "search_value"),
+        State(_dropdown_id, "options"),
+        prevent_initial_call=True,
+    )
+
 
 # Construit après l'import de callbacks : build_sidebar()/build_tabs() appellent des helpers
 # (update_tax_label(), toggle_etf_info()...) qui doivent déjà être enregistrés comme callbacks.
@@ -88,16 +117,16 @@ app.layout = dbc.Container([
                 value=True, persistence=True, persistence_type="local",
             ),
         ], width=3),
-    ], className="mt-2 align-items-start"),
+    ], className="mt-2 align-items-start app-header"),
     dbc.Row([
-        dbc.Col(html.Div(layout.build_sidebar("fr", {}), id="sidebar-container"), width=3, id="sidebar-col", className="border-end"),
+        dbc.Col(html.Div(layout.build_sidebar("fr", {}), id="sidebar-container"), width=3, id="sidebar-col", className="sidebar-panel"),
         dbc.Col(html.Div(layout.build_tabs("fr", {}), id="tabs-container"), width=9, id="main-col"),
     ]),
     html.Hr(className="mt-4"),
     html.Div(layout.build_footer("fr"), id="footer-container", className="text-center mb-2"),
     dcc.Interval(id="resize-kick", interval=300, n_intervals=0, max_intervals=8),
     html.Div(id="resize-kick-dummy", style={"display": "none"}),
-], fluid=True)
+], fluid=True, className="px-3 px-lg-5")
 
 
 if __name__ == "__main__":

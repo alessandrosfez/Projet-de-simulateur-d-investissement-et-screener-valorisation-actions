@@ -106,6 +106,24 @@ def get_stock_pe_history(ticker: str) -> pd.Series:
 
 
 @cached_ttl(3600)
+def get_stock_price_history(ticker: str, period: str = "5y", interval: str = "1mo") -> pd.Series:
+    """Série de prix de clôture, corrigée du même décalage d'échelle prix/BPA que
+    get_stock_pe_history (voir _price_scale_factor), mais sans exiger de BPA positif :
+    sert au calcul de rendement/volatilité/drawdown réalisés (track record), utiles
+    même pour une valeur sans bénéfice net positif, contrairement au P/E historique."""
+    info = _get_ticker_info(ticker)
+    trailing_pe = info.get("trailingPE")
+    trailing_eps = info.get("trailingEps")
+    current_price = info.get("currentPrice") or info.get("regularMarketPrice")
+    price_scale = _price_scale_factor(trailing_pe, trailing_eps, current_price)
+    try:
+        hist = yf.Ticker(ticker).history(period=period, interval=interval)["Close"].dropna()
+    except Exception:
+        return pd.Series(dtype=float)
+    return hist / price_scale
+
+
+@cached_ttl(3600)
 def get_stock_valuation(ticker: str) -> dict:
     """Prix et ratios de valorisation courants d'une action (P/E, PEG, P/B, rendement du
     dividende), plus sa position par rapport à son propre P/E historique sur 5 ans
@@ -294,12 +312,25 @@ def get_dcf_inputs(ticker: str) -> dict:
     else:
         raw_fcf = info.get("freeCashflow")
         fcf = raw_fcf * price_scale if raw_fcf else raw_fcf
+
+    total_debt = (info.get("totalDebt") or 0) * price_scale
+    total_cash = (info.get("totalCash") or 0) * price_scale
+    market_cap = info.get("marketCap")
+    # Recalculée à partir de market_cap (déjà dans la bonne unité : Yahoo le calcule depuis le
+    # cours coté, jamais affecté par le décalage pence/livre) + dette nette déjà remise à
+    # l'échelle ci-dessus, plutôt que lue directement sur Ticker.info["enterpriseValue"] : ce
+    # dernier pourrait hériter du même décalage d'unité que la dette/trésorerie brutes sans qu'on
+    # puisse le corriger après coup (contrairement au ratio enterpriseToEbitda, sans dimension et
+    # donc insensible à ce décalage, lui gardé tel quel).
+    enterprise_value = (market_cap + total_debt - total_cash) if market_cap else None
     return {
         "fcf": fcf,
         "fcf_history": fcf_history_records,
-        "total_debt": (info.get("totalDebt") or 0) * price_scale,
-        "total_cash": (info.get("totalCash") or 0) * price_scale,
+        "total_debt": total_debt,
+        "total_cash": total_cash,
         "shares_outstanding": info.get("sharesOutstanding"),
         "price": price,
         "currency": info.get("currency") or "N/A",
+        "enterprise_value": enterprise_value,
+        "ev_to_ebitda": info.get("enterpriseToEbitda"),
     }

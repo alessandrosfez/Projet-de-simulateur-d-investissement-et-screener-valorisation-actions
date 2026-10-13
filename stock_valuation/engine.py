@@ -139,6 +139,30 @@ def compute_comparables_fair_value(price: float, own_pe: float, peer_median_pe: 
     return price * (peer_median_pe / own_pe)
 
 
+def compute_comparables_ev_ebitda_fair_value(enterprise_value: float, ev_to_ebitda: float,
+                                              peer_median_ev_ebitda: float, total_debt: float,
+                                              total_cash: float, shares_outstanding: float):
+    """Valeur implicite par action si l'entreprise se traitait au multiple EV/EBITDA médian de ses
+    pairs plutôt qu'au sien. L'EBITDA propre est déduit de enterprise_value / ev_to_ebitda plutôt
+    que recalculé depuis le compte de résultat (aucun appel réseau de plus : les deux viennent
+    déjà de market_data.get_dcf_inputs, où enterprise_value est reconstruit dans une unité
+    cohérente avec total_debt/total_cash — voir le commentaire associé). La dette nette
+    (total_debt - total_cash) est retranchée de l'EV implicite pour revenir à une valeur des
+    capitaux propres, même logique que le DCF. Renvoie None si une donnée manque ou est
+    invalide. Invariant utile pour les tests : si peer_median_ev_ebitda == ev_to_ebitda (même
+    multiple que soi-même), le résultat doit redonner exactement le prix courant."""
+    if not enterprise_value or not ev_to_ebitda or ev_to_ebitda <= 0:
+        return None
+    if not peer_median_ev_ebitda or peer_median_ev_ebitda <= 0:
+        return None
+    if not shares_outstanding or shares_outstanding <= 0:
+        return None
+    ebitda = enterprise_value / ev_to_ebitda
+    implied_enterprise_value = ebitda * peer_median_ev_ebitda
+    implied_equity_value = implied_enterprise_value - total_debt + total_cash
+    return implied_equity_value / shares_outstanding
+
+
 # ============================================================
 # Backtest du signal "P/E décoté/tendu vs son propre historique 5 ans" : ce signal est déjà
 # affiché dans l'UI (cartes "5 les plus décotées/tendues vs leur propre historique 5 ans") comme
@@ -216,3 +240,51 @@ def summarize_pe_signal_backtest(per_stock_returns) -> dict:
         return {"n": len(arr), "mean": float(arr.mean()), "median": float(np.median(arr))}
 
     return {"low": _stats(low_all), "mid": _stats(mid_all), "high": _stats(high_all)}
+
+
+# ============================================================
+# Track record (rendement/risque réalisés) : métriques purement rétrospectives, calculées sur les
+# rendements mensuels passés d'un titre (voir market_data.get_stock_price_history) — un
+# complément aux valorisations prospectives (DCF/comparables) ci-dessus, pas une prédiction.
+# ============================================================
+
+def annualized_return(returns: np.ndarray, periods_per_year: int = 12) -> float | None:
+    """Rendement annualisé composé (CAGR) à partir d'une série de rendements périodiques
+    (ex: mensuels). None si la série est vide : pas d'historique, pas de CAGR."""
+    if len(returns) == 0:
+        return None
+    growth = float(np.prod(1 + returns))
+    n_periods = len(returns)
+    return growth ** (periods_per_year / n_periods) - 1
+
+
+def annualized_volatility(returns: np.ndarray, periods_per_year: int = 12) -> float | None:
+    """Écart-type des rendements périodiques, annualisé par la racine du nombre de périodes par
+    an (les variances de rendements indépendants s'additionnent dans le temps). None si moins de
+    2 points : un écart-type sur un seul point n'a pas de sens."""
+    if len(returns) < 2:
+        return None
+    return float(np.std(returns, ddof=1) * np.sqrt(periods_per_year))
+
+
+def max_drawdown(returns: np.ndarray) -> float | None:
+    """Pire baisse par rapport à un plus haut précédent, sur la période couverte par returns.
+    Reconstruit une valeur cumulée (base 1.0) à partir des rendements plutôt que d'exiger une
+    série de prix séparée : le point de départ (1.0) est arbitraire mais le drawdown relatif ne
+    dépend pas de lui. Une chute dès le tout premier point ne compte pas (aucun plus haut
+    antérieur dans la série pour la mesurer) : limite acceptée, le premier point sert toujours de
+    référence initiale. None si returns est vide."""
+    if len(returns) == 0:
+        return None
+    cumulative_value = np.cumprod(1 + returns)
+    running_max = np.maximum.accumulate(cumulative_value)
+    drawdown = cumulative_value / running_max - 1
+    return float(drawdown.min())
+
+
+def sharpe_ratio(annual_return: float | None, annual_volatility: float | None, risk_free_rate: float = 0.0) -> float | None:
+    """Rendement excédentaire par unité de risque. None si le rendement ou la volatilité est
+    manquant, ou si la volatilité est nulle (division par zéro sans signification)."""
+    if annual_return is None or not annual_volatility:
+        return None
+    return (annual_return - risk_free_rate) / annual_volatility

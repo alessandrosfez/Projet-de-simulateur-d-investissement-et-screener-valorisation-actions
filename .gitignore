@@ -2,6 +2,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .pea_forecast_cache.pkl
+.pea_forecast_portfolio.db
 venv/
 .venv/
 *.egg-info/

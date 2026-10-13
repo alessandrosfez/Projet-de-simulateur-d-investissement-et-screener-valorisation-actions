@@ -15,7 +15,7 @@ from engine import (
     overflow_schedule, progressive_schedule, returns_to_dca, rolling_backtest_final_values, summarize,
     summarize_historique, to_display_values, withdrawal_schedule,
 )
-from charts import make_band_figure
+from charts import make_actual_vs_simulated_figure, make_band_figure
 from i18n import L, PALETTE
 
 
@@ -394,3 +394,84 @@ def render_rolling_backtest_result(backtest_items, schedule, years_axis, annual_
         return ""
     body = html.Ul([html.Li(line) for line in lines]) if len(lines) > 1 else lines[0]
     return dbc.Alert(body, color="info")
+
+
+# ============================================================
+# PORTEFEUILLE RÉEL (onglet 3) : glue entre portfolio_engine (calcul pur) et l'affichage. Aucun
+# accès DB/yfinance ici (voir callbacks.py, qui lit portfolio_db/market_data puis appelle ces
+# fonctions) -- même convention que le reste de ce module.
+# ============================================================
+
+def build_portfolio_totals_cards(totals: dict, lang: str):
+    """totals : voir portfolio_engine.compute_totals(). Même style de carte que build_metric_cards
+    (H6 libellé, H5 valeur), P&L coloré vert/rouge selon le signe."""
+    def money_card(label_key, value):
+        text = f"{value:,.0f} €".replace(",", " ")
+        return dbc.Col(dbc.Card(dbc.CardBody([
+            html.H6(L(lang, label_key), className="card-subtitle text-muted mb-1"),
+            html.H5(text, className="mb-1"),
+        ]), className="h-100"), width=3, className="mb-2")
+
+    pnl_color = "success" if totals["pnl_eur"] >= 0 else "danger"
+    pnl_pct_text = f" ({totals['pnl_pct']:+.1f} %)" if totals["pnl_pct"] is not None else ""
+    pnl_card = dbc.Col(dbc.Card(dbc.CardBody([
+        html.H6(L(lang, "metric_pnl"), className="card-subtitle text-muted mb-1"),
+        html.H5(f"{totals['pnl_eur']:+,.0f} €".replace(",", " ") + pnl_pct_text, className=f"text-{pnl_color} mb-1"),
+    ]), className="h-100"), width=3, className="mb-2")
+
+    cards = [
+        money_card("metric_total_invested", totals["total_invested"]),
+        money_card("metric_current_value", totals["current_value"]),
+        pnl_card,
+        money_card("metric_total_fees", totals["total_fees"]),
+        money_card("metric_total_dividends", totals["total_dividends"]),
+    ]
+    return dbc.Row(cards)
+
+
+def build_rebalancing_table_data(rebalancing_df: pd.DataFrame, lang: str):
+    """rebalancing_df : voir portfolio_engine.compute_rebalancing_plan(). Même forme de retour que
+    build_metrics_outputs (table_data, table_columns) : delta_eur toujours affiché avec un signe
+    explicite et jamais présenté comme une instruction de vente (voir i18n rebalancing_hint,
+    affiché à côté du tableau par layout.py)."""
+    if rebalancing_df.empty:
+        return [], []
+    col_ticker = L(lang, "rebalancing_col_ticker")
+    col_target = L(lang, "rebalancing_col_target_pct")
+    col_current = L(lang, "rebalancing_col_current_pct")
+    col_value = L(lang, "rebalancing_col_current_value")
+    col_delta = L(lang, "rebalancing_col_delta")
+    rows = [
+        {
+            col_ticker: r["ticker"],
+            col_target: f"{r['target_pct']:.1f} %",
+            col_current: f"{r['current_pct']:.1f} %",
+            col_value: f"{r['current_value_eur']:,.0f} €".replace(",", " "),
+            col_delta: f"{r['delta_eur']:+,.0f} €".replace(",", " "),
+        }
+        for _, r in rebalancing_df.iterrows()
+    ]
+    columns = [{"name": c, "id": c} for c in [col_ticker, col_target, col_current, col_value, col_delta]]
+    return rows, columns
+
+
+def build_real_vs_simulated_figure(portfolio_returns, monthly_amounts, monthly_dates, real_series,
+                                    annual_fee_pct, lower_pct, upper_pct, lang="fr", palette=None, dark=False):
+    """portfolio_returns : (n_sims, n_months), rendements simulés du portefeuille réel à sa
+    composition/pondération ACTUELLE (voir callbacks.py : simulate_portfolio_asset_returns @
+    weights_vec, même combinaison que l'onglet 2). Mêmes étapes que chaque item de compute_results
+    (frais -> DCA -> percentiles), mais pour un seul "item" et l'échéancier RÉEL de versements
+    (monthly_amounts, voir portfolio_engine.monthly_contribution_schedule) plutôt qu'un échéancier
+    constant/progressif simulé. real_series : valeur de marché réelle reconstruite (voir
+    portfolio_engine.reconstruct_equity_curve), tracée sur le même axe calendaire que
+    monthly_dates (qui démarre à la date de la 1ère transaction)."""
+    net_returns = apply_fee(portfolio_returns, annual_fee_pct)
+    portfolio_value, invested_capital = returns_to_dca(net_returns, monthly_amounts)
+    median = np.percentile(portfolio_value, 50, axis=0)
+    p_low = np.percentile(portfolio_value, lower_pct, axis=0)
+    p_high = np.percentile(portfolio_value, upper_pct, axis=0)
+    return make_actual_vs_simulated_figure(
+        real_dates=real_series.index, real_values=real_series.values,
+        sim_dates=monthly_dates, sim_median=median, sim_p_low=p_low, sim_p_high=p_high,
+        invested_capital=invested_capital, lang=lang, palette=palette, dark=dark,
+    )
