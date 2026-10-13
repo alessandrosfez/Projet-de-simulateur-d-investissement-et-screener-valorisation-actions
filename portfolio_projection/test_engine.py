@@ -230,6 +230,54 @@ def test_suggest_optimal_weights_override_dominates_when_shrinkage_full():
     assert sharpe_w["C"] == max(sharpe_w.values())
 
 
+def test_suggest_optimal_weights_max_weight_caps_concentration():
+    # Sans contrainte, l'actif le plus rentable (C, override 30%) rafle tout le Sharpe-max ; avec
+    # un plafond à 40%, aucune ligne ne doit dépasser cette borne.
+    rng = np.random.default_rng(6)
+    df = pd.DataFrame(rng.normal(0.005, 0.03, size=(100, 3)), columns=["A", "B", "C"])
+    uncapped, _, _ = m.suggest_optimal_weights(df, step_pct=10, shrinkage=1.0, mu_override_pct=[None, None, 30.0])
+    assert uncapped["C"] > 40
+    capped, _, _ = m.suggest_optimal_weights(
+        df, step_pct=10, shrinkage=1.0, mu_override_pct=[None, None, 30.0], max_weight_pct=40.0,
+    )
+    assert all(w <= 40.0 for w in capped.values())
+    assert sum(capped.values()) == pytest.approx(100.0)
+
+
+def test_suggest_optimal_weights_min_weight_allows_full_exclusion():
+    # min_weight_pct=20 avec 3 actifs (20*3=60, faisable) ne doit PAS empêcher un actif d'être
+    # totalement exclu (poids 0) -- seuls les actifs INCLUS doivent respecter le plancher.
+    rng = np.random.default_rng(6)
+    df = pd.DataFrame(rng.normal(0.005, 0.03, size=(100, 3)), columns=["A", "B", "C"])
+    sharpe_w, _, _ = m.suggest_optimal_weights(df, step_pct=10, min_weight_pct=20.0)
+    assert sharpe_w is not None
+    for w in sharpe_w.values():
+        assert w == 0 or w >= 20.0
+
+
+def test_suggest_optimal_weights_infeasible_constraints_return_none():
+    # max_weight_pct=10 avec 3 actifs : impossible d'atteindre 100% sans dépasser 10% quelque part.
+    rng = np.random.default_rng(6)
+    df = pd.DataFrame(rng.normal(0.005, 0.03, size=(100, 3)), columns=["A", "B", "C"])
+    sharpe_w, vol_w, rp_w = m.suggest_optimal_weights(df, step_pct=10, max_weight_pct=10.0)
+    assert sharpe_w is None and vol_w is None and rp_w is None
+
+
+def test_suggest_optimal_weights_risk_free_rate_changes_ranking():
+    """A : rendement annualisé élevé (~17%) mais volatil. B : rendement modeste (~6%) mais stable.
+    Sans taux sans risque, B a le meilleur Sharpe brut (volatilité bien plus faible) ; un taux sans
+    risque assez élevé (ici 8%, sous le rendement de A mais au-dessus de celui de B) réduit le
+    rendement EXCÉDENTAIRE de B à près de zéro et fait basculer l'allocation Sharpe-max vers A."""
+    rng = np.random.default_rng(1)
+    a = rng.normal(0.02, 0.08, size=200)
+    b = rng.normal(0.006, 0.01, size=200)
+    df = pd.DataFrame({"A": a, "B": b})
+    sharpe_no_rf, _, _ = m.suggest_optimal_weights(df, step_pct=10, shrinkage=0.0, risk_free_rate_pct=0.0)
+    sharpe_high_rf, _, _ = m.suggest_optimal_weights(df, step_pct=10, shrinkage=0.0, risk_free_rate_pct=8.0)
+    assert sharpe_no_rf["B"] > sharpe_no_rf["A"]
+    assert sharpe_high_rf["A"] > sharpe_high_rf["B"]
+
+
 # ---------- mode objectif ----------
 
 def test_compute_objective_contribution_linear_scaling():

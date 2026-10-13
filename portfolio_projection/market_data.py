@@ -124,9 +124,19 @@ def get_current_price(ticker: str) -> float | None:
     """Prix courant d'un ticker quelconque, corrigé de l'éventuel décalage d'échelle
     pence/livre -- sert à valoriser les positions du portefeuille réel et à valider
     un ticker à la saisie (voir callbacks.py, formulaires d'ajout). None si
-    indisponible (ticker invalide/délisté)."""
+    indisponible (ticker invalide/délisté).
+
+    currentPrice/regularMarketPrice sont souvent absents pour les ETF (champs surtout
+    peuplés pour les actions individuelles chez Yahoo, constaté en pratique en dehors
+    des heures de cotation) -- repli sur la dernière clôture connue plutôt que de
+    traiter l'instrument comme introuvable : sans ça, un ETF réellement détenu
+    disparaissait silencieusement de la valorisation du portefeuille réel (montant
+    investi resté correct, valeur actuelle sous-évaluée d'autant)."""
     info = _get_ticker_info(ticker)
-    price = info.get("currentPrice") or info.get("regularMarketPrice")
+    price = (
+        info.get("currentPrice") or info.get("regularMarketPrice")
+        or info.get("previousClose") or info.get("regularMarketPreviousClose")
+    )
     if price is None:
         return None
     price_scale = _price_scale_factor(info.get("trailingPE"), info.get("trailingEps"), price)

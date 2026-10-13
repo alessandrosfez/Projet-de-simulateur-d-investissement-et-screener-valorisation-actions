@@ -296,7 +296,10 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
     palette = PALETTES.get(palette_code, PALETTE)
     dark = bool(dark_mode)
     style_header, style_cell, style_data = layout.table_style_overrides(dark)
-    conditional_style = layout.peg_conditional_style(dark) + layout.pe_history_conditional_style(dark)
+    conditional_style = (
+        layout.peg_conditional_style(dark) + layout.pe_history_conditional_style(dark)
+        + layout.score_conditional_style(dark)
+    )
     column_label_keys = {
         "Entreprise": "col_company", "Ticker": "col_ticker", "Score": "col_score", "Secteur": "col_sector",
         "Devise": "col_currency", "Prix": "col_price", "P/E (trailing)": "col_pe_trailing",
@@ -501,6 +504,10 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
     # layout.pe_history_conditional_style) : un NaN substitué par 50 (ni < 20 ni > 80) retombe
     # naturellement dans la zone neutre non coloriée, sans fausse coloration verte/rouge.
     table_df["_pe_pct_for_style"] = table_df["Position vs historique 5 ans (percentile)"].fillna(50)
+    # Même raisonnement pour le Score composite (voir layout.score_conditional_style) : un N/A
+    # (aucun des 3 piliers disponible) retombe dans la bande neutre (40-70) plutôt que faussement
+    # vert ou rouge.
+    table_df["_score_for_style"] = table_df["Score"].fillna(50)
     # NaN -> None : sinon un JSON NaN (invalide) part vers le DataTable et s'affiche mal.
     table_df = table_df.astype(object).where(pd.notnull(table_df), None)
 

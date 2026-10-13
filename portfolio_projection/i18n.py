@@ -339,6 +339,24 @@ TRANSLATIONS = {
             "guidée uniquement par le risque). Sans effet sur un actif dont le rendement est personnalisé "
             "ci-dessus."
         ),
+        "risk_free_rate_label": "Taux sans risque (%)",
+        "risk_free_rate_help": (
+            "Soustrait du rendement attendu avant de calculer le ratio de Sharpe (rendement "
+            "EXCÉDENTAIRE par unité de risque). 0% par défaut. Un taux trop élevé (au-dessus du "
+            "rendement attendu de tous les actifs) peut faire basculer l'allocation vers l'actif "
+            "le plus risqué plutôt que le plus sûr -- limitation connue du ratio de Sharpe, pas un bug."
+        ),
+        "weight_bounds_label": "Pondération min/max par ligne incluse",
+        "weight_bounds_help": (
+            "Un actif exclu (0%) n'est jamais concerné par le minimum -- seules les lignes "
+            "effectivement incluses doivent respecter ces bornes."
+        ),
+        "step_pct_label": "Précision de la grille de calcul",
+        "step_pct_help": (
+            "Pas plus fin = allocations plus précises mais calcul plus lent (jusqu'à quelques "
+            "secondes avec beaucoup d'actifs sélectionnés)."
+        ),
+        "weights_infeasible_hint": "Aucune allocation ne respecte ces bornes de pondération min/max -- élargis-les.",
         "apply_btn": "Appliquer à Portefeuille 1",
     },
     "en": {
@@ -652,6 +670,24 @@ TRANSLATIONS = {
             "assumed to have the same expected return (Sharpe allocation driven by risk alone). Has no "
             "effect on an asset with a custom expected return set above."
         ),
+        "risk_free_rate_label": "Risk-free rate (%)",
+        "risk_free_rate_help": (
+            "Subtracted from expected return before computing the Sharpe ratio (EXCESS return per "
+            "unit of risk). 0% by default. Setting it too high (above every asset's expected return) "
+            "can flip the allocation toward the riskiest asset instead of the safest -- a known "
+            "limitation of the Sharpe ratio, not a bug."
+        ),
+        "weight_bounds_label": "Min/max weight per included line",
+        "weight_bounds_help": (
+            "An excluded asset (0%) is never affected by the minimum -- only lines actually "
+            "included must respect these bounds."
+        ),
+        "step_pct_label": "Calculation grid precision",
+        "step_pct_help": (
+            "A finer step gives more precise allocations but a slower calculation (up to a few "
+            "seconds with many selected assets)."
+        ),
+        "weights_infeasible_hint": "No allocation satisfies these min/max weight bounds -- widen them.",
         "apply_btn": "Apply to Portfolio 1",
     },
 }

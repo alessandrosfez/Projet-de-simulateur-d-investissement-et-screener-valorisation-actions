@@ -298,9 +298,12 @@ def simplex_grid(k: int, total: int, step: int):
 
 
 def suggest_optimal_weights(aligned_hist: pd.DataFrame, step_pct: int = 5, shrinkage: float = 0.5,
-                             mu_override_pct=None):
+                             mu_override_pct=None, risk_free_rate_pct: float = 0.0,
+                             min_weight_pct: float = 0.0, max_weight_pct: float = 100.0):
     """Grille exhaustive sur les poids (pas besoin de scipy vu le petit nombre d'actifs).
-    Renvoie (poids_sharpe_max, poids_vol_min, poids_parite_risque), chacun un dict {nom: poids_pct}.
+    Renvoie (poids_sharpe_max, poids_vol_min, poids_parite_risque), chacun un dict {nom: poids_pct},
+    ou None si aucune combinaison de la grille ne respecte min_weight_pct/max_weight_pct (contrainte
+    trop stricte pour le nombre d'actifs/le pas choisi -- pas une erreur, juste rien à proposer).
 
     Les rendements moyens historiques sont un estimateur très bruité du rendement futur
     (peu d'observations, forte variance) : les utiliser bruts pousse l'optimiseur Sharpe
@@ -309,7 +312,23 @@ def suggest_optimal_weights(aligned_hist: pd.DataFrame, step_pct: int = 5, shrin
     ce qui stabilise fortement l'allocation suggérée. `mu_override_pct` (liste de rendements
     annuels en %, ou None par actif) remplace directement (sans shrinkage) la moyenne
     historique de l'actif concerné : c'est déjà une hypothèse choisie, pas un estimateur bruité.
-    """
+
+    risk_free_rate_pct : soustrait du rendement au numérateur du ratio de Sharpe (rendement
+    EXCÉDENTAIRE par unité de risque, définition usuelle) -- à 0 (défaut), comportement inchangé.
+    Affecte réellement le classement (pas juste un décalage constant) puisque le ratio divise par
+    une volatilité différente selon la combinaison. Mise en garde si réglé trop haut (au-dessus du
+    rendement attendu de TOUS les actifs) : le rendement excédentaire devient négatif partout, et
+    un ratio négatif divisé par une volatilité plus grande se rapproche de zéro -- l'optimiseur
+    "préfère" alors paradoxalement l'actif le plus risqué (il minimise la casse plutôt qu'il ne
+    maximise un gain). Pathologie connue du ratio de Sharpe appliqué tel quel en optimisation, pas
+    un bug de cette fonction -- reste correct pour un taux sans risque réaliste (quelques %).
+
+    min_weight_pct/max_weight_pct : bornes appliquées à chaque actif INCLUS dans le portefeuille
+    (poids non nul) -- un actif reste exclu entièrement (poids 0) même si min_weight_pct > 0, pour
+    ne jamais rendre la contrainte infaisable en forçant un poids minimum sur TOUS les actifs à la
+    fois (ex: min=20% avec 7 actifs demanderait au moins 140% au total, impossible). Permet
+    d'éviter les allocations "poussière" (quelques % ici et là) ou au contraire les positions trop
+    concentrées, selon ce que l'utilisateur choisit."""
     names = list(aligned_hist.columns)
     mu_sample = aligned_hist.mean().values * 12
     mu = (1 - shrinkage) * mu_sample + shrinkage * mu_sample.mean()
@@ -318,14 +337,17 @@ def suggest_optimal_weights(aligned_hist: pd.DataFrame, step_pct: int = 5, shrin
             if o is not None:
                 mu[i] = o / 100
     cov = aligned_hist.cov().values * 12
+    risk_free_rate = risk_free_rate_pct / 100
 
     best_sharpe_val, best_sharpe_w = -np.inf, None
     best_vol_val, best_vol_w = np.inf, None
     best_rp_val, best_rp_w = np.inf, None
     for combo in simplex_grid(len(names), 100, step_pct):
+        if any(c != 0 and not (min_weight_pct <= c <= max_weight_pct) for c in combo):
+            continue
         w = np.array(combo) / 100
         port_vol = np.sqrt(w @ cov @ w)
-        sharpe = (w @ mu) / port_vol if port_vol > 0 else -np.inf
+        sharpe = (w @ mu - risk_free_rate) / port_vol if port_vol > 0 else -np.inf
         if sharpe > best_sharpe_val:
             best_sharpe_val, best_sharpe_w = sharpe, w
         if port_vol < best_vol_val:

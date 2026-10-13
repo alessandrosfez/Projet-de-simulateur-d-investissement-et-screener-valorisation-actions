@@ -27,7 +27,7 @@ TABLE_BASE_CELL_STYLE = {"fontSize": "0.82rem", "textAlign": "left", "padding": 
 # clair/sombre) : posé directement sur le DataTable dans build_tab3, pas besoin de passer par un
 # callback.
 NUMERIC_TABLE_COLUMNS = [
-    "Prix", "P/E (trailing)", "P/E (prévisionnel)", "PEG", "EV/EBITDA", "P/B",
+    "Score", "Prix", "P/E (trailing)", "P/E (prévisionnel)", "PEG", "EV/EBITDA", "P/B",
     "Rendement dividende (%)", "P/E moyen 5 ans (approx.)", "Position vs historique 5 ans (percentile)",
     "Capitalisation",
 ]
@@ -116,6 +116,29 @@ def peg_conditional_style(dark: bool):
         {"if": {"column_id": "PEG", "filter_query": "{PEG} >= 1 && {PEG} <= 2"},
          "backgroundColor": amber, "color": amber_fg},
         {"if": {"column_id": "PEG", "filter_query": "{PEG} > 2"},
+         "backgroundColor": red, "color": red_fg},
+    ]
+
+
+def score_conditional_style(dark: bool):
+    """style_data_conditional pour la colonne Score (voir callbacks.render_stock_views) : vert
+    (>=70, haut du classement), amber (40-70, neutre), rouge (<40, bas du classement). Référence
+    la colonne technique "_score_for_style" (même raison que pe_history_conditional_style : un
+    Score manquant, substitué par 50, doit retomber dans la bande neutre plutôt que vert ou rouge
+    par accident)."""
+    style_col = "_score_for_style"
+    if dark:
+        green, amber, red = "#173a24", "#3a2f12", "#3a1616"
+        green_fg, amber_fg, red_fg = "#8fd19e", "#e0c46c", "#e88a8a"
+    else:
+        green, amber, red = "#d4edda", "#fff3cd", "#f8d7da"
+        green_fg, amber_fg, red_fg = "#155724", "#856404", "#721c24"
+    return [
+        {"if": {"column_id": "Score", "filter_query": f"{{{style_col}}} >= 70"},
+         "backgroundColor": green, "color": green_fg},
+        {"if": {"column_id": "Score", "filter_query": f"{{{style_col}}} >= 40 && {{{style_col}}} < 70"},
+         "backgroundColor": amber, "color": amber_fg},
+        {"if": {"column_id": "Score", "filter_query": f"{{{style_col}}} < 40"},
          "backgroundColor": red, "color": red_fg},
     ]
 

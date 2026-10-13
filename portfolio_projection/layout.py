@@ -83,7 +83,8 @@ TAB_STATE_FIELDS = (
     [("indices-checklist", "value"), ("n-portfolios-input", "value")]
     + [(f"name-p{p}", "value") for p in range(N_PORTFOLIOS_MAX)]
     + [(f"weight-p{p}-t{i}", "value") for p in range(N_PORTFOLIOS_MAX) for i in range(len(TICKER_KEYS))]
-    + [("shrinkage-slider", "value")]
+    + [("shrinkage-slider", "value"), ("risk-free-rate-slider", "value"),
+       ("weight-bounds-slider", "value"), ("step-pct-slider", "value")]
 )
 
 
@@ -599,6 +600,25 @@ def build_tab2(lang, v=None):
                     L(lang, "shrinkage_label"), "shrinkage-slider", 0, 100,
                     gv(v, "shrinkage-slider", 50), step=5, help_text=L(lang, "shrinkage_help"),
                 ),
+                slider_block(
+                    L(lang, "risk_free_rate_label"), "risk-free-rate-slider", 0, 10,
+                    gv(v, "risk-free-rate-slider", 0), step=0.5, help_text=L(lang, "risk_free_rate_help"),
+                ),
+                html.Div([
+                    dbc.Label(L(lang, "weight_bounds_label"), className="mb-0"),
+                    html.Div(L(lang, "weight_bounds_help"), className="text-muted", style={"fontSize": "0.75rem"}),
+                    dcc.RangeSlider(
+                        id="weight-bounds-slider", min=0, max=100, step=5,
+                        value=gv(v, "weight-bounds-slider", [0, 100]),
+                        marks={0: "0%", 50: "50%", 100: "100%"},
+                        tooltip={"placement": "bottom", "always_visible": False}, updatemode="mouseup",
+                    ),
+                ], className="mb-3"),
+                slider_block(
+                    L(lang, "step_pct_label"), "step-pct-slider", 5, 25,
+                    gv(v, "step-pct-slider", 10), step=None, marks={5: "5%", 10: "10%", 15: "15%", 20: "20%", 25: "25%"},
+                    help_text=L(lang, "step_pct_help"),
+                ),
             ], id="weights-explain-collapse", is_open=False, className="mb-2"),
             dbc.Row([
                 dbc.Col([
@@ -764,6 +784,10 @@ def build_tab3(lang):
         dcc.Download(id="tab3-download-div-template"),
     ], className="mb-3")
 
+    # Chaque section est un dbc.Card (ombre/coins arrondis déjà définis dans .card, assets/
+    # theme.css) : titre en dehors (section-title), formulaire/tableau dans la carte -- même
+    # découpage que les cartes qualité/track-record de stock_valuation, pour que cet onglet se
+    # lise comme le reste de l'appli plutôt qu'une simple liste de champs à plat.
     return html.Div([
         html.Div(id="tab3-totals-cards"),
         html.Div([
@@ -773,53 +797,63 @@ def build_tab3(lang):
         ], className="mb-3"),
 
         html.H5(L(lang, "section_real_vs_simulated"), className="section-title", id="anchor-tab3-chart"),
-        dcc.Loading(type="circle", children=[dcc.Graph(id="tab3-real-vs-sim-graph", config=GRAPH_CONFIG)]),
+        dbc.Card(dbc.CardBody(
+            dcc.Loading(type="circle", children=[dcc.Graph(id="tab3-real-vs-sim-graph", config=GRAPH_CONFIG)]),
+        ), className="mb-4"),
 
         html.H5(L(lang, "section_rebalancing"), className="section-title", id="anchor-tab3-rebalancing"),
-        html.Small(L(lang, "rebalancing_hint"), className="text-muted d-block mb-2"),
-        html.Div(id="tab3-rebalancing-warning"),
-        dash_table.DataTable(id="tab3-rebalancing-table", style_cell=TABLE_BASE_CELL_STYLE),
+        dbc.Card(dbc.CardBody([
+            html.Small(L(lang, "rebalancing_hint"), className="text-muted d-block mb-2"),
+            html.Div(id="tab3-rebalancing-warning"),
+            dash_table.DataTable(id="tab3-rebalancing-table", style_cell=TABLE_BASE_CELL_STYLE),
+        ]), className="mb-4"),
 
         html.H5(L(lang, "section_target_weights"), className="section-title", id="anchor-tab3-weights"),
-        weight_form,
-        html.Div(id="tab3-weight-form-error", className="text-danger mb-2", style={"fontSize": "0.8rem"}),
-        dash_table.DataTable(
-            id="tab3-weights-table", row_deletable=True, style_cell=TABLE_BASE_CELL_STYLE,
-            data=weights_data,
-            columns=[
-                {"name": L(lang, "weight_ticker_label"), "id": "ticker"},
-                {"name": L(lang, "weight_pct_label"), "id": "weight_pct"},
-            ],
-        ),
+        dbc.Card(dbc.CardBody([
+            weight_form,
+            html.Div(id="tab3-weight-form-error", className="text-danger mb-2", style={"fontSize": "0.8rem"}),
+            dash_table.DataTable(
+                id="tab3-weights-table", row_deletable=True, style_cell=TABLE_BASE_CELL_STYLE,
+                data=weights_data,
+                columns=[
+                    {"name": L(lang, "weight_ticker_label"), "id": "ticker"},
+                    {"name": L(lang, "weight_pct_label"), "id": "weight_pct"},
+                ],
+            ),
+        ]), className="mb-4"),
 
         html.H5(L(lang, "section_log_transaction"), className="section-title", id="anchor-tab3-tx"),
-        csv_import_block,
-        tx_form,
-        html.Div(id="tab3-tx-form-error", className="text-danger mb-2", style={"fontSize": "0.8rem"}),
-        dash_table.DataTable(
-            id="tab3-tx-table", row_deletable=True, style_cell=TABLE_BASE_CELL_STYLE,
-            data=tx_data,
-            columns=[
-                {"name": L(lang, "tx_col_ticker"), "id": "ticker"},
-                {"name": L(lang, "tx_col_date"), "id": "date"},
-                {"name": L(lang, "tx_col_amount"), "id": "amount_eur"},
-                {"name": L(lang, "tx_col_price"), "id": "price"},
-                {"name": L(lang, "tx_col_fee"), "id": "fee_eur"},
-            ],
-        ),
+        dbc.Card(dbc.CardBody([
+            csv_import_block,
+            tx_form,
+            html.Div(id="tab3-tx-form-error", className="text-danger mb-2", style={"fontSize": "0.8rem"}),
+            dash_table.DataTable(
+                id="tab3-tx-table", row_deletable=True, style_cell=TABLE_BASE_CELL_STYLE,
+                data=tx_data,
+                columns=[
+                    {"name": L(lang, "tx_col_ticker"), "id": "ticker"},
+                    {"name": L(lang, "tx_col_date"), "id": "date"},
+                    {"name": L(lang, "tx_col_amount"), "id": "amount_eur"},
+                    {"name": L(lang, "tx_col_price"), "id": "price"},
+                    {"name": L(lang, "tx_col_fee"), "id": "fee_eur"},
+                ],
+            ),
+        ]), className="mb-4"),
 
         html.H5(L(lang, "section_log_dividend"), className="section-title", id="anchor-tab3-div"),
-        div_form,
-        html.Div(id="tab3-div-form-error", className="text-danger mb-2", style={"fontSize": "0.8rem"}),
-        dash_table.DataTable(
-            id="tab3-div-table", row_deletable=True, style_cell=TABLE_BASE_CELL_STYLE,
-            data=div_data,
-            columns=[
-                {"name": L(lang, "div_col_ticker"), "id": "ticker"},
-                {"name": L(lang, "div_col_date"), "id": "date"},
-                {"name": L(lang, "div_col_amount"), "id": "amount_eur"},
-            ],
-        ),
+        dbc.Card(dbc.CardBody([
+            div_form,
+            html.Div(id="tab3-div-form-error", className="text-danger mb-2", style={"fontSize": "0.8rem"}),
+            dash_table.DataTable(
+                id="tab3-div-table", row_deletable=True, style_cell=TABLE_BASE_CELL_STYLE,
+                data=div_data,
+                columns=[
+                    {"name": L(lang, "div_col_ticker"), "id": "ticker"},
+                    {"name": L(lang, "div_col_date"), "id": "date"},
+                    {"name": L(lang, "div_col_amount"), "id": "amount_eur"},
+                ],
+            ),
+        ]), className="mb-4"),
 
         dcc.Store(id="tab3-refresh-trigger", data=0),
     ], className="p-3")

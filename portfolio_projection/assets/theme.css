@@ -114,3 +114,53 @@ h1, h2, h3, h4, h5, h6 { font-family: "Inter", sans-serif; font-weight: 600; let
 
 /* -------- Liens -------- */
 a { color: var(--accent); }
+
+/* -------- dcc.DatePickerSingle (react-dates) en mode sombre -------- */
+/* react-dates code ses couleurs en dur dans sa propre feuille de style (blanc partout), jamais
+   couverte par le thème Bootstrap ni par [data-bs-theme] : sans ces surcharges, le champ de date
+   ET le calendrier qui s'ouvre restent blancs sur fond sombre, le seul endroit de l'app qui n'a
+   pas suivi le mode sombre (onglet "Mon portefeuille réel", formulaires transaction/dividende). */
+[data-bs-theme="dark"] .DateInput,
+[data-bs-theme="dark"] .DateInput_input {
+    background-color: var(--surface);
+    color: var(--Dash-Text-Primary, #e9ecef);
+}
+[data-bs-theme="dark"] .DateInput_input__focused { border-bottom-color: var(--accent); }
+[data-bs-theme="dark"] .SingleDatePickerInput {
+    background-color: var(--surface);
+    border-color: var(--border-soft);
+}
+[data-bs-theme="dark"] .SingleDatePicker_picker,
+[data-bs-theme="dark"] .DayPicker,
+[data-bs-theme="dark"] .DayPicker_transitionContainer,
+[data-bs-theme="dark"] .CalendarMonthGrid,
+[data-bs-theme="dark"] .CalendarMonth,
+[data-bs-theme="dark"] .CalendarMonth_caption {
+    background-color: var(--surface);
+    color: var(--Dash-Text-Primary, #e9ecef);
+}
+[data-bs-theme="dark"] .DateInput_fangStroke { fill: var(--surface); stroke: var(--border-soft); }
+[data-bs-theme="dark"] .DayPicker_weekHeader { color: var(--Dash-Text-Weak, #9aa0ac); }
+[data-bs-theme="dark"] .CalendarDay__default {
+    background-color: var(--surface);
+    border-color: var(--border-soft);
+    color: var(--Dash-Text-Primary, #e9ecef);
+}
+[data-bs-theme="dark"] .CalendarDay__default:hover {
+    background-color: var(--surface-2);
+    color: var(--Dash-Text-Primary, #e9ecef);
+}
+[data-bs-theme="dark"] .CalendarDay__outside { background-color: var(--surface); }
+[data-bs-theme="dark"] .CalendarDay__selected,
+[data-bs-theme="dark"] .CalendarDay__selected:hover {
+    background-color: var(--accent);
+    border-color: var(--accent);
+    color: var(--accent-contrast);
+}
+[data-bs-theme="dark"] .CalendarDay__hovered_span,
+[data-bs-theme="dark"] .CalendarDay__hovered_span:hover {
+    background-color: color-mix(in srgb, var(--accent) 35%, var(--surface));
+    color: var(--Dash-Text-Primary, #e9ecef);
+}
+[data-bs-theme="dark"] .DayPickerNavigation_button { background-color: var(--surface); }
+[data-bs-theme="dark"] .DayPickerNavigation_svg { fill: var(--Dash-Text-Primary, #e9ecef); }

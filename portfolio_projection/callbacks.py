@@ -457,10 +457,14 @@ def download_tab1(n_clicks, csv_data):
     Input("lookback-slider", "value"),
     Input("lang-radio", "value"),
     Input("shrinkage-slider", "value"),
+    Input("risk-free-rate-slider", "value"),
+    Input("weight-bounds-slider", "value"),
+    Input("step-pct-slider", "value"),
     Input("dark-mode-switch", "value"),
     *[Input(f"mu-override-t{i}", "value") for i in range(len(TICKER_KEYS))],
 )
-def update_correlation_and_suggestions(source, lookback_years, lang, shrinkage_pct, dark_mode, *mu_overrides):
+def update_correlation_and_suggestions(source, lookback_years, lang, shrinkage_pct, risk_free_rate_pct,
+                                        weight_bounds, step_pct, dark_mode, *mu_overrides):
     lang = lang or "fr"
     dark = bool(dark_mode)
     universe = list(TICKERS.keys())
@@ -475,18 +479,18 @@ def update_correlation_and_suggestions(source, lookback_years, lang, shrinkage_p
 
     shrinkage = (shrinkage_pct if shrinkage_pct is not None else 50) / 100
     heatmap = make_correlation_heatmap(aligned.corr(), lang=lang, dark=dark)
-    # La grille exhaustive de suggest_optimal_weights est combinatoire en step_pct et en nombre
-    # d'actifs (compositions de 100/step_pct en k parts) : à pas fixe de 5, 6 actifs prennent ~1s
-    # et 7 actifs ~4s (mesuré), un ralentissement perceptible à CHAQUE rendu de cet onglet (pas
-    # seulement au clic) puisque `universe` ci-dessus est toujours la totalité de TICKERS, jamais
-    # un sous-ensemble choisi par l'utilisateur. Un pas plus large au-delà de 5 actifs garde le
-    # calcul sous ~0.25s quel que soit l'univers, au prix d'une granularité de suggestion plus
-    # grossière (10% au lieu de 5%) -- un compromis acceptable pour une simple proposition de
-    # départ, affinable ensuite à la main via les curseurs de pondération.
-    step_pct = 5 if len(aligned.columns) <= 5 else 10
+    # step_pct réglable par l'utilisateur (curseur à marques fixes 5/10/15/20/25, jamais en-dessous
+    # de 5 -- la grille exhaustive de suggest_optimal_weights est combinatoire en step_pct et en
+    # nombre d'actifs : mesuré ~4s au pire avec 7 actifs à 5%, acceptable pour un réglage explicite
+    # de l'utilisateur, contrairement à un défaut automatique qui tournerait à chaque rendu).
+    min_weight, max_weight = weight_bounds if weight_bounds else (0, 100)
     sharpe_w, vol_w, rp_w = suggest_optimal_weights(
-        aligned, step_pct=step_pct, shrinkage=shrinkage, mu_override_pct=list(mu_overrides),
+        aligned, step_pct=step_pct or 10, shrinkage=shrinkage, mu_override_pct=list(mu_overrides),
+        risk_free_rate_pct=risk_free_rate_pct or 0.0, min_weight_pct=min_weight, max_weight_pct=max_weight,
     )
+    if sharpe_w is None and vol_w is None and rp_w is None:
+        infeasible_hint = html.Small(L(lang, "weights_infeasible_hint"), className="text-muted")
+        return heatmap, {}, {}, {}, infeasible_hint, infeasible_hint, infeasible_hint
     sharpe_display = html.Ul([html.Li(f"{k}: {v:.0f}%") for k, v in sharpe_w.items()]) if sharpe_w else ""
     vol_display = html.Ul([html.Li(f"{k}: {v:.0f}%") for k, v in vol_w.items()]) if vol_w else ""
     rp_display = html.Ul([html.Li(f"{k}: {v:.0f}%") for k, v in rp_w.items()]) if rp_w else ""
