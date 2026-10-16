@@ -331,3 +331,92 @@ def test_rolling_backtest_final_values_no_circular_wrap():
     final_values = m.rolling_backtest_final_values(hist, schedule, years_axis, 0.0, False, 0.0, 0.0, False)
     assert final_values[-1] > 1200.0  # la dernière fenêtre a capté le pic
     np.testing.assert_allclose(final_values[:-1], 1200.0)  # aucune autre fenêtre ne l'a capté
+
+
+# ---------- walk_forward_calibration / summarize_calibration ----------
+
+def _synthetic_iid_returns(n, mu=0.006, sigma=0.04, seed=123):
+    """Rendements mensuels i.i.d. générés selon EXACTEMENT la même famille (loi t de Student, même
+    degré de liberté) que le mode paramétrique de simulate_index_returns -- un modèle bien spécifié
+    sur ces données doit donc produire une couverture proche du nominal ; une série i.i.d. n'a par
+    ailleurs aucune autocorrélation à casser, donc le bootstrap par blocs doit aussi bien se
+    calibrer dessus (seul le mode historique/bootstrap a besoin de préserver une structure
+    temporelle, absente ici par construction)."""
+    rng = np.random.default_rng(seed)
+    z = rng.standard_normal(n)
+    scale = m._student_t_scale(rng, m.STUDENT_T_DOF, size=n)
+    values = mu + sigma * z * scale
+    dates = pd.date_range("2000-01-01", periods=n, freq="MS")
+    return pd.Series(values, index=dates)
+
+
+@pytest.mark.parametrize("method", ["normal", "bootstrap"])
+def test_walk_forward_calibration_coverage_close_to_nominal_on_iid_synthetic_data(method):
+    returns_hist = _synthetic_iid_returns(n=700)
+    result = m.walk_forward_calibration(
+        returns_hist, horizon_months=60, n_sims=300, seed=42, method=method,
+        step_months=3, min_calibration_months=120, block_size=12,
+    )
+    assert result["n_origins"] >= 30
+    summary = m.summarize_calibration(result["pit"], bands=((5, 95), (25, 75)))
+    for row in summary:
+        nominal = row["upper_pct"] - row["lower_pct"]
+        # Tolérance large : peu d'origines "effectives" indépendantes (voir n_effective) + bruit
+        # Monte Carlo propre à n_sims -- on vérifie "pas d'écart grossier", pas une égalité précise.
+        assert abs(row["observed_pct"] - nominal) <= 25
+
+
+def test_walk_forward_calibration_empty_when_no_valid_origin():
+    returns_hist = _synthetic_iid_returns(n=20)
+    result = m.walk_forward_calibration(
+        returns_hist, horizon_months=60, n_sims=50, seed=1, method="normal", min_calibration_months=24,
+    )
+    assert result == {"origin_dates": [], "pit": pytest.approx(np.array([])), "n_origins": 0, "n_effective": 0}
+
+
+def test_walk_forward_calibration_no_future_leakage(monkeypatch):
+    """Construit une série avec une discontinuité connue (zéros puis une valeur sentinelle) et
+    espionne les appels à simulate_index_returns pour vérifier que la fenêtre de calibration de
+    CHAQUE origine correspond exactement au préfixe attendu (ni plus court ni plus long d'un mois)
+    -- la seule façon de garantir qu'aucune donnée à partir de t n'est jamais utilisée, plutôt que
+    de se fier à la relecture du code."""
+    n = 60
+    values = np.zeros(n)
+    values[30:] = 999.0  # discontinuité connue, repérable si elle apparaît trop tôt
+    dates = pd.date_range("2000-01-01", periods=n, freq="MS")
+    returns_hist = pd.Series(values, index=dates)
+
+    seen_calibration_windows = []
+    original = m.simulate_index_returns
+
+    def spy(calibration_series, *args, **kwargs):
+        seen_calibration_windows.append(np.asarray(calibration_series.values))
+        return original(calibration_series, *args, **kwargs)
+
+    monkeypatch.setattr(m, "simulate_index_returns", spy)
+
+    min_calibration_months, step_months, horizon_months = 10, 5, 6
+    m.walk_forward_calibration(
+        returns_hist, horizon_months=horizon_months, n_sims=10, seed=1, method="normal",
+        step_months=step_months, min_calibration_months=min_calibration_months,
+    )
+
+    expected_origins = list(range(min_calibration_months, n - horizon_months + 1, step_months))
+    assert len(seen_calibration_windows) == len(expected_origins)
+    for captured, t in zip(seen_calibration_windows, expected_origins):
+        assert len(captured) == t
+        np.testing.assert_array_equal(captured, values[:t])
+
+
+def test_summarize_calibration_perfectly_uniform_pit_matches_nominal_exactly():
+    # PIT exactement uniforme sur 100 points -> couverture observée = nominale au point près.
+    pit_values = np.linspace(0.005, 0.995, 100)
+    summary = m.summarize_calibration(pit_values, bands=((5, 95), (25, 75)))
+    by_band = {(row["lower_pct"], row["upper_pct"]): row["observed_pct"] for row in summary}
+    assert by_band[(5, 95)] == pytest.approx(90.0, abs=1.0)
+    assert by_band[(25, 75)] == pytest.approx(50.0, abs=1.0)
+
+
+def test_summarize_calibration_empty_pit_returns_none_observed():
+    summary = m.summarize_calibration(np.array([]), bands=((5, 95),))
+    assert summary == [{"lower_pct": 5, "upper_pct": 95, "nominal_pct": 90, "observed_pct": None}]

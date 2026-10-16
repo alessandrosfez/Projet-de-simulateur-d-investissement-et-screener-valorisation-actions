@@ -34,6 +34,51 @@ TRANSLATIONS = {
         "tab_par_indice": "Par indice",
         "tab_portefeuille": "Portefeuille pondéré",
         "tab_portefeuille_reel": "Mon portefeuille réel",
+        "tab_validation": "Validation du modèle",
+        "validation_intro": "Teste la fiabilité des bandes de percentiles affichées ailleurs dans "
+                             "l'appli : pour chaque date passée, le modèle est recalibré en ne regardant "
+                             "QUE les données antérieures à cette date (comme si tu étais réellement à "
+                             "cette date), puis on vérifie où la croissance RÉELLEMENT observée ensuite "
+                             "est tombée dans la distribution simulée.",
+        "validation_help": "PIT (probability integral transform) : le rang (en percentile) de la "
+                            "croissance réellement observée au sein de la distribution simulée à cette "
+                            "date d'origine. Sur de nombreuses origines, si le modèle est bien calibré, "
+                            "ces rangs doivent se répartir uniformément sur [0, 1] -- ni trop souvent "
+                            "proches de 0/1 (bandes trop étroites), ni trop concentrés au centre (bandes "
+                            "trop prudentes).",
+        "validation_ticker_label": "Indice / ETF à tester",
+        "validation_source_hint": "Indice brut recommandé : les ETF PEA ont souvent trop peu d'historique "
+                                   "pour tester plus que quelques dates d'origine.",
+        "validation_horizon_label": "Horizon de projection (H)",
+        "validation_horizon_5y": "5 ans",
+        "validation_horizon_10y": "10 ans",
+        "validation_step_label": "Pas entre deux dates d'origine",
+        "validation_step_monthly": "Mensuel",
+        "validation_step_annual": "Annuel",
+        "validation_run_btn": "Lancer le test",
+        "validation_running": "Calcul en cours (une simulation complète par date d'origine)...",
+        "validation_insufficient_history": "Pas assez d'historique pour cet indice/horizon : il faut au "
+                                            "moins quelques années de calibration suivies de l'horizon H "
+                                            "complet, pour au moins une date d'origine.",
+        "validation_n_origins_label": "{n} dates d'origine testées",
+        "validation_n_effective_label": "≈ {n} observations indépendantes \"effectives\"",
+        "validation_overlap_warning": "Les fenêtres de dates d'origine successives se CHEVAUCHENT "
+                                       "largement (elles partagent presque tous leurs mois dès que le "
+                                       "pas est plus petit que l'horizon) : elles ne sont pas "
+                                       "statistiquement indépendantes. Le nombre de dates testées "
+                                       "ci-dessus surestime donc la précision réelle de ce diagnostic --"
+                                       " le nombre d'observations réellement indépendantes est plus "
+                                       "proche de la durée totale de l'historique divisée par l'horizon.",
+        "pit_histogram_title_normal": "PIT -- méthode paramétrique (loi t de Student)",
+        "pit_histogram_title_bootstrap": "PIT -- méthode bootstrap par blocs",
+        "pit_expected_uniform_line": "Hauteur attendue si bien calibré",
+        "pit_x_axis": "PIT (rang percentile du réel dans le simulé)",
+        "pit_y_axis": "Nombre d'origines",
+        "validation_coverage_table_title": "Couverture observée des bandes de percentiles",
+        "validation_col_band": "Bande",
+        "validation_col_nominal": "Nominal (%)",
+        "validation_col_observed_normal": "Observé -- paramétrique (%)",
+        "validation_col_observed_bootstrap": "Observé -- bootstrap (%)",
         "section_portfolio_totals": "Totaux",
         "metric_total_invested": "Capital investi",
         "metric_current_value": "Valeur actuelle",
@@ -388,6 +433,48 @@ TRANSLATIONS = {
         "tab_par_indice": "By index",
         "tab_portefeuille": "Weighted portfolio",
         "tab_portefeuille_reel": "My real portfolio",
+        "tab_validation": "Model validation",
+        "validation_intro": "Tests how reliable the percentile bands shown elsewhere in the app really "
+                             "are: for each past date, the model is recalibrated using ONLY data before "
+                             "that date (as if you were really standing at that date), then checks where "
+                             "the growth ACTUALLY observed afterward landed in the simulated distribution.",
+        "validation_help": "PIT (probability integral transform): the percentile rank of the actually "
+                            "observed growth within the simulated distribution at that origin date. "
+                            "Across many origins, if the model is well calibrated, these ranks should be "
+                            "spread uniformly over [0, 1] -- not too often near 0/1 (bands too narrow), "
+                            "nor too concentrated in the middle (bands too cautious).",
+        "validation_ticker_label": "Index / ETF to test",
+        "validation_source_hint": "Raw index recommended: PEA ETFs often have too little history to test "
+                                   "more than a handful of origin dates.",
+        "validation_horizon_label": "Projection horizon (H)",
+        "validation_horizon_5y": "5 years",
+        "validation_horizon_10y": "10 years",
+        "validation_step_label": "Step between origin dates",
+        "validation_step_monthly": "Monthly",
+        "validation_step_annual": "Annual",
+        "validation_run_btn": "Run the test",
+        "validation_running": "Computing (one full simulation per origin date)...",
+        "validation_insufficient_history": "Not enough history for this index/horizon: a few years of "
+                                            "calibration followed by the full horizon H are needed, for "
+                                            "at least one origin date.",
+        "validation_n_origins_label": "{n} origin dates tested",
+        "validation_n_effective_label": "≈ {n} independent \"effective\" observations",
+        "validation_overlap_warning": "Successive origin-date windows OVERLAP heavily (they share "
+                                       "almost all of their months as soon as the step is smaller than "
+                                       "the horizon): they are not statistically independent. The number "
+                                       "of dates tested above therefore overstates this diagnostic's real "
+                                       "precision -- the number of truly independent observations is "
+                                       "closer to the total length of the history divided by the horizon.",
+        "pit_histogram_title_normal": "PIT -- parametric method (Student t)",
+        "pit_histogram_title_bootstrap": "PIT -- block bootstrap method",
+        "pit_expected_uniform_line": "Expected height if well calibrated",
+        "pit_x_axis": "PIT (percentile rank of the real outcome in the simulation)",
+        "pit_y_axis": "Number of origins",
+        "validation_coverage_table_title": "Observed coverage of the percentile bands",
+        "validation_col_band": "Band",
+        "validation_col_nominal": "Nominal (%)",
+        "validation_col_observed_normal": "Observed -- parametric (%)",
+        "validation_col_observed_bootstrap": "Observed -- bootstrap (%)",
         "section_portfolio_totals": "Totals",
         "metric_total_invested": "Invested capital",
         "metric_current_value": "Current value",

@@ -287,6 +287,88 @@ def compute_objective_contribution(all_metrics: dict, schedules: dict, items: li
     return rows
 
 
+# ============================================================
+# VALIDATION DU MODÈLE (backtest walk-forward, PIT)
+# ============================================================
+
+def walk_forward_calibration(returns_hist: pd.Series, horizon_months: int, n_sims: int, seed: int,
+                              method: str, step_months: int = 12, block_size: int = 12,
+                              min_calibration_months: int = 24) -> dict:
+    """Vérifie que les bandes de percentiles affichées ailleurs dans l'appli sont fiables, par un
+    backtest walk-forward : pour chaque date d'origine t valide (espacées de step_months), calibre
+    le modèle (`simulate_index_returns`) UNIQUEMENT sur returns_hist[:t] -- fenêtre EXPANSIBLE qui
+    grandit avec t, jamais de donnée à partir de t ou au-delà, aucune fuite d'information du futur
+    même pour le bootstrap par blocs (qui ne tire que dans cette même fenêtre passée) -- simule la
+    croissance de 1€ sur horizon_months, puis situe la croissance RÉELLEMENT observée sur
+    returns_hist[t:t+horizon_months] dans cette distribution simulée : sa "PIT" (probability
+    integral transform), la fraction des simulations dont la croissance finale est inférieure ou
+    égale à la croissance réelle. Si le modèle est bien calibré, les PIT sur de nombreuses origines
+    doivent se répartir uniformément sur [0, 1] (voir summarize_calibration) -- ni trop souvent
+    proches de 0/1 (bandes trop étroites, le réel surprend trop souvent le modèle) ni trop
+    concentrées au centre (bandes trop larges, le modèle est trop prudent).
+
+    min_calibration_months : en-dessous, une moyenne/écart-type (ou un tirage bootstrap) sur trop
+    peu d'observations serait trop bruité pour être une calibration significative -- ces origines
+    trop précoces sont simplement exclues, pas calculées avec une fenêtre dégradée.
+
+    Renvoie {"origin_dates": [...], "pit": ndarray, "n_origins": int, "n_effective": int}.
+    n_effective (≈ durée totale de l'historique testé / horizon_months) : les fenêtres de
+    différentes origines se CHEVAUCHENT dès que step_months < horizon_months (ex: origines
+    mensuelles avec un horizon de 5 ans partagent jusqu'à 59 des 60 mois de leur fenêtre avec
+    l'origine suivante) -- donc pas indépendantes entre elles, à ne pas lire comme "n_origins
+    observations indépendantes" (la couverture observée reste un bon diagnostic, mais son
+    incertitude statistique propre est plus grande que ne le suggérerait n_origins)."""
+    values = np.asarray(returns_hist.values, dtype=float)
+    dates = returns_hist.index
+    n_obs = len(values)
+    origins = list(range(min_calibration_months, n_obs - horizon_months + 1, step_months))
+    if not origins:
+        return {"origin_dates": [], "pit": np.array([]), "n_origins": 0, "n_effective": 0}
+
+    # Une graine dérivée par origine (reproductible, indépendante d'une origine à l'autre) plutôt
+    # que la même graine partout, pour que les tirages Monte Carlo de deux origines différentes ne
+    # soient pas de simples répétitions du même aléa.
+    master_rng = np.random.default_rng(seed)
+    origin_seeds = master_rng.integers(0, 2**32 - 1, size=len(origins))
+
+    pit_values = np.empty(len(origins))
+    for i, t in enumerate(origins):
+        calibration_series = pd.Series(values[:t])
+        realized_growth = float(np.prod(1 + values[t:t + horizon_months]))
+        simulated = simulate_index_returns(
+            calibration_series, horizon_months, n_sims, int(origin_seeds[i]), method, block_size=block_size,
+        )
+        simulated_growth = np.prod(1 + simulated, axis=1)
+        pit_values[i] = float((simulated_growth <= realized_growth).mean())
+
+    n_effective = max(1, round(n_obs / horizon_months))
+    return {
+        "origin_dates": [dates[t] for t in origins],
+        "pit": pit_values,
+        "n_origins": len(origins),
+        "n_effective": n_effective,
+    }
+
+
+def summarize_calibration(pit_values: np.ndarray, bands=((5, 95), (25, 75))) -> list[dict]:
+    """Taux de couverture observé de chaque bande nominale (lower_pct, upper_pct) : la fraction des
+    origines dont la PIT tombe dans cette bande. Équivalent à vérifier que la croissance réalisée
+    tombe entre les percentiles simulés correspondants (voir walk_forward_calibration), sans avoir
+    à conserver la distribution complète de chaque origine -- un bon modèle calibré a un taux
+    observé proche du taux nominal (upper_pct - lower_pct)."""
+    rows = []
+    for lo, hi in bands:
+        observed = (
+            float(((pit_values >= lo / 100) & (pit_values <= hi / 100)).mean() * 100)
+            if len(pit_values) > 0 else None
+        )
+        rows.append({
+            "lower_pct": lo, "upper_pct": hi, "nominal_pct": hi - lo,
+            "observed_pct": round(observed, 1) if observed is not None else None,
+        })
+    return rows
+
+
 def simplex_grid(k: int, total: int, step: int):
     """Génère tous les vecteurs entiers non-négatifs de longueur k sommant à `total`, multiples de `step`."""
     if k == 1:

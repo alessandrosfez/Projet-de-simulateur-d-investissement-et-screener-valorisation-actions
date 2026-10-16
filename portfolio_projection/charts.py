@@ -109,6 +109,34 @@ def make_actual_vs_simulated_figure(real_dates, real_values, sim_dates, sim_medi
     return fig
 
 
+def make_pit_histogram(pit_values, title, lang="fr", palette=None, dark: bool = False, n_bins: int = 10):
+    """Histogramme des PIT (probability integral transform) d'un backtest walk-forward (voir
+    engine.walk_forward_calibration) : si le modèle est bien calibré, les barres doivent être
+    proches de la ligne pointillée (hauteur attendue sous une répartition uniforme sur [0, 1]) --
+    des barres plus hautes aux extrémités (0 ou 1) signalent des bandes de percentiles trop
+    étroites (le réel surprend le modèle trop souvent), des barres plus hautes au centre signalent
+    des bandes trop larges (trop prudentes)."""
+    palette = palette or PALETTE
+    fig = go.Figure()
+    fig.add_trace(go.Histogram(
+        x=pit_values, xbins=dict(start=0, end=1, size=1 / n_bins),
+        marker_color=palette[0], name=title, showlegend=False,
+    ))
+    if len(pit_values) > 0:
+        expected_count = len(pit_values) / n_bins
+        fig.add_hline(
+            y=expected_count, line_dash="dash", line_color="gray",
+            annotation_text=L(lang, "pit_expected_uniform_line"), annotation_position="top left",
+        )
+    fig.update_layout(
+        template="plotly_dark" if dark else "plotly",
+        title=dict(text=title, font=dict(size=14)),
+        xaxis_title=L(lang, "pit_x_axis"), yaxis_title=L(lang, "pit_y_axis"),
+        bargap=0.05, margin=dict(t=60),
+    )
+    return fig
+
+
 def make_sequence_risk_figure(shock_years, final_values, invested_capital, lang="fr", palette=None,
                                dark: bool = False):
     """Nuage de points : valeur finale du portefeuille (une simulation Monte Carlo = un point) vs

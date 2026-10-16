@@ -688,6 +688,7 @@ def build_tabs(lang, v=None, active_tab="tab-par-indice"):
         dbc.Tab(build_tab1(lang, v), label=L(lang, "tab_par_indice"), tab_id="tab-par-indice"),
         dbc.Tab(build_tab2(lang, v), label=L(lang, "tab_portefeuille"), tab_id="tab-portefeuille"),
         dbc.Tab(build_tab3(lang), label=L(lang, "tab_portefeuille_reel"), tab_id="tab-portefeuille-reel"),
+        dbc.Tab(build_tab4(lang), label=L(lang, "tab_validation"), tab_id="tab-validation"),
     ], id="main-tabs", active_tab=active_tab or "tab-par-indice")
 
 
@@ -869,4 +870,80 @@ def build_tab3(lang):
         ]), className="mb-4"),
 
         dcc.Store(id="tab3-refresh-trigger", data=0),
+    ], className="p-3")
+
+
+# ---------- Onglet 4 : validation du modèle (backtest walk-forward) ----------
+def build_tab4(lang):
+    """Backtest walk-forward (voir engine.walk_forward_calibration) : onglet indépendant des 3
+    autres, sans State partagé avec eux (indice/horizon/pas propres à ce test) -- seul le
+    lancement est explicite (bouton), pas réactif aux curseurs, vu le coût d'une simulation Monte
+    Carlo complète par date d'origine testée (voir callbacks.py)."""
+    return html.Div([
+        html.P(L(lang, "validation_intro"), className="text-muted"),
+        html.Div([
+            html.Div([
+                html.Div([dbc.Label(L(lang, "validation_ticker_label"), className="mb-0")] + info_tooltip(
+                    "validation-help-info", L(lang, "validation_help"),
+                )),
+                dcc.Dropdown(
+                    id="validation-ticker-dropdown",
+                    options=[{"label": name, "value": name} for name in TICKER_KEYS],
+                    value=TICKER_KEYS[0], clearable=False, style={"width": "280px"},
+                ),
+            ], className="mb-2"),
+            html.Div([
+                dbc.Label(L(lang, "source_label"), className="mb-0"),
+                dcc.RadioItems(
+                    id="validation-source-radio",
+                    options=[
+                        {"label": L(lang, "source_indice"), "value": "indice"},
+                        {"label": L(lang, "source_etf"), "value": "etf"},
+                    ],
+                    # Indice brut par défaut, contrairement au reste de l'appli : les ETF PEA ont
+                    # souvent moins de 15 ans d'historique, trop peu pour plus d'une poignée de
+                    # dates d'origine une fois retirés la calibration minimale et l'horizon H.
+                    value="indice", inline=True,
+                ),
+                html.Small(L(lang, "validation_source_hint"), className="text-muted d-block"),
+            ], className="mb-2"),
+            html.Div([
+                dbc.Label(L(lang, "validation_horizon_label"), className="mb-0"),
+                dcc.RadioItems(
+                    id="validation-horizon-radio",
+                    options=[
+                        {"label": L(lang, "validation_horizon_5y"), "value": 60},
+                        {"label": L(lang, "validation_horizon_10y"), "value": 120},
+                    ],
+                    value=60, inline=True,
+                ),
+            ], className="mb-2"),
+            html.Div([
+                dbc.Label(L(lang, "validation_step_label"), className="mb-0"),
+                dcc.RadioItems(
+                    id="validation-step-radio",
+                    options=[
+                        {"label": L(lang, "validation_step_monthly"), "value": 1},
+                        {"label": L(lang, "validation_step_annual"), "value": 12},
+                    ],
+                    value=12, inline=True,
+                ),
+            ], className="mb-2"),
+            dbc.Button(
+                L(lang, "validation_run_btn"), id="validation-run-btn", color="primary", size="sm",
+                className="mt-1",
+            ),
+        ], className="mb-3"),
+        dcc.Loading(type="circle", children=[
+            html.Div(id="validation-error", className="text-danger"),
+            html.Div(id="validation-info-caption", className="text-muted mb-2", style={"fontSize": "0.85rem"}),
+            html.Div([
+                html.Div(dcc.Graph(id="validation-pit-graph-normal", config=GRAPH_CONFIG),
+                         style={"flex": "1", "minWidth": "0"}),
+                html.Div(dcc.Graph(id="validation-pit-graph-bootstrap", config=GRAPH_CONFIG),
+                         style={"flex": "1", "minWidth": "0"}),
+            ], style={"display": "flex", "gap": "1rem", "flexWrap": "wrap"}),
+            html.H5(L(lang, "validation_coverage_table_title"), className="section-title mt-2"),
+            dash_table.DataTable(id="validation-coverage-table", style_cell=TABLE_BASE_CELL_STYLE),
+        ]),
     ], className="p-3")
