@@ -7,6 +7,14 @@ récupérées (market_data.get_daily_price_history()) -- aucun accès disque ou 
 """
 import pandas as pd
 
+from constants import TICKERS
+
+# Ticker (indice brut ou ETF) -> nom de l'indice, pour ticker_display_label ci-dessous.
+_TICKER_TO_INDEX_NAME = {}
+for _name, _tks in TICKERS.items():
+    _TICKER_TO_INDEX_NAME[_tks["indice"]] = _name
+    _TICKER_TO_INDEX_NAME[_tks["etf"]] = _name
+
 
 def reconstruct_holdings(transactions: pd.DataFrame) -> pd.DataFrame:
     """Quantité détenue cumulée par ticker, à partir des achats (amount_eur / price par
@@ -314,3 +322,13 @@ def known_tickers(transactions: pd.DataFrame, dividends: pd.DataFrame, target_we
     if not target_weights.empty:
         tickers |= set(target_weights["ticker"])
     return sorted(tickers)
+
+
+def ticker_display_label(ticker: str) -> str:
+    """Libellé affiché pour un ticker dans les menus déroulants (voir layout.build_tab3) :
+    ajoute le nom de l'indice entre parenthèses quand le ticker correspond à un ETF/indice
+    connu de l'univers de simulation (constants.TICKERS), pour lever l'ambiguïté des tickers
+    ETF peu parlants (ex: "CW8.PA" -> "CW8.PA (MSCI World)"). Inchangé pour un ticker hors de
+    cet univers (le portefeuille réel accepte n'importe quel ticker)."""
+    index_name = _TICKER_TO_INDEX_NAME.get(ticker)
+    return f"{ticker} ({index_name})" if index_name else ticker

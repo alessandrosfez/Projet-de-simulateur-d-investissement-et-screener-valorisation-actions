@@ -708,9 +708,10 @@ def build_tab3(lang):
     tx_data = transactions_df.to_dict("records")
     div_data = dividends_df.to_dict("records")
     weights_data = weights_df.to_dict("records")
-    ticker_options = [{"label": t, "value": t} for t in portfolio_engine.known_tickers(
-        transactions_df, dividends_df, weights_df,
-    )]
+    ticker_options = [
+        {"label": portfolio_engine.ticker_display_label(t), "value": t}
+        for t in portfolio_engine.known_tickers(transactions_df, dividends_df, weights_df)
+    ]
 
     def ticker_dropdown(dropdown_id, placeholder):
         # dcc.Dropdown plutôt qu'un simple texte libre : reproposer un ticker déjà utilisé en un
@@ -800,6 +801,18 @@ def build_tab3(lang):
         dbc.Card(dbc.CardBody(
             dcc.Loading(type="circle", children=[dcc.Graph(id="tab3-real-vs-sim-graph", config=GRAPH_CONFIG)]),
         ), className="mb-4"),
+
+        html.H5(L(lang, "section_real_portfolio_projection"), className="section-title", id="anchor-tab3-projection"),
+        dbc.Card(dbc.CardBody([
+            html.Small(L(lang, "real_portfolio_projection_hint"), className="text-muted d-block mb-2"),
+            dcc.Loading(type="circle", children=[dcc.Graph(id="tab3-projection-graph", config=GRAPH_CONFIG)]),
+        ]), className="mb-4"),
+
+        html.H5(L(lang, "section_real_portfolio_corr"), className="section-title", id="anchor-tab3-corr"),
+        dbc.Card(dbc.CardBody([
+            html.Small(L(lang, "real_portfolio_corr_hint"), className="text-muted d-block mb-2"),
+            dcc.Loading(type="circle", children=[dcc.Graph(id="tab3-corr-heatmap", config=GRAPH_CONFIG)]),
+        ]), className="mb-4"),
 
         html.H5(L(lang, "section_rebalancing"), className="section-title", id="anchor-tab3-rebalancing"),
         dbc.Card(dbc.CardBody([

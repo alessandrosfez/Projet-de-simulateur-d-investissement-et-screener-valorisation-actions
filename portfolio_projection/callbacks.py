@@ -21,18 +21,18 @@ import portfolio_db
 import portfolio_engine
 from app_instance import app
 from charts import make_correlation_heatmap, make_sequence_risk_figure
-from constants import BACKTEST_ANCHORS, N_PORTFOLIOS_MAX, PEA_CONTRIBUTION_CAP, TICKER_KEYS, TICKERS
+from constants import BACKTEST_ANCHORS, N_PORTFOLIOS_MAX, PEA_CONTRIBUTION_CAP, PEA_TAX_RATE, TICKER_KEYS, TICKERS
 from engine import inject_shock, simulate_index_returns, simulate_portfolio_asset_returns, suggest_optimal_weights
 from i18n import L, PALETTE, PALETTE_CODES, PALETTE_NAMES, PALETTES
 from market_data import (
     get_aligned_returns, get_aligned_returns_for_tickers, get_current_price, get_daily_price_history,
-    get_monthly_returns, resolve_isin_to_ticker,
+    get_monthly_returns, get_ticker_name, resolve_isin_to_ticker,
 )
 from results import (
     build_envelope_comparison_figure, build_historique_metrics_outputs, build_metric_cards,
-    build_metrics_outputs, build_portfolio_totals_cards, build_rebalancing_table_data, build_real_vs_simulated_figure,
-    build_schedules, build_sequence_risk_series, compute_results, render_objective_result,
-    render_rolling_backtest_result,
+    build_metrics_outputs, build_portfolio_totals_cards, build_real_portfolio_future_figure,
+    build_rebalancing_table_data, build_real_vs_simulated_figure, build_schedules, build_sequence_risk_series,
+    compute_results, render_objective_result, render_rolling_backtest_result,
 )
 
 # ============================================================
@@ -833,6 +833,21 @@ def download_tab2(n_clicks, csv_data):
 # circulaire refusée par Dash.
 
 
+def _ticker_display_label(ticker: str) -> str:
+    """Libellé affiché pour un ticker dans les menus déroulants de l'onglet 3 : priorité au nom
+    d'indice connu (constants.TICKERS, voir portfolio_engine.ticker_display_label), repli sur le
+    nom du fonds/de l'entreprise renvoyé par Yahoo Finance (market_data.get_ticker_name) pour un
+    ticker hors de cet univers -- ex: "PAASI.PA (Amundi PEA Asie Emergente (MSCI...)". Fait un
+    appel réseau (caché 24h) uniquement ici, pas dans layout.build_tab3, pour garder le premier
+    rendu de page sans attente réseau (voir refresh_tab3, qui tourne aussi au chargement initial
+    et écrase ces options juste après)."""
+    curated = portfolio_engine.ticker_display_label(ticker)
+    if curated != ticker:
+        return curated
+    name = get_ticker_name(ticker)
+    return f"{ticker} ({name})" if name else ticker
+
+
 def _validated_ticker(ticker: str):
     """None si le ticker est vide ou si aucun prix n'est disponible pour lui (typo, délisting) --
     sert de garde-fou à la saisie plutôt que de laisser une valeur invalide entrer en base et
@@ -1072,6 +1087,8 @@ def delete_removed_weights(table_data):
     Output("tab3-totals-cards", "children"),
     Output("tab3-real-pace-display", "children"),
     Output("tab3-real-vs-sim-graph", "figure"),
+    Output("tab3-projection-graph", "figure"),
+    Output("tab3-corr-heatmap", "figure"),
     Output("tab3-rebalancing-table", "data"),
     Output("tab3-rebalancing-table", "columns"),
     Output("tab3-rebalancing-table", "style_header"),
@@ -1100,10 +1117,15 @@ def delete_removed_weights(table_data):
     Input("method-radio", "value"),
     Input("n-sims-slider", "value"),
     Input("seed-input", "value"),
+    Input("horizon-slider", "value"),
+    Input("fee-slider", "value"),
+    Input("tax-checkbox", "value"),
 )
-def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed):
+def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed, horizon_years, annual_fee_pct,
+                  apply_tax):
     lang = lang or "fr"
     dark = bool(dark_mode)
+    apply_tax = bool(apply_tax and "on" in apply_tax)
     style_header, style_cell, style_data = layout.table_style_overrides(dark)
     table_styles = (style_header, style_cell, style_data)
 
@@ -1147,13 +1169,16 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
     empty_fig = go.Figure()
     empty_fig.update_layout(template="plotly_dark" if dark else "plotly")
     real_vs_sim_fig = empty_fig
+    projection_fig = empty_fig
+    corr_fig = empty_fig
 
     monthly_amounts = portfolio_engine.monthly_contribution_schedule(transactions)
+    monthly_pace = float(monthly_amounts.mean()) if not monthly_amounts.empty else 0.0
     real_pace_display = (
-        L(lang, "real_pace_label", amount=f"{monthly_amounts.mean():,.0f}".replace(",", " "))
+        L(lang, "real_pace_label", amount=f"{monthly_pace:,.0f}".replace(",", " "))
         if not monthly_amounts.empty else L(lang, "real_pace_no_data")
     )
-    if not monthly_amounts.empty and not holdings.empty and not current_values.empty:
+    if not holdings.empty and not current_values.empty:
         tickers = list(holdings["ticker"])
         try:
             aligned = get_aligned_returns_for_tickers(tickers, lookback_years or 10)
@@ -1161,19 +1186,41 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
             aligned = pd.DataFrame()
 
         if not aligned.empty and list(aligned.columns) == tickers:
+            if len(tickers) >= 2:
+                corr_matrix = aligned.corr()
+                labels = [_ticker_display_label(t) for t in corr_matrix.columns]
+                corr_matrix = corr_matrix.set_axis(labels, axis=0).set_axis(labels, axis=1)
+                corr_fig = make_correlation_heatmap(corr_matrix, lang=lang, dark=dark)
+
             weights_vec = current_values.reindex(tickers).fillna(0.0).to_numpy()
             total_w = weights_vec.sum()
             if total_w > 0:
                 weights_vec = weights_vec / total_w
-                n_months = len(monthly_amounts)
-                asset_returns = simulate_portfolio_asset_returns(
-                    aligned, n_months, n_sims or 500, seed or 42, method or "bootstrap",
+
+                # Poids actuels ("à l'instant t") figés pour toute la projection -- pas de
+                # rééquilibrage simulé dans le temps, même simplification que les pondérations
+                # suggérées de l'onglet 2.
+                n_months_forward = (horizon_years or 20) * 12
+                asset_returns_forward = simulate_portfolio_asset_returns(
+                    aligned, n_months_forward, n_sims or 500, seed or 42, method or "bootstrap",
                 )
-                portfolio_returns = asset_returns @ weights_vec
-                real_vs_sim_fig = build_real_vs_simulated_figure(
-                    portfolio_returns, monthly_amounts.values, monthly_amounts.index, real_series,
-                    annual_fee_pct=0.0, lower_pct=10, upper_pct=90, lang=lang, palette=PALETTE, dark=dark,
+                portfolio_returns_forward = asset_returns_forward @ weights_vec
+                projection_fig = build_real_portfolio_future_figure(
+                    portfolio_returns_forward, current_value_total, monthly_pace,
+                    annual_fee_pct=annual_fee_pct or 0.0, apply_tax=apply_tax, tax_rate=PEA_TAX_RATE,
+                    lower_pct=10, upper_pct=90, lang=lang, palette=PALETTE, dark=dark,
                 )
+
+                if not monthly_amounts.empty:
+                    n_months = len(monthly_amounts)
+                    asset_returns = simulate_portfolio_asset_returns(
+                        aligned, n_months, n_sims or 500, seed or 42, method or "bootstrap",
+                    )
+                    portfolio_returns = asset_returns @ weights_vec
+                    real_vs_sim_fig = build_real_vs_simulated_figure(
+                        portfolio_returns, monthly_amounts.values, monthly_amounts.index, real_series,
+                        annual_fee_pct=0.0, lower_pct=10, upper_pct=90, lang=lang, palette=PALETTE, dark=dark,
+                    )
         elif not real_series.empty:
             # Historique insuffisant pour aligner tous les tickers détenus (voir
             # get_aligned_returns_for_tickers) : on affiche quand même la courbe réelle seule,
@@ -1190,12 +1237,13 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
     weights_data = target_weights.to_dict("records")
     tx_data = transactions.to_dict("records")
     div_data = dividends.to_dict("records")
-    ticker_options = [{"label": t, "value": t} for t in portfolio_engine.known_tickers(
-        transactions, dividends, target_weights,
-    )]
+    ticker_options = [
+        {"label": _ticker_display_label(t), "value": t}
+        for t in portfolio_engine.known_tickers(transactions, dividends, target_weights)
+    ]
 
     return (
-        totals_cards, real_pace_display, real_vs_sim_fig,
+        totals_cards, real_pace_display, real_vs_sim_fig, projection_fig, corr_fig,
         rebalancing_data, rebalancing_columns, *table_styles, rebalancing_warning,
         weights_data, *table_styles,
         tx_data, *table_styles,

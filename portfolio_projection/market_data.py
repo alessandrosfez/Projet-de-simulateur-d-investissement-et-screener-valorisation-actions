@@ -162,6 +162,18 @@ def get_daily_price_history(ticker: str, start_date: str) -> pd.Series:
     return hist / price_scale
 
 
+@cached_ttl(86400)
+def get_ticker_name(ticker: str) -> str | None:
+    """Nom lisible d'un ticker quelconque (shortName, repli longName) -- sert à annoter dans
+    l'UI les tickers du portefeuille réel qui ne font pas partie de l'univers simulé
+    (constants.TICKERS), pour qu'un ticker peu parlant (ex: "PAASI.PA") reste identifiable sans
+    recherche externe (voir callbacks._ticker_display_label). Cache TTL plus long que
+    get_current_price : le nom d'un instrument change rarement, contrairement à son prix. None
+    si indisponible (ticker invalide/délisté)."""
+    info = _get_ticker_info(ticker)
+    return info.get("shortName") or info.get("longName")
+
+
 @cached_ttl(3600)
 def resolve_isin_to_ticker(isin: str) -> str | None:
     """Résout un code ISIN (ex: FR0011550193) en ticker Yahoo Finance (ex: ETZ.PA). Les exports de

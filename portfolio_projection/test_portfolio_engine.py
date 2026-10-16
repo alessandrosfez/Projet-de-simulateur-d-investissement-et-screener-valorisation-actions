@@ -315,3 +315,17 @@ def test_known_tickers_all_empty():
     empty_div = pd.DataFrame(columns=["ticker", "date", "amount_eur"])
     empty_weights = pd.DataFrame(columns=["ticker", "weight_pct"])
     assert m.known_tickers(empty_tx, empty_div, empty_weights) == []
+
+
+# ---------- ticker_display_label ----------
+
+def test_ticker_display_label_known_etf_adds_index_name():
+    assert m.ticker_display_label("CW8.PA") == "CW8.PA (MSCI World)"
+
+
+def test_ticker_display_label_known_indice_adds_index_name():
+    assert m.ticker_display_label("^GSPC") == "^GSPC (S&P 500)"
+
+
+def test_ticker_display_label_unknown_ticker_unchanged():
+    assert m.ticker_display_label("AAPL") == "AAPL"

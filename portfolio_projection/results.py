@@ -475,3 +475,31 @@ def build_real_vs_simulated_figure(portfolio_returns, monthly_amounts, monthly_d
         sim_dates=monthly_dates, sim_median=median, sim_p_low=p_low, sim_p_high=p_high,
         invested_capital=invested_capital, lang=lang, palette=palette, dark=dark,
     )
+
+
+def build_real_portfolio_future_figure(portfolio_returns, current_value_total, monthly_pace,
+                                        annual_fee_pct, apply_tax, tax_rate, lower_pct, upper_pct,
+                                        lang="fr", palette=None, dark=False):
+    """portfolio_returns : (n_sims, n_months), rendements simulés du portefeuille réel à sa
+    pondération ACTUELLE (même combinaison actifs/poids que build_real_vs_simulated_figure),
+    mais projetés à partir d'AUJOURD'HUI plutôt que rejoués sur l'historique passé : répond à
+    "où ça m'emmène si je continue comme ça ?", pas à "qu'aurait donné le marché sur ma période
+    passée ?". Échéancier : toute la valeur actuelle au mois 0 (convention déjà utilisée partout
+    ailleurs dans ce moteur pour un premier versement -- voir engine.returns_to_dca, la valeur ne
+    grossit pas encore pendant son propre mois d'entrée), puis le rythme réel moyen de versement
+    chaque mois suivant (portfolio_engine.monthly_contribution_schedule)."""
+    n_sims, n_months = portfolio_returns.shape
+    monthly_amounts = np.full(n_months, monthly_pace)
+    monthly_amounts[0] = current_value_total
+    net_returns = apply_fee(portfolio_returns, annual_fee_pct)
+    portfolio_value, invested_capital = returns_to_dca(net_returns, monthly_amounts)
+    portfolio_value = apply_social_tax(portfolio_value, invested_capital, apply_tax, tax_rate)
+    years_axis = np.arange(n_months) / 12
+    median = np.percentile(portfolio_value, 50, axis=0)
+    p_low = np.percentile(portfolio_value, lower_pct, axis=0)
+    p_high = np.percentile(portfolio_value, upper_pct, axis=0)
+    title = L(lang, "real_portfolio_projection_chart_title")
+    return make_band_figure(
+        [(L(lang, "real_portfolio_projection_trace"), median, p_low, p_high)], years_axis, title,
+        lang=lang, palette=palette, invested_capital=invested_capital, dark=dark,
+    )

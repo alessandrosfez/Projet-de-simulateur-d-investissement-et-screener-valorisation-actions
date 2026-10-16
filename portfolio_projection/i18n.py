@@ -44,6 +44,20 @@ TRANSLATIONS = {
         "real_vs_simulated_chart_title": "Valeur réelle vs ce qu'une simulation Monte Carlo aurait donné",
         "real_equity_trace": "Valeur réelle",
         "simulated_median_trace": "Médiane simulée",
+        "section_real_portfolio_projection": "Projection depuis aujourd'hui",
+        "real_portfolio_projection_hint": "Projette ta valeur actuelle et ta pondération actuelle vers l'avenir "
+                                           "(horizon et autres réglages dans le panneau latéral), en continuant au "
+                                           "même rythme de versement moyen que ci-dessus.",
+        "real_portfolio_projection_chart_title": "Projection du portefeuille réel (valeur et pondération actuelles)",
+        "real_portfolio_projection_trace": "Portefeuille réel projeté",
+        "real_portfolio_projection_no_data": "Pas assez d'historique pour projeter ta pondération actuelle "
+                                              "(ticker trop récent ou jamais coté sur la période choisie).",
+        "section_real_portfolio_corr": "Corrélations entre tes lignes",
+        "real_portfolio_corr_hint": "Corrélation des rendements mensuels historiques entre les tickers réellement "
+                                     "détenus (même lecture que l'onglet Portefeuille pondéré) — proche de 1 : les "
+                                     "lignes montent et baissent ensemble, la diversification apportée est limitée.",
+        "real_portfolio_corr_no_data": "Au moins 2 tickers avec un historique suffisant sont nécessaires pour "
+                                        "calculer une corrélation.",
         "section_rebalancing": "Plan de rééquilibrage",
         "rebalancing_hint": "Delta = montant à rediriger depuis tes PROCHAINS versements vers ce ticker pour te "
                              "rapprocher de ta pondération cible — jamais une suggestion de vente (une vente en "
@@ -384,6 +398,20 @@ TRANSLATIONS = {
         "real_vs_simulated_chart_title": "Real value vs. what a Monte Carlo simulation would have given",
         "real_equity_trace": "Real value",
         "simulated_median_trace": "Simulated median",
+        "section_real_portfolio_projection": "Projection from today",
+        "real_portfolio_projection_hint": "Projects your current value and current weighting forward (horizon "
+                                           "and other settings in the sidebar), continuing at the same average "
+                                           "contribution pace as above.",
+        "real_portfolio_projection_chart_title": "Real portfolio projection (current value and weighting)",
+        "real_portfolio_projection_trace": "Projected real portfolio",
+        "real_portfolio_projection_no_data": "Not enough history to project your current weighting (a ticker is "
+                                              "too recent or never traded over the chosen period).",
+        "section_real_portfolio_corr": "Correlation between your holdings",
+        "real_portfolio_corr_hint": "Correlation of historical monthly returns across the tickers you actually "
+                                     "hold (same reading as the Weighted portfolio tab) — close to 1: the holdings "
+                                     "move up and down together, limited diversification benefit.",
+        "real_portfolio_corr_no_data": "At least 2 tickers with enough history are needed to compute a "
+                                        "correlation.",
         "section_rebalancing": "Rebalancing plan",
         "rebalancing_hint": "Delta = amount to redirect from your NEXT contributions toward this ticker to get "
                              "closer to your target weight — never a suggestion to sell (a PEA sale isn't tax-neutral).",
