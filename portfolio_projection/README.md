@@ -9,11 +9,9 @@ scénarios possibles (percentiles), pas un chiffre garanti. Projet frère :
 [`../stock_valuation`](../stock_valuation) (valorisation d'actions
 individuelles), indépendant de celui-ci.
 
-Pour **suivre et visualiser un PEA réellement constitué** (positions, apports
-et valeur effective dans le temps) plutôt que projeter un plan d'épargne
-hypothétique, voir le projet `invest_db` (base SQLite/SQLAlchemy, hors de ce
-dépôt) : mieux adapté à ce besoin que l'outil ci-dessous, qui reste un
-simulateur forward-looking.
+Un troisième onglet, **Mon portefeuille réel**, suit le PEA effectivement
+constitué (achats, dividendes, valeur dans le temps) et le compare à ce
+qu'une simulation aurait donné.
 
 ## Fonctionnalités
 
@@ -21,7 +19,7 @@ simulateur forward-looking.
   percentiles) ou Historique (croissance brute réellement observée, base 100,
   sans apports/frais/fiscalité — un vrai "qu'a fait le marché ?", avec ses
   propres statistiques : rendement annualisé, volatilité, max drawdown).
-- **Deux onglets** : par indice (chaque indice simulé isolément) ou
+- **Deux onglets de simulation** : par indice (chaque indice simulé isolément) ou
   portefeuille pondéré (plusieurs allocations comparées avec les mêmes
   tirages aléatoires, rééquilibrage mensuel).
 - **Simulation** (mode Prévision) paramétrique (loi de Student, queues
@@ -36,6 +34,11 @@ simulateur forward-looking.
   choc de marché optionnel (ampleur, durée, timing aléatoire ou fixe).
 - **Mode objectif** : calcule l'apport mensuel nécessaire pour atteindre un
   capital cible.
+- **Portefeuille réel** : saisie des achats et dividendes (ou import CSV,
+  dont l'export Trade Republic), courbe de valeur reconstruite jour par jour,
+  totaux (capital investi, frais, dividendes, P&L), plan de rééquilibrage vers des
+  pondérations cibles, graphique « réel vs simulé », et reprise du rythme
+  d'apport réel comme paramètre de simulation. Stockage SQLite local.
 - Infobulles (ⓘ) sur les concepts clés (Sharpe, drawdown, méthode de
   simulation...), interface FR/EN, export/import de configuration en JSON,
   cache disque des téléchargements (`yfinance`) pour limiter les appels
@@ -96,21 +99,26 @@ L'application est servie sur [http://localhost:8050](http://localhost:8050)
 - `market_data.py` : appels yfinance (historique d'indices/ETF) et cache disque.
 - `engine.py` : moteur de calcul pur (simulation Monte Carlo, DCA, frais,
   fiscalité, poids optimaux, mode objectif). Aucune dépendance Dash/réseau.
+- `portfolio_db.py` : persistance SQLite du portefeuille réel (transactions,
+  dividendes, pondérations cibles).
+- `portfolio_engine.py` : moteur pur du portefeuille réel (positions, courbe
+  de valeur, rééquilibrage, totaux, validation des imports CSV).
 - `charts.py` : constructeurs de graphiques Plotly.
 - `results.py` : agrège les résultats du moteur en métriques/figures affichables.
-- `layout.py` : construction de la sidebar et des deux onglets.
+- `layout.py` : construction de la sidebar et des trois onglets.
 - `app_instance.py` / `callbacks.py` / `app.py` : instance Dash, callbacks, point d'entrée.
 
 ## Tests
 
 ```bash
 pip install -r requirements-dev.txt
-pytest test_engine.py -v
+pytest -v
 ```
 
 Les tests couvrent le moteur de calcul pur (frais, fiscalité, bootstrap,
-DCA, simulation Monte Carlo, poids optimaux, mode objectif), pas la couche
-interface, ni les appels réseau.
+DCA, simulation Monte Carlo, poids optimaux, mode objectif), le moteur et la
+base du portefeuille réel (SQLite en mémoire) et le cache de données de
+marché, pas la couche interface ni les appels réseau.
 
 ## Docker
 
