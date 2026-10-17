@@ -1,0 +1,53 @@
+/* Surcharges pour le mode sombre (activées via la classe "dark-mode" sur <body>,
+   posée par le clientside_callback de dark-mode-switch dans app.py).
+
+   dash_table.DataTable et dcc.Dropdown ont leurs propres couleurs, non couvertes
+   par le thème Bootstrap DARKLY :
+   - DataTable : géré côté Python via les props style_header/style_cell/style_data
+     (voir layout.table_style_overrides), plus fiable que du CSS externe car ce
+     composant réinjecte ses styles par défaut au montage.
+   - dcc.Dropdown (et les autres composants dcc récents : Slider, Tabs...)
+     s'appuient sur un jeu de variables CSS propre à Dash (--Dash-*), distinct de
+     Bootstrap et sans variante sombre native. Les redéfinir ici suffit : tous les
+     composants qui les utilisent (via var(--Dash-Text-Strong) etc.) s'adaptent
+     automatiquement, y compris le popup du Dropdown qui est rendu en dehors de la
+     zone habituelle de l'app mais reste un enfant de <body>. */
+
+body.dark-mode {
+    --Dash-Text-Primary: rgba(255, 255, 255, 0.87);
+    --Dash-Text-Strong: rgba(255, 255, 255, 0.92);
+    --Dash-Text-Weak: rgba(255, 255, 255, 0.65);
+    --Dash-Text-Disabled: rgba(255, 255, 255, 0.4);
+    --Dash-Fill-Inverse-Strong: #2b2b2b;
+    --Dash-Fill-Interactive-Weak: rgba(255, 255, 255, 0.06);
+    --Dash-Fill-Primary-Hover: rgba(255, 255, 255, 0.06);
+    --Dash-Fill-Primary-Active: rgba(255, 255, 255, 0.1);
+    --Dash-Fill-Disabled: rgba(255, 255, 255, 0.08);
+    --Dash-Stroke-Weak: rgba(255, 255, 255, 0.12);
+    --Dash-Stroke-Strong: rgba(255, 255, 255, 0.35);
+}
+
+/* Bulle de tooltip_header (survol des en-têtes de colonnes DataTable, ex: "Sharpe",
+   "Max drawdown") : fond clair #f6f6f6 codé en dur par dash_table dans une feuille de
+   style qu'il injecte lui-même, sans couleur de texte propre (héritée de l'ancêtre,
+   donc blanche en mode sombre) : texte blanc sur fond clair, illisible. Ces sélecteurs
+   sont plus spécifiques que ceux de dash_table, donc gagnent sans !important. */
+body.dark-mode .dash-tooltip {
+    border-color: #444;
+}
+body.dark-mode .dash-tooltip .dash-table-tooltip {
+    background-color: #2b2b2b;
+    color: #e9ecef;
+}
+body.dark-mode .dash-tooltip[data-attr-anchor='top']:after {
+    border-bottom-color: #2b2b2b;
+}
+body.dark-mode .dash-tooltip[data-attr-anchor='top']:before {
+    border-bottom-color: #444;
+}
+body.dark-mode .dash-tooltip[data-attr-anchor='bottom']:after {
+    border-top-color: #2b2b2b;
+}
+body.dark-mode .dash-tooltip[data-attr-anchor='bottom']:before {
+    border-top-color: #444;
+}
