@@ -9,7 +9,10 @@ import pandas as pd
 from dash import dash_table, dcc, html
 
 from constants import CAC40_TICKERS
-from engine import FIELD_SCHEMA, NormalizedStatements
+from engine import (
+    ALTMAN_MODELS, BENEISH_COEFFICIENTS, BENEISH_INDICES, BENEISH_REFERENCE_MEANS, BENEISH_THRESHOLD, FIELD_SCHEMA,
+    PIOTROSKI_CRITERIA, NormalizedStatements, beneish_verdict, beneish_m_score_from_indices,
+)
 from i18n import L
 
 GRAPH_CONFIG = {
@@ -178,10 +181,16 @@ def format_ratio(value: float | None, kind: str, lang: str, signed: bool = False
 
 
 def _component_label(key: str, lang: str) -> str:
-    """Nom lisible d'une composante : poste des états financiers, ou ratio (le cycle de conversion se
-    compose de DSO, DIO et DPO)."""
+    """Nom lisible d'une composante : poste des états financiers (éventuellement suffixé _t / _p pour
+    l'exercice t ou t-1 des scores), ou ratio (le cycle de conversion se compose de DSO, DIO et DPO)."""
+    suffix = ""
+    for marker, suffix_key in (("_t", "suffix_t"), ("_p", "suffix_p")):
+        if key.endswith(marker) and L(lang, f"field_{key[:-2]}") != f"field_{key[:-2]}":
+            key, suffix = key[:-2], " " + L(lang, suffix_key)
+            break
     field_label = L(lang, f"field_{key}")
-    return field_label if field_label != f"field_{key}" else L(lang, f"ratio_{key}")
+    label = field_label if field_label != f"field_{key}" else L(lang, f"ratio_{key}")
+    return label + suffix
 
 
 def ratio_tooltip(result: dict, lang: str) -> str:
@@ -272,6 +281,264 @@ def bridge_controls(years: list, lang: str):
         ),
         dcc.Graph(id="bridge-graph", config=GRAPH_CONFIG),
         html.Div(id="bridge-notes", className="text-muted", style={"fontSize": "0.8rem"}),
+    ])
+
+
+# ============================================================
+# Scores d'alerte : tableaux détaillés
+# ============================================================
+
+def detail_table(table_id: str, first_column: str, column_names: list[str], rows: list[dict], dark: bool):
+    """Tableau générique des scores : rows = [{"label", "help", "cells": [{"text", "tooltip", "state"}]}].
+    state colore la cellule : "good" (vert), "warn" (ambre), "bad" (rouge), "na" (gris), "flagged"
+    (italique, repli sur un poste voisin), "ok" (neutre). Même technique de colonnes cachées que
+    statement_table pour le style conditionnel."""
+    column_ids = [f"c{i}" for i in range(len(column_names))]
+    columns = [{"name": first_column, "id": "label"}] + [
+        {"name": name, "id": column_id} for name, column_id in zip(column_names, column_ids)
+    ]
+    data, tooltips = [], []
+    for row in rows:
+        record = {"label": row["label"]}
+        tooltip = {"label": {"value": row.get("help", ""), "type": "markdown"}}
+        for column_id, cell in zip(column_ids, row["cells"]):
+            record[column_id] = cell["text"]
+            record[f"_state_{column_id}"] = cell.get("state", "ok")
+            if cell.get("tooltip"):
+                tooltip[column_id] = {"value": cell["tooltip"], "type": "markdown"}
+        data.append(record)
+        tooltips.append(tooltip)
+
+    style_header, style_cell, style_data = table_style_overrides(dark)
+    if dark:
+        colors = {"good": ("#173a24", "#8fd19e"), "warn": ("#3a2f12", "#e0c46c"), "bad": ("#3a1616", "#e88a8a")}
+        muted = "#8b93a7"
+    else:
+        colors = {"good": ("#d4edda", "#155724"), "warn": ("#fff3cd", "#856404"), "bad": ("#f8d7da", "#721c24")}
+        muted = "#8a8f99"
+    conditional = []
+    for column_id in column_ids:
+        for state, (background, foreground) in colors.items():
+            conditional.append({"if": {"column_id": column_id, "filter_query": f"{{_state_{column_id}}} = {state}"},
+                                "backgroundColor": background, "color": foreground})
+        conditional.append({"if": {"column_id": column_id, "filter_query": f"{{_state_{column_id}}} = na"}, "color": muted})
+        conditional.append({"if": {"column_id": column_id, "filter_query": f"{{_state_{column_id}}} = flagged"},
+                            "fontStyle": "italic"})
+    return dash_table.DataTable(
+        id=table_id, columns=columns, data=data, tooltip_data=tooltips, tooltip_delay=0, tooltip_duration=None,
+        style_header=style_header, style_cell=style_cell, style_data=style_data,
+        style_cell_conditional=[{"if": {"column_id": "label"}, "textAlign": "left", "minWidth": "260px"}],
+        style_data_conditional=conditional, style_table={"overflowX": "auto"},
+    )
+
+
+def _na_cell(tooltip: str, lang: str) -> dict:
+    return {"text": L(lang, "na"), "tooltip": tooltip, "state": "na"}
+
+
+def _reason_text(result: dict, lang: str) -> str:
+    if result.get("reason") == "missing_inputs":
+        return L(lang, "reason_missing_inputs", missing=", ".join(_component_label(k, lang) for k in result["missing"]))
+    if result.get("reason") == "non_positive_base":
+        return L(lang, "reason_non_positive_base")
+    return ""
+
+
+def pair_label(pair: tuple, lang: str) -> str:
+    return L(lang, "col_pair", t=format_year(pair[0], lang), p=format_year(pair[1], lang))
+
+
+def beneish_table(results: list[dict], lang: str, dark: bool):
+    """Une colonne par couple (t, t-1), du plus récent au plus ancien, puis les moyennes de référence de
+    Beneish (1999, tableau 2). Infobulle de chaque indice : formule remplie avec les montants des deux
+    exercices, valeur, contribution au score (coefficient x indice) et mentions."""
+    columns = [pair_label(r["pair"], lang) for r in results] + [
+        L(lang, "col_reference_manipulators"), L(lang, "col_reference_non_manipulators"),
+    ]
+    rows = []
+    for index in BENEISH_INDICES:
+        cells = []
+        for result in results:
+            item = result["indices"][index]
+            formula = L(lang, f"formula_beneish_{index}", **{k: format_amount(v, lang) for k, v in item["components"].items()})
+            if item["value"] is None:
+                cells.append(_na_cell(f"{formula}\n\n{_reason_text(item, lang)}", lang))
+                continue
+            lines = [f"{formula} = {item['value']:.3f}", L(
+                lang, "contribution_text", coefficient=f"{BENEISH_COEFFICIENTS[index]:+.3f}", value=f"{item['value']:.3f}",
+                contribution=f"{result['contributions'][index]:+.3f}",
+            )]
+            lines += [L(lang, f"flag_{flag}") for flag in item["flags"]]
+            cells.append({"text": f"{item['value']:.3f}", "tooltip": "\n\n".join(lines),
+                          "state": "flagged" if item["flags"] else "ok"})
+        cells += [{"text": f"{BENEISH_REFERENCE_MEANS[group][index]:.3f}", "state": "ok"}
+                  for group in ("manipulators", "non_manipulators")]
+        rows.append({"label": L(lang, f"beneish_{index}"), "help": L(lang, f"beneish_{index}_help"), "cells": cells})
+
+    m_cells = []
+    for result in results:
+        score = result["m_score"]
+        if score["value"] is None:
+            missing = ", ".join(L(lang, f"beneish_{i}") for i in score["missing"])
+            m_cells.append(_na_cell(L(lang, "beneish_official_na", pair=pair_label(result["pair"], lang), missing=missing), lang))
+        else:
+            m_cells.append({"text": f"{score['value']:.2f}", "state": "bad" if score["value"] > BENEISH_THRESHOLD else "good",
+                            "tooltip": L(lang, f"beneish_verdict_{score['verdict']}", pair=pair_label(result["pair"], lang),
+                                         value=f"{score['value']:.2f}")})
+    reference_scores = []
+    for group in ("manipulators", "non_manipulators"):
+        value = beneish_m_score_from_indices(BENEISH_REFERENCE_MEANS[group])
+        reference_scores.append({"text": f"{value:.2f}", "state": "bad" if value > BENEISH_THRESHOLD else "good"})
+    rows.append({"label": L(lang, "beneish_m_score"), "help": L(lang, "beneish_help"), "cells": m_cells + reference_scores})
+
+    if any(r["m_score_indicative"] for r in results):
+        indicative_cells = []
+        for result in results:
+            indicative = result["m_score_indicative"]
+            if indicative is None:
+                indicative_cells.append({"text": "—", "state": "ok"})
+                continue
+            neutralized = ", ".join(L(lang, f"beneish_{i}") for i in indicative["neutralized"])
+            indicative_cells.append({
+                "text": f"{indicative['value']:.2f}", "state": "warn",
+                "tooltip": L(lang, "beneish_indicative_note", neutralized=neutralized),
+            })
+        indicative_cells += [{"text": "—", "state": "ok"}, {"text": "—", "state": "ok"}]
+        rows.append({"label": L(lang, "beneish_m_score_indicative"), "help": L(lang, "beneish_indicative_note",
+                                                                              neutralized="…"), "cells": indicative_cells})
+    return detail_table("table-beneish", L(lang, "col_metric"), columns, rows, dark)
+
+
+def beneish_summary(result: dict, lang: str):
+    """Phrase de conclusion sur le couple le plus récent : verdict du M-score officiel, ou pourquoi il est
+    n.d. et ce que donne la variante indicative."""
+    pair = pair_label(result["pair"], lang)
+    score = result["m_score"]
+    if score["value"] is not None:
+        color = "warning" if score["verdict"] == "manipulation_risk" else "success"
+        return dbc.Alert(L(lang, f"beneish_verdict_{score['verdict']}", pair=pair, value=f"{score['value']:.2f}"),
+                         color=color, className="py-2 mt-2")
+    missing = ", ".join(L(lang, f"beneish_{i}") for i in score["missing"])
+    children = [html.Div(L(lang, "beneish_official_na", pair=pair, missing=missing))]
+    indicative = result["m_score_indicative"]
+    if indicative is not None:
+        neutralized = ", ".join(L(lang, f"beneish_{i}") for i in indicative["neutralized"])
+        verdict = L(lang, f"beneish_verdict_{beneish_verdict(indicative['value'])}", pair=pair,
+                    value=f"{indicative['value']:.2f}")
+        children += [html.Div(L(lang, "beneish_indicative_note", neutralized=neutralized)), html.Div(verdict)]
+    return dbc.Alert(children, color="secondary", className="py-2 mt-2")
+
+
+ZONE_STATES = {"safe": "good", "grey": "warn", "distress": "bad"}
+
+
+def altman_table(results: list[dict], lang: str, dark: bool):
+    """Une colonne par exercice (du plus récent au plus ancien) : X1 à X5, Z, zone. Infobulle de chaque
+    ratio : numérateur ÷ dénominateur = valeur, puis contribution (coefficient x ratio)."""
+    model = results[0]["model"]
+    coefficients = ALTMAN_MODELS[model]["coefficients"]
+    columns = [format_year(r["year"], lang) for r in results]
+    rows = []
+    for x, coefficient in coefficients.items():
+        cells = []
+        for result in results:
+            component = result["components"][x]
+            formula = L(
+                lang, "altman_ratio_formula",
+                numerator_label=_component_label(component["numerator_key"], lang),
+                numerator=format_amount(component["numerator"], lang),
+                denominator_label=_component_label(component["denominator_key"], lang),
+                denominator=format_amount(component["denominator"], lang),
+                value=f"{component['value']:.3f}" if component["value"] is not None else L(lang, "na"),
+            )
+            if component["value"] is None:
+                text = formula
+                if component["numerator_key"] == "market_value_of_equity" and component["numerator"] is None:
+                    text += "\n\n" + L(lang, "altman_mve_unavailable")
+                cells.append(_na_cell(text, lang))
+                continue
+            contribution = L(lang, "contribution_text", coefficient=f"{coefficient:g}", value=f"{component['value']:.3f}",
+                             contribution=f"{result['contributions'][x]:+.3f}")
+            cells.append({"text": f"{component['value']:.3f}", "tooltip": f"{formula}\n\n{contribution}", "state": "ok"})
+        rows.append({"label": L(lang, f"altman_{x}"), "help": L(lang, f"altman_{x}_help"), "cells": cells})
+    z_cells, zone_cells = [], []
+    for result in results:
+        if result["value"] is None:
+            missing = ", ".join(_component_label(k, lang) for k in result["missing"])
+            z_cells.append(_na_cell(L(lang, "reason_missing_inputs", missing=missing), lang))
+            zone_cells.append(_na_cell("", lang))
+        else:
+            state = ZONE_STATES[result["zone"]]
+            flags = "\n\n".join(L(lang, f"flag_{flag}") for flag in result["flags"])
+            z_cells.append({"text": f"{result['value']:.2f}", "state": state, "tooltip": flags or None})
+            zone_cells.append({"text": L(lang, f"zone_{result['zone']}"), "state": state})
+    rows.append({"label": L(lang, "altman_z"), "help": L(lang, "altman_help"), "cells": z_cells})
+    rows.append({"label": L(lang, "altman_zone"), "help": L(lang, "altman_help"), "cells": zone_cells})
+    return detail_table("table-altman", L(lang, "col_metric"), columns, rows, dark)
+
+
+# Unité d'affichage des détails des critères de Piotroski.
+PIOTROSKI_DETAIL_KINDS = {
+    "roa_t": "percent", "roa_p": "percent", "leverage_t": "percent", "leverage_p": "percent",
+    "gross_margin_t": "percent", "gross_margin_p": "percent", "current_ratio_t": "multiple",
+    "current_ratio_p": "multiple", "turnover_t": "multiple", "turnover_p": "multiple",
+    "cfo_t": "amount", "net_income_t": "amount", "shares_t": "amount", "shares_p": "amount",
+}
+
+
+def _format_detail(key: str, value: float | None, lang: str) -> str:
+    kind = PIOTROSKI_DETAIL_KINDS[key]
+    if kind == "amount":
+        return format_amount(value, lang)
+    return format_ratio(value, kind, lang)
+
+
+def piotroski_table(results: list[dict], lang: str, dark: bool):
+    """Une colonne par exercice comparé à son précédent : 1 / 0 / n.d. par critère, puis le F-score
+    (« 6 / 8 » quand un critère n'est pas calculable). Infobulle : valeurs comparées."""
+    columns = [pair_label((r["year"], r["prior_year"]), lang) for r in results]
+    rows = []
+    for criterion in PIOTROSKI_CRITERIA:
+        cells = []
+        for result in results:
+            item = result["criteria"][criterion]
+            details = " · ".join(f"{L(lang, f'piotroski_detail_{k}')} {_format_detail(k, v, lang)}"
+                                 for k, v in item["details"].items())
+            if item["value"] is None:
+                cells.append(_na_cell(details, lang))
+            else:
+                cells.append({"text": str(item["value"]), "tooltip": details, "state": "good" if item["value"] else "bad"})
+        rows.append({"label": L(lang, f"piotroski_{criterion}"), "help": L(lang, f"piotroski_{criterion}_help"),
+                     "cells": cells})
+    score_cells = []
+    for result in results:
+        if result["score"] is None:
+            score_cells.append(_na_cell("", lang))
+            continue
+        partial = result["n_available"] < result["n_criteria"]
+        score_cells.append({
+            "text": L(lang, "piotroski_score_text", score=result["score"], n=result["n_available"]),
+            "tooltip": L(lang, "piotroski_partial", n=result["n_available"]) if partial else None,
+            "state": "flagged" if partial else ("good" if result["score"] >= 8 else "bad" if result["score"] <= 2 else "ok"),
+        })
+    rows.append({"label": L(lang, "piotroski_score"), "help": L(lang, "piotroski_help"), "cells": score_cells})
+    return detail_table("table-piotroski", L(lang, "col_metric"), columns, rows, dark)
+
+
+def altman_controls(lang: str):
+    """Bascule de modèle Altman (automatique par défaut) et emplacement du tableau, rempli par
+    callbacks.update_altman. persistence : le choix survit au changement de langue, qui recrée ce
+    composant."""
+    return html.Div([
+        dbc.Label(L(lang, "altman_model_label"), className="mb-0"),
+        dcc.RadioItems(
+            id="altman-model-radio",
+            options=[{"label": f" {L(lang, f'altman_model_{code}')}", "value": code}
+                     for code in ("auto", "original", "z_double_prime")],
+            value="auto", inline=True, persistence=True, persistence_type="session", className="mb-2",
+            inputStyle={"marginLeft": "0.8rem"},
+        ),
+        html.Div(id="altman-container"),
     ])
 
 

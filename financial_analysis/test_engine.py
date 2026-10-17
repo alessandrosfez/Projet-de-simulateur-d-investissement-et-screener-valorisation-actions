@@ -191,7 +191,7 @@ def test_available_count():
 def test_banks_are_detected_and_analyses_disabled(industry):
     regime = m.detect_sector_regime("Financial Services", industry)
     assert regime["regime"] == "bank"
-    assert regime["applicable"] == {"beneish": False, "altman": False, "working_capital": False, "earnings_quality": False}
+    assert regime["applicable"] == {"beneish": False, "altman": False, "piotroski": False, "working_capital": False, "earnings_quality": False}
 
 
 @pytest.mark.parametrize("industry", ["Insurance - Diversified", "Insurance - Life", "Insurance - Reinsurance"])
@@ -216,7 +216,7 @@ def test_industrial_company_has_everything_applicable():
     regime = m.detect_sector_regime("Basic Materials", "Specialty Chemicals")
     assert regime == {
         "regime": "general", "caution": None,
-        "applicable": {"beneish": True, "altman": True, "working_capital": True, "earnings_quality": True},
+        "applicable": {"beneish": True, "altman": True, "piotroski": True, "working_capital": True, "earnings_quality": True},
         "sector": "Basic Materials", "industry": "Specialty Chemicals",
     }
 

@@ -28,11 +28,16 @@ Yahoo Finance sans retraitement par un analyste.
   publié.
 - **BFR en jours** : DSO, DIO, DPO et cycle de conversion de trésorerie,
   leur évolution sur la période, et un graphique.
+- **Scores d'alerte** : Beneish M-score (8 indices, seuil −1,78, à côté des
+  moyennes de l'échantillon de Beneish), Altman Z-score (Z d'origine pour
+  les industriels, Z'' pour les autres, choix automatique et bascule
+  manuelle, zones sûre / grise / détresse) et Piotroski F-score (9 critères
+  détaillés). Chaque indice, ratio ou critère affiche le calcul complet.
 - **Devises** : cours et capitalisation ramenés dans la devise des comptes
   (cours en pence à Londres, double cotation), avec le détail du calcul.
-- **Banques et assureurs détectés** : Beneish, Altman et l'analyse du BFR
-  y sont déclarés non applicables, avec un message clair plutôt que des
-  chiffres absurdes.
+- **Banques et assureurs détectés** : Beneish, Altman, Piotroski, la
+  qualité des résultats et l'analyse du BFR y sont déclarés non
+  applicables, avec un message clair plutôt que des chiffres absurdes.
 - Interface FR/EN, thèmes clair et sombre, cache disque des appels
   yfinance.
 
@@ -111,6 +116,53 @@ Yahoo Finance sans retraitement par un analyste.
 - **Banques et assureurs** : la conversion en cash et les accruals y sont
   aussi non applicables, leur CFO étant dominé par les flux de dépôts et de
   crédits (des dizaines de milliards d'une année sur l'autre).
+- **Sources des scores, vérifiées sur pièce** : coefficients et moyennes de
+  Beneish lus dans l'article d'origine (version de travail de juin 1999,
+  tableaux 2 et 3), coefficients d'Altman (1968, X5 à 0,999, souvent
+  arrondi à 1,0) et Z'' (Altman 1995, repris par Altman et al. 2017),
+  critères de Piotroski (2000). Les tests reproduisent un exemple chiffré
+  publié pour chaque score (sources citées dans `test_scores.py`).
+- **Beneish : couples d'exercices et données manquantes** : les 8 indices
+  comparent t à t-1, pour chaque couple consécutif disponible (3 couples
+  avec 4 exercices), le plus récent étant résumé. Les coefficients ont été
+  estimés conjointement : dès qu'un indice manque, le M-score officiel est
+  n.d. Une variante indicative remplace alors les indices manquants par 1
+  (aucune variation), ce que faisait Beneish lui-même pour DEPI et SGAI
+  quand COMPUSTAT ne fournissait pas la donnée ; TATA, un niveau sans
+  valeur neutre, n'est jamais neutralisé. Le SGAI manque souvent pour les
+  sociétés européennes, qui ne publient pas de SG&A séparé (Air Liquide).
+- **Beneish : écarts assumés avec l'article** : TATA est calculé par les
+  flux de trésorerie, (résultat net − CFO) / actif, plutôt que par les
+  variations de postes du bilan, méthode moins sujette aux erreurs de
+  mesure (Hribar et Collins, 2002). La dette à long terme du LVGI inclut
+  les dettes locatives non courantes (IFRS 16), les courantes étant déjà
+  dans le passif courant. L'AQI suit l'article : 1 − (actif courant +
+  immobilisations corporelles) / actif total, sans les titres de placement
+  qu'ajoutent certaines sources secondaires.
+- **Altman : choix du modèle** : le Z d'origine a été calibré sur des
+  industriels cotés de 1946-1965. Il est choisi automatiquement pour les
+  secteurs Yahoo Industrials et Basic Materials, et le Z'' (fonds propres
+  comptables, sans le ratio CA / actif, très variable selon les secteurs)
+  pour les autres ; une bascule manuelle reste possible. Score de niveau,
+  calculé pour chaque exercice. Pour le Z d'origine, la capitalisation de
+  chaque exercice est historique : cours de clôture du jour de clôture
+  (ou du dernier jour coté avant), nombre d'actions du bilan, change du
+  même jour.
+- **Piotroski : fidèle à l'article** : ROA et rotation de l'actif rapportés
+  à l'actif d'ouverture, levier à l'actif moyen, dette à long terme hors
+  dettes locatives. Il faut donc trois bilans pour les critères de
+  variation : avec 4 exercices, le F-score est complet pour les deux
+  derniers. Un critère non calculable est n.d., et le score est affiché
+  sur les seuls critères calculables (« 4 / 6 »), à ne pas comparer tel
+  quel aux seuils sur 9. Le critère « pas d'augmentation de capital » est
+  jugé sur le nombre d'actions, ce qui compte les attributions d'actions
+  gratuites comme une émission (faux positif régulier chez Air Liquide).
+- **Limites communes** : ces scores ont été calibrés sur des sociétés
+  américaines, à d'autres époques (1946-1965 pour Altman, 1982-1992 pour
+  Beneish, 1976-1996 pour Piotroski) et sous d'autres normes comptables
+  que les IFRS. Les seuils n'ont jamais été réestimés sur des sociétés
+  européennes récentes : ce sont des signaux à creuser, pas des verdicts.
+  Ils sont non applicables aux banques et assureurs.
 - **Échecs réseau non mis en cache** : les couches cachées de
   `market_data.py` lèvent une exception quand yfinance ne renvoie rien,
   pour qu'un échec ponctuel ne reste pas 24 h en cache à la place des
@@ -141,7 +193,8 @@ L'application est servie sur [http://localhost:8052](http://localhost:8052)
   taux de change) et cache disque. Ne transforme rien.
 - `engine.py` : moteur de calcul pur (normalisation, classement sectoriel,
   conversion des données de marché, qualité des résultats, pont résultat →
-  CFO, BFR en jours). Aucune dépendance Dash, réseau ou disque.
+  CFO, BFR en jours, scores de Beneish, Altman et Piotroski). Aucune
+  dépendance Dash, réseau ou disque.
 - `charts.py` : constructeurs de graphiques Plotly (cascade, jours de BFR).
 - `layout.py` : construction de l'écran et mise en forme (montants,
   ratios et détail de leur calcul, provenance, tableaux).
@@ -160,7 +213,9 @@ Les tests couvrent le moteur pur (normalisation sur des DataFrames
 synthétiques, postes manquants, identités comptables, classement
 sectoriel, devises, ratios de qualité des résultats et de BFR sur des cas
 calculés à la main) et `market_data.py` avec yfinance remplacé par des
-doublures : aucun appel réseau. `test_i18n.py` vérifie que chaque clé de
+doublures : aucun appel réseau. `test_scores.py` reproduit un exemple
+chiffré publié pour chaque score (source citée au-dessus de chaque test)
+et couvre les cas limites (donnée manquante, base nulle, seuils). `test_i18n.py` vérifie que chaque clé de
 traduction construite dynamiquement existe en FR et en EN.
 
 ## Docker

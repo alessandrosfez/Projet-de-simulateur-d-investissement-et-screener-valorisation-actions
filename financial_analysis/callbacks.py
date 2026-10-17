@@ -14,12 +14,13 @@ from app_instance import app
 from charts import empty_figure_with_message, make_bridge_waterfall, make_working_capital_days_chart
 from constants import TYPICAL_YFINANCE_YEARS
 from engine import (
-    NormalizedStatements, cash_conversion, detect_sector_regime, market_values_in_reporting_currency, metric_trend,
-    minor_unit_consistency, net_income_to_cfo_bridge, normalize_statements, sloan_accruals, split_currency_unit,
-    working_capital_days,
+    NormalizedStatements, altman_default_model, altman_z_score, beneish_m_score, cash_conversion, consecutive_pairs,
+    detect_sector_regime, market_value_of_equity, market_values_in_reporting_currency, metric_trend,
+    minor_unit_consistency, net_income_to_cfo_bridge, normalize_statements, piotroski_f_score, price_on_or_before,
+    sloan_accruals, split_currency_unit, working_capital_days,
 )
 from i18n import L, PALETTE, PALETTE_CODES, PALETTE_NAMES, PALETTES
-from market_data import get_annual_statements, get_company_profile, get_fx_rate
+from market_data import fx_symbol, get_annual_statements, get_company_profile, get_daily_closes, get_fx_rate
 
 EARNINGS_QUALITY_METRICS = ("cfo_to_net_income", "fcf_to_net_income", "sloan_accruals")
 WORKING_CAPITAL_METRICS = ("dso", "dio", "dpo", "ccc")
@@ -140,6 +141,86 @@ def _working_capital_section(normalized: NormalizedStatements, regime: dict, lan
     ]
 
 
+def _score_heading(text_key: str, help_key: str, lang: str):
+    return html.H6([L(lang, text_key)] + layout.info_tooltip(f"{text_key}-info", L(lang, help_key)), className="mt-3")
+
+
+def _scores_section(normalized: NormalizedStatements, regime: dict, lang: str, dark: bool) -> list:
+    section = [
+        html.H5(L(lang, "section_scores"), className="section-title"),
+        html.Small(L(lang, "scores_caveat"), className="text-muted d-block mb-2"),
+        _score_heading("section_beneish", "beneish_help", lang),
+    ]
+    applicable = regime["applicable"]
+    pairs = consecutive_pairs(normalized)
+    if not applicable["beneish"]:
+        section.append(_not_applicable(regime, lang))
+    elif pairs:
+        results = [beneish_m_score(normalized, year, prior) for year, prior in pairs]
+        section += [layout.beneish_table(results, lang, dark), layout.beneish_summary(results[0], lang)]
+
+    section.append(_score_heading("section_altman", "altman_help", lang))
+    section.append(layout.altman_controls(lang) if applicable["altman"] else _not_applicable(regime, lang))
+
+    section.append(_score_heading("section_piotroski", "piotroski_help", lang))
+    if not applicable["piotroski"]:
+        section.append(_not_applicable(regime, lang))
+    else:
+        results = [piotroski_f_score(normalized, year) for year, _prior in pairs]
+        results = [r for r in results if r["n_available"] > 0]
+        if results:
+            section.append(layout.piotroski_table(results, lang, dark))
+    return section
+
+
+def _market_values_at_year_end(ticker: str, normalized: NormalizedStatements, profile: dict) -> dict:
+    """Capitalisation à chaque date de clôture, dans la devise des comptes : cours de clôture de ce
+    jour-là (ou du dernier jour coté avant) x nombre d'actions du bilan x taux de change de ce même
+    jour. None pour un exercice si l'un des trois manque."""
+    quote_major, divisor = split_currency_unit(profile["quote_currency"])
+    reporting = profile["reporting_currency"]
+    if quote_major is None or not reporting or not normalized.years:
+        return {year: None for year in normalized.years}
+    start = (min(normalized.years) - pd.Timedelta(days=20)).strftime("%Y-%m-%d")
+    closes = get_daily_closes(ticker, start)
+    fx_closes = None if quote_major == reporting else get_daily_closes(fx_symbol(quote_major, reporting), start)
+    values = {}
+    for year in normalized.years:
+        fx = 1.0 if fx_closes is None else price_on_or_before(fx_closes, year)
+        values[year] = market_value_of_equity(price_on_or_before(closes, year),
+                                              normalized.get("shares_outstanding", year), divisor, fx)
+    return values
+
+
+@app.callback(
+    Output("altman-container", "children"),
+    Input("altman-model-radio", "value"),
+    Input("lang-radio", "value"),
+    Input("dark-mode-switch", "value"),
+    State("analysis-ticker-store", "data"),
+)
+def update_altman(model_choice, lang, dark_mode, store):
+    lang = lang or "fr"
+    if not store or not store.get("ticker"):
+        raise dash.exceptions.PreventUpdate
+    ticker = store["ticker"]
+    normalized = _load_normalized(ticker)
+    if not normalized.years:
+        raise dash.exceptions.PreventUpdate
+    profile = get_company_profile(ticker)
+    children = []
+    if not model_choice or model_choice == "auto":
+        model = altman_default_model(profile["sector"])
+        children.append(html.Small(L(lang, "altman_auto_choice", model=L(lang, f"altman_model_{model}"),
+                                     sector=profile["sector"] or L(lang, "na")), className="text-muted d-block mb-2"))
+    else:
+        model = model_choice
+    market_values = _market_values_at_year_end(ticker, normalized, profile) if model == "original" else {}
+    results = [altman_z_score(normalized, year, model, market_values.get(year)) for year in normalized.years]
+    children.append(layout.altman_table(results, lang, bool(dark_mode)))
+    return children
+
+
 @app.callback(
     Output("results-container", "children"),
     Input("analysis-ticker-store", "data"),
@@ -188,6 +269,7 @@ def render_analysis(store, lang, dark_mode, palette_code):
                   color="light", className="py-2"),
         *_earnings_quality_section(normalized, regime, lang, dark),
         *_working_capital_section(normalized, regime, lang, dark, palette),
+        *_scores_section(normalized, regime, lang, dark),
         html.H5(L(lang, "section_statements"), className="section-title"),
         html.Small(L(lang, "amounts_unit", currency=reporting), className="text-muted d-block"),
         html.Small(L(lang, "statements_legend"), className="text-muted d-block mb-2"),

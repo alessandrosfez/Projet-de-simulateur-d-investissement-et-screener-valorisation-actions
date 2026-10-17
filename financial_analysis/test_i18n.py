@@ -27,6 +27,19 @@ def _expected_keys() -> set[str]:
     keys |= {f"bridge_step_{step}" for step in engine.BRIDGE_STEPS}
     keys |= {f"prov_{source}" for source in ("published", "equivalent", "derived")}
     keys |= {"prov_missing_not_in_yfinance", "prov_missing_derivation"}
+    # Scores d'alerte
+    for index in engine.BENEISH_INDICES:
+        keys |= {f"beneish_{index}", f"beneish_{index}_help", f"formula_beneish_{index}"}
+    keys |= {f"beneish_verdict_{verdict}" for verdict in ("manipulation_risk", "no_signal")}
+    keys |= {f"flag_{flag}" for flag in engine.SCORE_FLAGS}
+    keys |= {"reason_non_positive_base"}
+    for model in engine.ALTMAN_MODELS:
+        keys.add(f"altman_model_{model}")
+        keys |= {f"altman_{x}" for x in engine.ALTMAN_MODELS[model]["coefficients"]}
+        keys |= {f"altman_{x}_help" for x in engine.ALTMAN_MODELS[model]["coefficients"]}
+    keys |= {f"zone_{zone}" for zone in ("safe", "grey", "distress")}
+    for criterion in engine.PIOTROSKI_CRITERIA:
+        keys |= {f"piotroski_{criterion}", f"piotroski_{criterion}_help"}
     return keys
 
 

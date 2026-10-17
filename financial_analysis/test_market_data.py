@@ -83,6 +83,38 @@ def test_fx_rate_reads_last_close_of_yahoo_pair(monkeypatch):
     assert seen == ["GBPUSD=X"]
 
 
+def test_daily_closes_are_raw_and_timezone_free(monkeypatch):
+    seen = {}
+
+    def fake_ticker(symbol):
+        fake = MagicMock()
+
+        def history(start=None, interval=None, auto_adjust=None):
+            seen["auto_adjust"] = auto_adjust
+            index = pd.DatetimeIndex(["2024-12-30"]).tz_localize("Europe/Paris")
+            return pd.DataFrame({"Close": [11.0]}, index=index)
+
+        fake.history.side_effect = history
+        return fake
+
+    monkeypatch.setattr(md.yf, "Ticker", fake_ticker)
+    closes = md.get_daily_closes("AI.PA", "2020-01-01")
+    assert seen["auto_adjust"] is False
+    assert closes.index.tz is None
+    assert closes.iloc[0] == 11.0
+
+
+def test_daily_closes_unavailable_are_empty_and_not_cached(monkeypatch):
+    def fake_ticker(symbol):
+        fake = MagicMock()
+        fake.history.return_value = pd.DataFrame({"Close": []})
+        return fake
+
+    monkeypatch.setattr(md.yf, "Ticker", fake_ticker)
+    assert md.get_daily_closes("NOPE", "2020-01-01").empty
+    assert not md._cache
+
+
 def test_fx_rate_unavailable_returns_none(monkeypatch):
     def fake_ticker(symbol):
         fake = MagicMock()

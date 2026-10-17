@@ -208,6 +208,176 @@ TRANSLATIONS = {
         "bridge_unavailable": "Pont indisponible pour cet exercice : {missing} manquant.",
         "days_chart_title": "Évolution des jours de BFR",
         "days_axis": "Jours",
+        # ---------- Scores d'alerte ----------
+        "analysis_piotroski": "Piotroski F-score",
+        "section_scores": "Scores d'alerte",
+        "scores_caveat": "Ces scores ont été calibrés sur des sociétés américaines, à d'autres époques (1946-1965 "
+                         "pour Altman, 1982-1992 pour Beneish, 1976-1996 pour Piotroski), et avec des normes "
+                         "comptables différentes des IFRS : ce sont des signaux à creuser, pas des verdicts.",
+        "col_pair": "{t} vs {p}",
+        "col_reference_manipulators": "Manipulateurs (moy.)",
+        "col_reference_non_manipulators": "Non-manipulateurs (moy.)",
+        "suffix_t": "(t)",
+        "suffix_p": "(t-1)",
+        "reason_non_positive_base": "n.d. : base de comparaison nulle ou négative, indice non interprétable.",
+        "flag_aqi_neutral_by_definition": "Base de t-1 nulle (actif composé uniquement d'actif courant et "
+                                          "d'immobilisations corporelles) : indice fixé à 1, comme le fait Beneish.",
+        "flag_depreciation_includes_amortization": "Amortissements des seules immobilisations corporelles non "
+                                                   "distingués par Yahoo : dotations totales utilisées (incluent "
+                                                   "l'amortissement des incorporels).",
+        "flag_group_share_equity_fallback": "Capitaux propres part du groupe utilisés : la version y compris "
+                                            "minoritaires n'est pas fournie par Yahoo.",
+        # Beneish
+        "section_beneish": "Beneish M-score",
+        "beneish_help": "Mesure la ressemblance des comptes avec ceux des sociétés ayant manipulé leurs résultats "
+                        "(échantillon de Beneish, 1999). Formule : M = −4,84 + 0,920·DSRI + 0,528·GMI + 0,404·AQI + "
+                        "0,892·SGI + 0,115·DEPI − 0,172·SGAI + 4,679·TATA − 0,327·LVGI. Seuil : au-dessus de −1,78, "
+                        "profil plus proche des manipulateurs. Compare deux exercices consécutifs (t et t-1). "
+                        "Colonnes de droite : moyennes de l'échantillon d'estimation (Beneish 1999, tableau 2).",
+        "beneish_m_score": "M-score",
+        "beneish_m_score_indicative": "M-score indicatif (indices manquants neutralisés à 1)",
+        "beneish_verdict_manipulation_risk": "{pair} : M = {value}, au-dessus de −1,78 : profil plus proche des "
+                                             "manipulateurs de l'échantillon de Beneish, signal à creuser.",
+        "beneish_verdict_no_signal": "{pair} : M = {value}, en dessous de −1,78 : pas de signal de manipulation "
+                                     "selon le modèle.",
+        "beneish_official_na": "{pair} : M-score n.d., indice(s) manquant(s) : {missing}. Les coefficients sont "
+                               "estimés conjointement, on ne peut pas retirer une variable.",
+        "beneish_indicative_note": "Variante indicative, indices manquants remplacés par 1 (aucune variation) : "
+                                   "{neutralized}. C'est ce que faisait Beneish lui-même pour DEPI et SGAI quand "
+                                   "COMPUSTAT ne fournissait pas la donnée ; à lire comme un ordre de grandeur.",
+        "beneish_dsri": "DSRI (créances / CA)",
+        "beneish_dsri_help": "Indice des jours de créances. Formule : (créances t ÷ CA t) ÷ (créances t-1 ÷ CA t-1). "
+                             "Au-dessus de 1, les créances progressent plus vite que les ventes : changement de "
+                             "politique de crédit, ou chiffre d'affaires gonflé.",
+        "beneish_gmi": "GMI (marge brute)",
+        "beneish_gmi_help": "Indice de marge brute. Formule : marge brute t-1 ÷ marge brute t (en % du CA). "
+                            "Au-dessus de 1, la marge s'est dégradée : des perspectives moins bonnes incitent "
+                            "davantage à embellir les comptes.",
+        "beneish_aqi": "AQI (qualité des actifs)",
+        "beneish_aqi_help": "Indice de qualité des actifs. Formule : [1 − (actif courant + immobilisations "
+                            "corporelles) ÷ actif total] t ÷ même ratio t-1. Au-dessus de 1, la part d'actifs aux "
+                            "avantages futurs incertains augmente : coûts possiblement immobilisés plutôt que passés "
+                            "en charges.",
+        "beneish_sgi": "SGI (croissance du CA)",
+        "beneish_sgi_help": "Indice de croissance des ventes. Formule : CA t ÷ CA t-1. La croissance n'est pas une "
+                            "manipulation, mais la pression pour la maintenir y incite.",
+        "beneish_depi": "DEPI (amortissements)",
+        "beneish_depi_help": "Indice d'amortissement. Formule : taux t-1 ÷ taux t, avec taux = amortissements ÷ "
+                             "(amortissements + immobilisations corporelles nettes). Au-dessus de 1, le rythme "
+                             "d'amortissement ralentit : durées d'utilité allongées, ce qui améliore le résultat.",
+        "beneish_sgai": "SGAI (frais généraux)",
+        "beneish_sgai_help": "Indice des frais commerciaux et administratifs. Formule : (SG&A t ÷ CA t) ÷ (SG&A "
+                             "t-1 ÷ CA t-1). Au-dessus de 1, les frais progressent plus vite que les ventes. Souvent "
+                             "n.d. : beaucoup de sociétés européennes ne publient pas de SG&A séparé.",
+        "beneish_lvgi": "LVGI (endettement)",
+        "beneish_lvgi_help": "Indice d'endettement. Formule : [(passif courant + dette long terme, dettes locatives "
+                             "comprises) ÷ actif total] t ÷ même ratio t-1. Au-dessus de 1, l'endettement augmente : "
+                             "les covenants bancaires peuvent inciter à embellir les comptes.",
+        "beneish_tata": "TATA (accruals / actif)",
+        "beneish_tata_help": "Accruals rapportés à l'actif. Formule : (résultat net − CFO) ÷ actif total t. Plus il "
+                             "est élevé, moins le résultat est adossé à du cash. Calculé par les flux de trésorerie "
+                             "plutôt que par les variations de postes du bilan de l'article (plus fiable, Hribar et "
+                             "Collins 2002).",
+        "formula_beneish_dsri": "(créances {receivables_t} ÷ CA {revenue_t}) ÷ (créances {receivables_p} ÷ CA {revenue_p})",
+        "formula_beneish_gmi": "(marge brute {gross_profit_p} ÷ CA {revenue_p}) ÷ (marge brute {gross_profit_t} ÷ CA "
+                               "{revenue_t})",
+        "formula_beneish_aqi": "[1 − ({current_assets_t} + {ppe_net_t}) ÷ {total_assets_t}] ÷ [1 − ({current_assets_p} "
+                               "+ {ppe_net_p}) ÷ {total_assets_p}]",
+        "formula_beneish_sgi": "CA {revenue_t} ÷ CA {revenue_p}",
+        "formula_beneish_depi": "[{depreciation_p} ÷ ({depreciation_p} + {ppe_net_p})] ÷ [{depreciation_t} ÷ "
+                                "({depreciation_t} + {ppe_net_t})]",
+        "formula_beneish_sgai": "(SG&A {sga_t} ÷ CA {revenue_t}) ÷ (SG&A {sga_p} ÷ CA {revenue_p})",
+        "formula_beneish_lvgi": "[({current_liabilities_t} + {long_term_debt_incl_leases_t}) ÷ {total_assets_t}] ÷ "
+                                "[({current_liabilities_p} + {long_term_debt_incl_leases_p}) ÷ {total_assets_p}]",
+        "formula_beneish_tata": "(résultat net {net_income_t} − CFO {cfo_t}) ÷ actif {total_assets_t}",
+        "contribution_text": "contribution au score : {coefficient} × {value} = {contribution}",
+        # Altman
+        "section_altman": "Altman Z-score",
+        "altman_help": "Mesure le risque de défaillance à partir de cinq ratios de bilan et de résultat. Z d'origine "
+                       "(Altman 1968, industriels cotés) : Z = 1,2·X1 + 1,4·X2 + 3,3·X3 + 0,6·X4 + 0,999·X5, zones "
+                       "< 1,81 détresse, 1,81-2,99 grise, > 2,99 sûre. Z'' (Altman 1995, sociétés non "
+                       "manufacturières) : Z'' = 6,56·X1 + 3,26·X2 + 6,72·X3 + 1,05·X4 sur fonds propres comptables, "
+                       "zones < 1,10 détresse, 1,10-2,60 grise, > 2,60 sûre. Score de niveau : un exercice à la fois.",
+        "altman_model_label": "Modèle",
+        "altman_model_auto": "Automatique",
+        "altman_model_original": "Z d'origine (industriels cotés)",
+        "altman_model_z_double_prime": "Z'' (non manufacturiers)",
+        "altman_auto_choice": "Choix automatique : {model}, d'après le secteur Yahoo « {sector} ». Le Z d'origine est "
+                              "réservé aux secteurs Industrials et Basic Materials, proches de l'échantillon "
+                              "d'industriels sur lequel il a été calibré.",
+        "altman_x1": "X1 fonds de roulement / actif",
+        "altman_x1_help": "Liquidité : (actif courant − passif courant) ÷ actif total. Un fonds de roulement qui fond "
+                          "est l'un des premiers signes de difficulté.",
+        "altman_x2": "X2 réserves / actif",
+        "altman_x2_help": "Profitabilité cumulée : résultats accumulés non distribués ÷ actif total. Pénalise "
+                          "naturellement les sociétés jeunes.",
+        "altman_x3": "X3 EBIT / actif",
+        "altman_x3_help": "Rentabilité économique de l'actif : EBIT ÷ actif total, le ratio le plus pondéré.",
+        "altman_x4": "X4 capitaux propres / passif",
+        "altman_x4_help": "Coussin avant insolvabilité : capitalisation boursière à la clôture (Z d'origine) ou "
+                          "capitaux propres comptables (Z'') ÷ passif total. La capitalisation historique = cours de "
+                          "clôture à la date de l'exercice × nombre d'actions du bilan, convertie au taux de change "
+                          "de cette date.",
+        "altman_x5": "X5 CA / actif",
+        "altman_x5_help": "Rotation de l'actif : chiffre d'affaires ÷ actif total (Z d'origine seulement : très "
+                          "variable d'un secteur à l'autre, d'où son retrait du Z'').",
+        "altman_z": "Z-score",
+        "altman_zone": "Zone",
+        "zone_safe": "sûre",
+        "zone_grey": "grise",
+        "zone_distress": "détresse",
+        "altman_ratio_formula": "{numerator_label} {numerator} ÷ {denominator_label} {denominator} = {value}",
+        "altman_mve_unavailable": "Capitalisation à la clôture indisponible (cours ou change historique manquant) : "
+                                  "Z d'origine n.d. pour cet exercice, bascule sur Z'' possible.",
+        "field_market_value_of_equity": "capitalisation à la clôture",
+        # Piotroski
+        "section_piotroski": "Piotroski F-score",
+        "piotroski_help": "Mesure l'amélioration de la santé financière sur 9 critères binaires (1 = rempli), "
+                          "Piotroski 2000 : rentabilité (4), structure financière (3), efficacité (2). Lecture : 8-9 "
+                          "solide, 0-2 fragile. ROA et rotation de l'actif rapportés à l'actif d'ouverture, comme dans "
+                          "l'article : il faut trois bilans pour les critères de variation.",
+        "piotroski_score": "F-score",
+        "piotroski_score_text": "{score} / {n}",
+        "piotroski_partial": "Calculé sur {n} critères sur 9 (les autres sont n.d.) : à ne pas comparer tel quel "
+                             "aux seuils usuels.",
+        "piotroski_roa_positive": "ROA > 0",
+        "piotroski_roa_positive_help": "Résultat net ÷ actif d'ouverture positif.",
+        "piotroski_cfo_positive": "CFO > 0",
+        "piotroski_cfo_positive_help": "Flux de trésorerie d'exploitation positif.",
+        "piotroski_roa_improved": "ROA en hausse",
+        "piotroski_roa_improved_help": "ROA de t supérieur à celui de t-1.",
+        "piotroski_cfo_exceeds_net_income": "CFO > résultat net",
+        "piotroski_cfo_exceeds_net_income_help": "Résultat adossé à du cash : CFO supérieur au résultat net "
+                                                 "(équivaut à CFO / actif > ROA).",
+        "piotroski_leverage_decreased": "Levier en baisse",
+        "piotroski_leverage_decreased_help": "Dette financière long terme (hors dettes locatives) ÷ actif moyen en "
+                                             "baisse sur un an.",
+        "piotroski_current_ratio_improved": "Liquidité en hausse",
+        "piotroski_current_ratio_improved_help": "Ratio de liquidité générale (actif courant ÷ passif courant) en "
+                                                 "hausse sur un an.",
+        "piotroski_no_equity_issuance": "Pas d'augmentation de capital",
+        "piotroski_no_equity_issuance_help": "Nombre d'actions du bilan stable ou en baisse : une hausse liée à des "
+                                             "plans salariés ou à des attributions d'actions gratuites (pratique "
+                                             "régulière chez Air Liquide, par exemple) compte aussi comme une "
+                                             "émission, sans qu'aucun capital n'ait été levé.",
+        "piotroski_gross_margin_improved": "Marge brute en hausse",
+        "piotroski_gross_margin_improved_help": "Marge brute (en % du CA) en hausse sur un an.",
+        "piotroski_asset_turnover_improved": "Rotation de l'actif en hausse",
+        "piotroski_asset_turnover_improved_help": "CA ÷ actif d'ouverture en hausse sur un an.",
+        "piotroski_detail_roa_t": "ROA t",
+        "piotroski_detail_roa_p": "ROA t-1",
+        "piotroski_detail_cfo_t": "CFO t",
+        "piotroski_detail_net_income_t": "résultat net t",
+        "piotroski_detail_leverage_t": "levier t",
+        "piotroski_detail_leverage_p": "levier t-1",
+        "piotroski_detail_current_ratio_t": "liquidité t",
+        "piotroski_detail_current_ratio_p": "liquidité t-1",
+        "piotroski_detail_shares_t": "actions t",
+        "piotroski_detail_shares_p": "actions t-1",
+        "piotroski_detail_gross_margin_t": "marge brute t",
+        "piotroski_detail_gross_margin_p": "marge brute t-1",
+        "piotroski_detail_turnover_t": "rotation t",
+        "piotroski_detail_turnover_p": "rotation t-1",
         "field_revenue": "Chiffre d'affaires",
         "field_revenue_help": "Produits de l'activité ordinaire de l'exercice, hors taxes.",
         "field_cost_of_revenue": "Coût des ventes",
@@ -221,6 +391,10 @@ TRANSLATIONS = {
         "field_d_and_a": "Dotations aux amortissements",
         "field_d_and_a_help": "Consommation de la valeur des immobilisations sur l'exercice. Charge sans "
                               "sortie de trésorerie : écart structurel entre résultat et flux de trésorerie.",
+        "field_depreciation": "Amortissements des immobilisations corporelles",
+        "field_depreciation_help": "Dotations aux amortissements hors amortissement des incorporels : la "
+                                   "base du DEPI de Beneish. Repli sur les dotations totales (poste voisin) si "
+                                   "Yahoo ne les distingue pas.",
         "field_interest_expense": "Charges d'intérêts",
         "field_interest_expense_help": "Coût de la dette financière sur l'exercice.",
         "field_pretax_income": "Résultat avant impôt",
@@ -287,6 +461,9 @@ TRANSLATIONS = {
         "field_lease_liabilities": "Dettes locatives (IFRS 16)",
         "field_lease_liabilities_help": "Loyers futurs actualisés des contrats de location (IFRS 16). "
                                         "Identité de repli : court terme + long terme.",
+        "field_long_term_debt_incl_leases": "Dette long terme (dont dettes locatives)",
+        "field_long_term_debt_incl_leases_help": "Dette financière à plus de 12 mois + dettes locatives non "
+                                                 "courantes (IFRS 16). Identité de repli : somme des deux.",
         "field_total_debt": "Dette totale (Yahoo)",
         "field_total_debt_help": "Dette financière + dettes locatives, telle que calculée par Yahoo. La dette "
                                  "financière hors IFRS 16 se lit sur les lignes court et long terme.",
@@ -486,6 +663,167 @@ TRANSLATIONS = {
         "bridge_unavailable": "Bridge unavailable for this fiscal year: {missing} missing.",
         "days_chart_title": "Working capital days over time",
         "days_axis": "Days",
+        "analysis_piotroski": "Piotroski F-score",
+        "section_scores": "Warning scores",
+        "scores_caveat": "These scores were calibrated on US companies, in other eras (1946-1965 for Altman, "
+                         "1982-1992 for Beneish, 1976-1996 for Piotroski), and under accounting standards other than "
+                         "IFRS: they are signals to investigate, not verdicts.",
+        "col_pair": "{t} vs {p}",
+        "col_reference_manipulators": "Manipulators (mean)",
+        "col_reference_non_manipulators": "Non-manipulators (mean)",
+        "suffix_t": "(t)",
+        "suffix_p": "(t-1)",
+        "reason_non_positive_base": "n/a: zero or negative comparison base, index not meaningful.",
+        "flag_aqi_neutral_by_definition": "Zero base in t-1 (assets made only of current assets and property, plant "
+                                          "and equipment): index set to 1, as Beneish does.",
+        "flag_depreciation_includes_amortization": "Depreciation of tangible assets alone not separated by Yahoo: "
+                                                   "total D&A used (includes amortization of intangibles).",
+        "flag_group_share_equity_fallback": "Group-share equity used: the version including minorities is not "
+                                            "provided by Yahoo.",
+        "section_beneish": "Beneish M-score",
+        "beneish_help": "Measures how closely the accounts resemble those of companies that manipulated earnings "
+                        "(Beneish 1999 sample). Formula: M = −4.84 + 0.920·DSRI + 0.528·GMI + 0.404·AQI + 0.892·SGI + "
+                        "0.115·DEPI − 0.172·SGAI + 4.679·TATA − 0.327·LVGI. Threshold: above −1.78, profile closer to "
+                        "manipulators. Compares two consecutive fiscal years (t and t-1). Right-hand columns: means of "
+                        "the estimation sample (Beneish 1999, table 2).",
+        "beneish_m_score": "M-score",
+        "beneish_m_score_indicative": "Indicative M-score (missing indices neutralized at 1)",
+        "beneish_verdict_manipulation_risk": "{pair}: M = {value}, above −1.78: profile closer to the manipulators of "
+                                             "Beneish's sample, a signal to investigate.",
+        "beneish_verdict_no_signal": "{pair}: M = {value}, below −1.78: no manipulation signal according to the model.",
+        "beneish_official_na": "{pair}: M-score n/a, missing index(es): {missing}. The coefficients are estimated "
+                               "jointly, a variable cannot be dropped.",
+        "beneish_indicative_note": "Indicative variant, missing indices replaced by 1 (no change): {neutralized}. "
+                                   "Beneish himself did this for DEPI and SGAI when COMPUSTAT lacked the data; read it "
+                                   "as an order of magnitude.",
+        "beneish_dsri": "DSRI (receivables / revenue)",
+        "beneish_dsri_help": "Days sales in receivables index. Formula: (receivables t ÷ revenue t) ÷ (receivables t-1 ÷ "
+                             "revenue t-1). Above 1, receivables grow faster than sales: a change in credit policy, or "
+                             "inflated revenue.",
+        "beneish_gmi": "GMI (gross margin)",
+        "beneish_gmi_help": "Gross margin index. Formula: gross margin t-1 ÷ gross margin t (as % of revenue). Above 1, "
+                            "the margin has deteriorated: poorer prospects increase the incentive to dress up the "
+                            "accounts.",
+        "beneish_aqi": "AQI (asset quality)",
+        "beneish_aqi_help": "Asset quality index. Formula: [1 − (current assets + PP&E) ÷ total assets] t ÷ same ratio "
+                            "t-1. Above 1, the share of assets with uncertain future benefits grows: costs possibly "
+                            "capitalized instead of expensed.",
+        "beneish_sgi": "SGI (sales growth)",
+        "beneish_sgi_help": "Sales growth index. Formula: revenue t ÷ revenue t-1. Growth is not manipulation, but the "
+                            "pressure to sustain it is an incentive.",
+        "beneish_depi": "DEPI (depreciation)",
+        "beneish_depi_help": "Depreciation index. Formula: rate t-1 ÷ rate t, with rate = depreciation ÷ (depreciation + "
+                             "net PP&E). Above 1, depreciation slows down: longer useful lives, which boosts earnings.",
+        "beneish_sgai": "SGAI (overheads)",
+        "beneish_sgai_help": "SG&A expenses index. Formula: (SG&A t ÷ revenue t) ÷ (SG&A t-1 ÷ revenue t-1). Above 1, "
+                             "overheads grow faster than sales. Often n/a: many European companies do not report SG&A "
+                             "separately.",
+        "beneish_lvgi": "LVGI (leverage)",
+        "beneish_lvgi_help": "Leverage index. Formula: [(current liabilities + long-term debt, leases included) ÷ total "
+                             "assets] t ÷ same ratio t-1. Above 1, leverage rises: debt covenants may encourage "
+                             "dressing up the accounts.",
+        "beneish_tata": "TATA (accruals / assets)",
+        "beneish_tata_help": "Accruals scaled by assets. Formula: (net income − CFO) ÷ total assets t. The higher, the "
+                             "less earnings are backed by cash. Computed from cash flows rather than from the paper's "
+                             "balance-sheet changes (more reliable, Hribar and Collins 2002).",
+        "formula_beneish_dsri": "(receivables {receivables_t} ÷ revenue {revenue_t}) ÷ (receivables {receivables_p} ÷ "
+                                "revenue {revenue_p})",
+        "formula_beneish_gmi": "(gross profit {gross_profit_p} ÷ revenue {revenue_p}) ÷ (gross profit {gross_profit_t} ÷ "
+                               "revenue {revenue_t})",
+        "formula_beneish_aqi": "[1 − ({current_assets_t} + {ppe_net_t}) ÷ {total_assets_t}] ÷ [1 − ({current_assets_p} "
+                               "+ {ppe_net_p}) ÷ {total_assets_p}]",
+        "formula_beneish_sgi": "revenue {revenue_t} ÷ revenue {revenue_p}",
+        "formula_beneish_depi": "[{depreciation_p} ÷ ({depreciation_p} + {ppe_net_p})] ÷ [{depreciation_t} ÷ "
+                                "({depreciation_t} + {ppe_net_t})]",
+        "formula_beneish_sgai": "(SG&A {sga_t} ÷ revenue {revenue_t}) ÷ (SG&A {sga_p} ÷ revenue {revenue_p})",
+        "formula_beneish_lvgi": "[({current_liabilities_t} + {long_term_debt_incl_leases_t}) ÷ {total_assets_t}] ÷ "
+                                "[({current_liabilities_p} + {long_term_debt_incl_leases_p}) ÷ {total_assets_p}]",
+        "formula_beneish_tata": "(net income {net_income_t} − CFO {cfo_t}) ÷ assets {total_assets_t}",
+        "contribution_text": "contribution to the score: {coefficient} × {value} = {contribution}",
+        "section_altman": "Altman Z-score",
+        "altman_help": "Measures default risk from five balance-sheet and earnings ratios. Original Z (Altman 1968, "
+                       "listed manufacturers): Z = 1.2·X1 + 1.4·X2 + 3.3·X3 + 0.6·X4 + 0.999·X5, zones < 1.81 distress, "
+                       "1.81-2.99 grey, > 2.99 safe. Z'' (Altman 1995, non-manufacturers): Z'' = 6.56·X1 + 3.26·X2 + "
+                       "6.72·X3 + 1.05·X4 on book equity, zones < 1.10 distress, 1.10-2.60 grey, > 2.60 safe. A level "
+                       "score: one fiscal year at a time.",
+        "altman_model_label": "Model",
+        "altman_model_auto": "Automatic",
+        "altman_model_original": "Original Z (listed manufacturers)",
+        "altman_model_z_double_prime": "Z'' (non-manufacturers)",
+        "altman_auto_choice": "Automatic choice: {model}, based on the Yahoo sector \"{sector}\". The original Z is "
+                              "reserved for the Industrials and Basic Materials sectors, close to the manufacturing "
+                              "sample it was calibrated on.",
+        "altman_x1": "X1 working capital / assets",
+        "altman_x1_help": "Liquidity: (current assets − current liabilities) ÷ total assets. Shrinking working capital "
+                          "is one of the first signs of trouble.",
+        "altman_x2": "X2 retained earnings / assets",
+        "altman_x2_help": "Cumulative profitability: retained earnings ÷ total assets. Naturally penalizes young "
+                          "companies.",
+        "altman_x3": "X3 EBIT / assets",
+        "altman_x3_help": "Return on assets: EBIT ÷ total assets, the most heavily weighted ratio.",
+        "altman_x4": "X4 equity / liabilities",
+        "altman_x4_help": "Cushion before insolvency: market capitalization at year end (original Z) or book equity "
+                          "(Z'') ÷ total liabilities. Historical market cap = closing price at the fiscal year-end date "
+                          "× shares from the balance sheet, converted at that date's exchange rate.",
+        "altman_x5": "X5 revenue / assets",
+        "altman_x5_help": "Asset turnover: revenue ÷ total assets (original Z only: it varies widely across sectors, "
+                          "hence its removal from Z'').",
+        "altman_z": "Z-score",
+        "altman_zone": "Zone",
+        "zone_safe": "safe",
+        "zone_grey": "grey",
+        "zone_distress": "distress",
+        "altman_ratio_formula": "{numerator_label} {numerator} ÷ {denominator_label} {denominator} = {value}",
+        "altman_mve_unavailable": "Market cap at year end unavailable (historical price or exchange rate missing): "
+                                  "original Z n/a for this fiscal year, switching to Z'' is possible.",
+        "field_market_value_of_equity": "market cap at year end",
+        "section_piotroski": "Piotroski F-score",
+        "piotroski_help": "Measures improving financial health on 9 binary criteria (1 = met), Piotroski 2000: "
+                          "profitability (4), financial structure (3), efficiency (2). Reading: 8-9 strong, 0-2 weak. "
+                          "ROA and asset turnover scaled by opening assets, as in the paper: change criteria need three "
+                          "balance sheets.",
+        "piotroski_score": "F-score",
+        "piotroski_score_text": "{score} / {n}",
+        "piotroski_partial": "Computed on {n} criteria out of 9 (the others are n/a): not directly comparable to the "
+                             "usual thresholds.",
+        "piotroski_roa_positive": "ROA > 0",
+        "piotroski_roa_positive_help": "Net income ÷ opening assets is positive.",
+        "piotroski_cfo_positive": "CFO > 0",
+        "piotroski_cfo_positive_help": "Cash flow from operations is positive.",
+        "piotroski_roa_improved": "ROA up",
+        "piotroski_roa_improved_help": "ROA in t higher than in t-1.",
+        "piotroski_cfo_exceeds_net_income": "CFO > net income",
+        "piotroski_cfo_exceeds_net_income_help": "Earnings backed by cash: CFO above net income (equivalent to CFO / "
+                                                 "assets > ROA).",
+        "piotroski_leverage_decreased": "Leverage down",
+        "piotroski_leverage_decreased_help": "Long-term financial debt (excluding leases) ÷ average assets down over "
+                                             "the year.",
+        "piotroski_current_ratio_improved": "Liquidity up",
+        "piotroski_current_ratio_improved_help": "Current ratio (current assets ÷ current liabilities) up over the "
+                                                 "year.",
+        "piotroski_no_equity_issuance": "No equity issuance",
+        "piotroski_no_equity_issuance_help": "Share count on the balance sheet stable or down: an increase from "
+                                             "employee plans or bonus share allotments (a regular practice at Air "
+                                             "Liquide, for instance) also counts as an issuance, even though no "
+                                             "capital was raised.",
+        "piotroski_gross_margin_improved": "Gross margin up",
+        "piotroski_gross_margin_improved_help": "Gross margin (as % of revenue) up over the year.",
+        "piotroski_asset_turnover_improved": "Asset turnover up",
+        "piotroski_asset_turnover_improved_help": "Revenue ÷ opening assets up over the year.",
+        "piotroski_detail_roa_t": "ROA t",
+        "piotroski_detail_roa_p": "ROA t-1",
+        "piotroski_detail_cfo_t": "CFO t",
+        "piotroski_detail_net_income_t": "net income t",
+        "piotroski_detail_leverage_t": "leverage t",
+        "piotroski_detail_leverage_p": "leverage t-1",
+        "piotroski_detail_current_ratio_t": "liquidity t",
+        "piotroski_detail_current_ratio_p": "liquidity t-1",
+        "piotroski_detail_shares_t": "shares t",
+        "piotroski_detail_shares_p": "shares t-1",
+        "piotroski_detail_gross_margin_t": "gross margin t",
+        "piotroski_detail_gross_margin_p": "gross margin t-1",
+        "piotroski_detail_turnover_t": "turnover t",
+        "piotroski_detail_turnover_p": "turnover t-1",
         "field_revenue": "Revenue",
         "field_revenue_help": "Revenue from ordinary activities for the fiscal year, excluding taxes.",
         "field_cost_of_revenue": "Cost of revenue",
@@ -499,6 +837,10 @@ TRANSLATIONS = {
         "field_d_and_a": "Depreciation and amortization",
         "field_d_and_a_help": "Consumption of the value of fixed assets over the year. A non-cash charge: a "
                               "structural gap between earnings and cash flow.",
+        "field_depreciation": "Depreciation of property, plant and equipment",
+        "field_depreciation_help": "Depreciation excluding amortization of intangibles: the basis of Beneish's "
+                                   "DEPI. Falls back on total D&A (neighbouring item) if Yahoo does not "
+                                   "separate them.",
         "field_interest_expense": "Interest expense",
         "field_interest_expense_help": "Cost of financial debt over the year.",
         "field_pretax_income": "Pre-tax income",
@@ -563,6 +905,9 @@ TRANSLATIONS = {
         "field_lease_liabilities": "Lease liabilities (IFRS 16)",
         "field_lease_liabilities_help": "Discounted future lease payments (IFRS 16). Fallback identity: "
                                         "short-term + long-term.",
+        "field_long_term_debt_incl_leases": "Long-term debt (incl. leases)",
+        "field_long_term_debt_incl_leases_help": "Financial debt due after 12 months + non-current lease "
+                                                 "liabilities (IFRS 16). Fallback identity: sum of both.",
         "field_total_debt": "Total debt (Yahoo)",
         "field_total_debt_help": "Financial debt + lease liabilities, as computed by Yahoo. Financial debt "
                                  "excluding IFRS 16 is read on the short- and long-term lines.",

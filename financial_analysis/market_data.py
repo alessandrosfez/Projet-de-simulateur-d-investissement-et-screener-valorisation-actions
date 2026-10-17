@@ -151,6 +151,32 @@ def _fetch_fx_rate(from_currency: str, to_currency: str) -> float:
     return float(closes.iloc[-1])
 
 
+@cached_ttl(STATEMENTS_TTL)
+def _fetch_daily_closes(symbol: str, start_date: str) -> pd.Series:
+    """Clôtures quotidiennes BRUTES (auto_adjust=False) : la capitalisation d'une date passée se calcule
+    au cours réellement coté ce jour-là, pas à un cours rétroactivement ajusté des dividendes. Index
+    sans fuseau horaire, pour se comparer directement aux dates de clôture des exercices."""
+    closes = yf.Ticker(symbol).history(start=start_date, interval="1d", auto_adjust=False)["Close"].dropna()
+    if closes.empty:
+        raise ValueError(f"Pas d'historique pour {symbol}")
+    if closes.index.tz is not None:
+        closes.index = closes.index.tz_localize(None)
+    return closes
+
+
+def get_daily_closes(symbol: str, start_date: str) -> pd.Series:
+    """Clôtures quotidiennes d'un titre ou d'une paire de devises Yahoo ("GBPUSD=X") depuis start_date.
+    Série vide si indisponible (jamais mise en cache dans ce cas)."""
+    try:
+        return _fetch_daily_closes(symbol, start_date)
+    except Exception:
+        return pd.Series(dtype=float)
+
+
+def fx_symbol(from_currency: str, to_currency: str) -> str:
+    return f"{from_currency}{to_currency}=X"
+
+
 def get_fx_rate(from_currency: str | None, to_currency: str | None) -> float | None:
     """Taux de change from -> to. 1.0 sans appel réseau si les deux devises coïncident, None si
     l'une est inconnue ou si la paire n'est pas cotée sur Yahoo Finance."""

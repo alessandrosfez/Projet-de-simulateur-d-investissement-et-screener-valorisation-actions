@@ -66,6 +66,13 @@ FIELD_SCHEMA: tuple[FieldSpec, ...] = (
         _inc("Reconciled Depreciation", "Depreciation And Amortization In Income Statement")
         + _cf("Depreciation And Amortization"),
     ),
+    # Amortissement des immobilisations corporelles seules : le DEPI de Beneish (1999) l'exige
+    # (dépréciation hors amortissement des incorporels). Repli sur les dotations totales, signalé.
+    FieldSpec(
+        "depreciation", "income", _inc("Depreciation Income Statement") + _cf("Depreciation"),
+        equivalents=_inc("Reconciled Depreciation", "Depreciation And Amortization In Income Statement")
+        + _cf("Depreciation And Amortization"),
+    ),
     FieldSpec("interest_expense", "income", _inc("Interest Expense"), equivalents=_inc("Interest Expense Non Operating")),
     FieldSpec("pretax_income", "income", _inc("Pretax Income")),
     # EBIT : Yahoo le construit comme résultat avant impôt + charges d'intérêts, et l'EBITDA comme
@@ -114,6 +121,12 @@ FIELD_SCHEMA: tuple[FieldSpec, ...] = (
     FieldSpec(
         "lease_liabilities", "balance", _bal("Capital Lease Obligations"),
         derivation=("sum", ("lease_liabilities_current", "lease_liabilities_non_current")),
+    ),
+    # Dette à long terme y compris dettes locatives non courantes : sous IFRS 16, les dettes locatives
+    # courantes sont déjà dans le passif courant, d'où ce périmètre pour le LVGI de Beneish.
+    FieldSpec(
+        "long_term_debt_incl_leases", "balance", _bal("Long Term Debt And Capital Lease Obligation"),
+        derivation=("sum", ("long_term_debt", "lease_liabilities_non_current")),
     ),
     # "Total Debt" de Yahoo inclut les dettes locatives : la dette financière brute hors IFRS 16 se
     # reconstruit à partir de current_debt et long_term_debt (voir phase 4, pont de dette nette).
@@ -240,7 +253,9 @@ def _resolve_field(spec: FieldSpec, frames: dict[str, pd.DataFrame], year: pd.Ti
 # earnings_quality : conversion du résultat en cash et accruals. Pour une banque, le CFO est dominé
 # par les flux de dépôts et de crédits (des dizaines de milliards d'une année sur l'autre) : CFO /
 # résultat net n'y mesure rien de la qualité du résultat.
-ANALYSES = ("beneish", "altman", "working_capital", "earnings_quality")
+# piotroski : ses critères de liquidité (ratio de liquidité générale) et de marge brute n'ont pas de
+# sens pour une banque ou un assureur, comme les deux autres scores.
+ANALYSES = ("beneish", "altman", "piotroski", "working_capital", "earnings_quality")
 
 
 def detect_sector_regime(sector: str | None, industry: str | None) -> dict:
@@ -354,6 +369,7 @@ RATIO_FLAGS = ("group_share_fallback", "broad_receivables", "broad_payables")
 RATIO_REASONS = ("missing_inputs", "non_positive_denominator", "no_prior_year")
 RATIO_DENOMINATORS = ("net_income", "revenue", "cost_of_revenue", "average_total_assets")
 BRIDGE_STEPS = ("net_income", "d_and_a", "change_in_working_capital", "other_items")
+SCORE_FLAGS = ("aqi_neutral_by_definition", "depreciation_includes_amortization", "group_share_equity_fallback")
 
 
 def _ratio(formula: str, numerator: float | None, denominator: float | None, components: dict,
@@ -518,3 +534,390 @@ def metric_trend(series_by_year: dict[pd.Timestamp, dict], metric: str) -> dict 
         return None
     (first_year, first), (last_year, last) = points[0], points[-1]
     return {"first_year": first_year, "last_year": last_year, "first": first, "last": last, "delta": last - first}
+
+
+# ============================================================
+# SCORES D'ALERTE : Beneish, Altman, Piotroski
+# ============================================================
+# Ces scores ont été calibrés sur des sociétés américaines, à d'autres époques (1946-1965 pour
+# Altman, 1982-1992 pour Beneish, 1976-1996 pour Piotroski) : ce sont des signaux à creuser, pas des
+# verdicts. Beneish et Piotroski comparent deux exercices consécutifs (t contre t-1) ; chaque
+# résultat indique le couple utilisé.
+
+def consecutive_pairs(ns: NormalizedStatements) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
+    """Couples (exercice t, exercice t-1) disponibles, du plus récent au plus ancien."""
+    chronological = sorted(ns.years)
+    return [(chronological[i], chronological[i - 1]) for i in range(len(chronological) - 1, 0, -1)]
+
+
+def _div(numerator: float | None, denominator: float | None) -> float | None:
+    if numerator is None or denominator is None or denominator == 0:
+        return None
+    return numerator / denominator
+
+
+def _flag_if_equivalent(ns: NormalizedStatements, key: str, years: tuple[pd.Timestamp, ...], flag: str) -> tuple[str, ...]:
+    return (flag,) if any(ns.provenance[key][year]["source"] == "equivalent" for year in years) else ()
+
+
+# ---------- Beneish M-score ----------
+
+# Beneish (1999), « The Detection of Earnings Manipulation », Financial Analysts Journal 55(5), 24-36 ;
+# tableau 3, probit non pondéré (version de travail de juin 1999, p. 24).
+BENEISH_INTERCEPT = -4.84
+BENEISH_COEFFICIENTS = {
+    "dsri": 0.920, "gmi": 0.528, "aqi": 0.404, "sgi": 0.892, "depi": 0.115, "sgai": -0.172, "lvgi": -0.327,
+    "tata": 4.679,
+}
+BENEISH_INDICES = tuple(BENEISH_COEFFICIENTS)
+BENEISH_THRESHOLD = -1.78
+# Beneish (1999), tableau 2 : moyennes de l'échantillon d'estimation (50 manipulateurs, 1 708
+# non-manipulateurs du même secteur), affichées comme repères à côté des indices de la société.
+BENEISH_REFERENCE_MEANS = {
+    "manipulators": {"dsri": 1.465, "gmi": 1.193, "aqi": 1.254, "sgi": 1.607, "depi": 1.077, "sgai": 1.041,
+                     "lvgi": 1.111, "tata": 0.031},
+    "non_manipulators": {"dsri": 1.031, "gmi": 1.014, "aqi": 1.039, "sgi": 1.134, "depi": 1.001, "sgai": 1.054,
+                         "lvgi": 1.037, "tata": 0.018},
+}
+# Valeur neutre d'un indice : 1, soit « aucune variation entre t-1 et t ». TATA est un niveau (accruals
+# / actif), pas un indice de variation : il n'a pas de valeur neutre et n'est jamais neutralisé.
+BENEISH_NEUTRALIZABLE = tuple(index for index in BENEISH_INDICES if index != "tata")
+
+
+def beneish_m_score_from_indices(indices: dict[str, float]) -> float:
+    """M = -4,84 + 0,920 DSRI + 0,528 GMI + 0,404 AQI + 0,892 SGI + 0,115 DEPI - 0,172 SGAI
+    + 4,679 TATA - 0,327 LVGI. Les 8 indices sont requis : les coefficients ont été estimés
+    conjointement, en retirer un fausserait les autres."""
+    return BENEISH_INTERCEPT + sum(coefficient * indices[index] for index, coefficient in BENEISH_COEFFICIENTS.items())
+
+
+def _beneish_index(current: float | None, prior: float | None, components: dict, formula: str,
+                   flags: tuple[str, ...] = (), inverse: bool = False) -> dict:
+    """Indice de variation entre t et t-1 : ratio_t / ratio_t-1 (ou l'inverse pour GMI et DEPI, où
+    Beneish met l'exercice précédent au numérateur pour qu'un indice > 1 signale toujours une
+    dégradation)."""
+    result = {"value": None, "current": current, "prior": prior, "components": components, "formula": formula,
+              "reason": None, "missing": tuple(k for k, v in components.items() if v is None), "flags": flags}
+    if result["missing"]:
+        result["reason"] = "missing_inputs"
+        return result
+    numerator, denominator = (prior, current) if inverse else (current, prior)
+    if numerator is None or denominator is None or denominator <= 0:
+        result["reason"] = "non_positive_base"
+        return result
+    result["value"] = numerator / denominator
+    return result
+
+
+def beneish_m_score(ns: NormalizedStatements, year: pd.Timestamp, prior_year: pd.Timestamp) -> dict:
+    """Les 8 indices de Beneish pour le couple (year, prior_year), selon les définitions du tableau 2 de
+    Beneish (1999), puis le M-score.
+
+    Écarts assumés avec l'article, faute de données COMPUSTAT : TATA est calculé par les flux de
+    trésorerie, (résultat net - CFO) / actif total, plutôt que par les variations de postes du bilan
+    (méthode moins sujette aux erreurs de mesure, Hribar et Collins 2002), avec le résultat net y
+    compris minoritaires comme partout ailleurs ; la dette à long terme du LVGI inclut les dettes
+    locatives non courantes (IFRS 16).
+
+    M-score officiel n.d. dès qu'un indice manque. Variante indicative : les indices manquants (hors
+    TATA) sont remplacés par 1, leur valeur neutre. C'est d'ailleurs ce que faisait Beneish lui-même
+    pour DEPI et SGAI quand COMPUSTAT ne fournissait pas la donnée (p. 12 de l'article). Elle est
+    toujours présentée comme telle, avec la liste des indices neutralisés."""
+    t, p = year, prior_year
+    g = ns.get
+    revenue_t, revenue_p = g("revenue", t), g("revenue", p)
+    assets_t, assets_p = g("total_assets", t), g("total_assets", p)
+    net_income, ni_flags = _net_income_for_cash_comparison(ns, t)
+
+    indices = {}
+    indices["dsri"] = _beneish_index(
+        _div(g("receivables", t), revenue_t), _div(g("receivables", p), revenue_p),
+        {"receivables_t": g("receivables", t), "revenue_t": revenue_t,
+         "receivables_p": g("receivables", p), "revenue_p": revenue_p},
+        "dsri", _flag_if_equivalent(ns, "receivables", (t, p), "broad_receivables"),
+    )
+    indices["gmi"] = _beneish_index(
+        _div(g("gross_profit", t), revenue_t), _div(g("gross_profit", p), revenue_p),
+        {"gross_profit_t": g("gross_profit", t), "revenue_t": revenue_t,
+         "gross_profit_p": g("gross_profit", p), "revenue_p": revenue_p},
+        "gmi", inverse=True,
+    )
+
+    def asset_quality(y):
+        ca, ppe, ta = g("current_assets", y), g("ppe_net", y), g("total_assets", y)
+        return None if None in (ca, ppe, ta) or ta == 0 else 1 - (ca + ppe) / ta
+
+    aqi_components = {"current_assets_t": g("current_assets", t), "ppe_net_t": g("ppe_net", t), "total_assets_t": assets_t,
+                      "current_assets_p": g("current_assets", p), "ppe_net_p": g("ppe_net", p), "total_assets_p": assets_p}
+    aq_t, aq_p = asset_quality(t), asset_quality(p)
+    if aq_p == 0 and aq_t is not None:
+        # Beneish (1999, p. 12) : actif de t-1 composé uniquement d'actif courant et
+        # d'immobilisations corporelles, indice non défini, fixé à sa valeur neutre 1.
+        indices["aqi"] = {"value": 1.0, "current": aq_t, "prior": aq_p, "components": aqi_components, "formula": "aqi",
+                          "reason": None, "missing": (), "flags": ("aqi_neutral_by_definition",)}
+    else:
+        indices["aqi"] = _beneish_index(aq_t, aq_p, aqi_components, "aqi")
+    indices["sgi"] = _beneish_index(revenue_t, revenue_p, {"revenue_t": revenue_t, "revenue_p": revenue_p}, "sgi")
+
+    def depreciation_rate(y):
+        dep, ppe = g("depreciation", y), g("ppe_net", y)
+        return _div(dep, dep + ppe) if dep is not None and ppe is not None else None
+
+    indices["depi"] = _beneish_index(
+        depreciation_rate(t), depreciation_rate(p),
+        {"depreciation_t": g("depreciation", t), "ppe_net_t": g("ppe_net", t),
+         "depreciation_p": g("depreciation", p), "ppe_net_p": g("ppe_net", p)},
+        "depi", _flag_if_equivalent(ns, "depreciation", (t, p), "depreciation_includes_amortization"), inverse=True,
+    )
+    indices["sgai"] = _beneish_index(
+        _div(g("sga", t), revenue_t), _div(g("sga", p), revenue_p),
+        {"sga_t": g("sga", t), "revenue_t": revenue_t, "sga_p": g("sga", p), "revenue_p": revenue_p}, "sgai",
+    )
+
+    def leverage(y):
+        cl, ltd, ta = g("current_liabilities", y), g("long_term_debt_incl_leases", y), g("total_assets", y)
+        return _div(cl + ltd, ta) if cl is not None and ltd is not None else None
+
+    indices["lvgi"] = _beneish_index(
+        leverage(t), leverage(p),
+        {"current_liabilities_t": g("current_liabilities", t), "long_term_debt_incl_leases_t": g("long_term_debt_incl_leases", t),
+         "total_assets_t": assets_t, "current_liabilities_p": g("current_liabilities", p),
+         "long_term_debt_incl_leases_p": g("long_term_debt_incl_leases", p), "total_assets_p": assets_p},
+        "lvgi",
+    )
+    cfo = g("cfo", t)
+    tata_components = {"net_income_t": net_income, "cfo_t": cfo, "total_assets_t": assets_t}
+    tata_missing = tuple(k for k, v in tata_components.items() if v is None)
+    indices["tata"] = {
+        "value": None if tata_missing or not assets_t else (net_income - cfo) / assets_t,
+        "current": None, "prior": None, "components": tata_components, "formula": "tata",
+        "reason": "missing_inputs" if tata_missing else (None if assets_t else "non_positive_base"),
+        "missing": tata_missing, "flags": ni_flags,
+    }
+
+    values = {index: indices[index]["value"] for index in BENEISH_INDICES}
+    missing_indices = tuple(index for index, value in values.items() if value is None)
+    official = None
+    if not missing_indices:
+        official = beneish_m_score_from_indices(values)
+    indicative = None
+    if missing_indices and values["tata"] is not None:
+        neutralized = {index: (1.0 if value is None else value) for index, value in values.items()}
+        indicative = {"value": beneish_m_score_from_indices(neutralized), "neutralized": missing_indices}
+        indicative["verdict"] = beneish_verdict(indicative["value"])
+    return {
+        "pair": (t, p),
+        "indices": indices,
+        "contributions": {index: (BENEISH_COEFFICIENTS[index] * value if value is not None else None)
+                          for index, value in values.items()},
+        "m_score": {"value": official, "missing": missing_indices,
+                    "verdict": beneish_verdict(official) if official is not None else None},
+        "m_score_indicative": indicative,
+    }
+
+
+def beneish_verdict(m_score: float) -> str:
+    """Au-dessus de -1,78 : profil plus proche des manipulateurs de l'échantillon de Beneish."""
+    return "manipulation_risk" if m_score > BENEISH_THRESHOLD else "no_signal"
+
+
+# ---------- Altman Z-score ----------
+
+# Z d'origine : Altman (1968), Journal of Finance 23(4), 589-609, fonction discriminante réexprimée
+# sur des ratios décimaux (X5 à 0,999 dans l'article, souvent arrondi à 1,0). Z'' (sociétés non
+# manufacturières, fonds propres comptables, sans X5) : Altman (1995), repris dans Altman et al.
+# (2017). Seuils : 1,81 / 2,99 pour Z, 1,10 / 2,60 pour Z''.
+ALTMAN_MODELS = {
+    "original": {"coefficients": {"x1": 1.2, "x2": 1.4, "x3": 3.3, "x4": 0.6, "x5": 0.999}, "zones": (1.81, 2.99)},
+    "z_double_prime": {"coefficients": {"x1": 6.56, "x2": 3.26, "x3": 6.72, "x4": 1.05}, "zones": (1.10, 2.60)},
+}
+# Le Z d'origine a été calibré sur des industriels cotés : réservé par défaut aux secteurs Yahoo les
+# plus proches de ce profil, Z'' (la version conseillée par Altman hors industrie) pour les autres.
+ALTMAN_ORIGINAL_SECTORS = ("Industrials", "Basic Materials")
+
+
+def altman_default_model(sector: str | None) -> str:
+    return "original" if sector in ALTMAN_ORIGINAL_SECTORS else "z_double_prime"
+
+
+def altman_zone(z_score: float, model: str) -> str:
+    """Zone de détresse, grise ou sûre ; les seuils eux-mêmes sont rangés en zone grise."""
+    distress, safe = ALTMAN_MODELS[model]["zones"]
+    if z_score < distress:
+        return "distress"
+    return "safe" if z_score > safe else "grey"
+
+
+def altman_z_from_ratios(ratios: dict[str, float], model: str) -> float:
+    return sum(coefficient * ratios[x] for x, coefficient in ALTMAN_MODELS[model]["coefficients"].items())
+
+
+def price_on_or_before(closes: pd.Series, date: pd.Timestamp, max_gap_days: int = 10) -> float | None:
+    """Dernier cours de clôture connu à `date` ou avant (une clôture d'exercice tombe souvent un jour
+    sans cotation, 31 décembre compris). None si le dernier cours connu date de plus de max_gap_days :
+    au-delà, ce ne serait plus « le cours à la clôture de l'exercice »."""
+    if closes is None or closes.empty:
+        return None
+    eligible = closes[closes.index <= date]
+    if eligible.empty or (date - eligible.index[-1]).days > max_gap_days:
+        return None
+    return float(eligible.iloc[-1])
+
+
+def market_value_of_equity(close_price: float | None, shares: float | None, divisor: float,
+                           fx_rate: float | None) -> float | None:
+    """Capitalisation à une date, dans la devise des comptes : cours de clôture (éventuellement en
+    sous-unité, ex. pence) / diviseur x nombre d'actions x taux de change de cette date. None si une
+    donnée manque, jamais une capitalisation non convertie."""
+    if close_price is None or shares is None or fx_rate is None or divisor <= 0:
+        return None
+    return close_price / divisor * shares * fx_rate
+
+
+def altman_z_score(ns: NormalizedStatements, year: pd.Timestamp, model: str,
+                   market_value: float | None = None) -> dict:
+    """Z-score d'Altman d'un exercice (score de niveau, un seul exercice : pas de couple).
+
+    X1 = fonds de roulement / actif total, X2 = réserves / actif total, X3 = EBIT / actif total,
+    X4 = capitalisation boursière (Z d'origine) ou capitaux propres comptables (Z'') / passif total,
+    X5 = chiffre d'affaires / actif total (Z d'origine seulement). Les capitaux propres comptables
+    incluent les minoritaires, cohérents avec le passif total (actif - capitaux propres consolidés) ;
+    repli signalé sur la part du groupe. market_value : capitalisation à la date de clôture, dans la
+    devise des comptes (voir market_value_of_equity). Pas de valeur neutre pour un ratio de niveau :
+    Z est n.d. dès qu'un ratio manque."""
+    g = ns.get
+    assets = g("total_assets", year)
+    liabilities = g("total_liabilities", year)
+    flags: tuple[str, ...] = ()
+    if model == "original":
+        x4_numerator, x4_key = market_value, "market_value_of_equity"
+    else:
+        x4_numerator, x4_key = g("total_equity_incl_minorities", year), "total_equity_incl_minorities"
+        if x4_numerator is None and g("equity", year) is not None:
+            x4_numerator, x4_key, flags = g("equity", year), "equity", ("group_share_equity_fallback",)
+
+    definitions = {
+        "x1": ("working_capital", g("working_capital", year), "total_assets", assets),
+        "x2": ("retained_earnings", g("retained_earnings", year), "total_assets", assets),
+        "x3": ("ebit", g("ebit", year), "total_assets", assets),
+        "x4": (x4_key, x4_numerator, "total_liabilities", liabilities),
+    }
+    if model == "original":
+        definitions["x5"] = ("revenue", g("revenue", year), "total_assets", assets)
+
+    components, ratios, missing = {}, {}, []
+    for x, (num_key, num, den_key, den) in definitions.items():
+        ratio = _div(num, den) if den is not None and den > 0 else None
+        components[x] = {"numerator_key": num_key, "numerator": num, "denominator_key": den_key,
+                         "denominator": den, "value": ratio}
+        if ratio is None:
+            missing.extend(k for k, v in ((num_key, num), (den_key, den)) if v is None or (k == den_key and v <= 0))
+        ratios[x] = ratio
+    missing_keys = tuple(dict.fromkeys(missing))
+    value = None if any(r is None for r in ratios.values()) else altman_z_from_ratios(ratios, model)
+    coefficients = ALTMAN_MODELS[model]["coefficients"]
+    return {
+        "model": model, "year": year, "value": value, "zone": altman_zone(value, model) if value is not None else None,
+        "components": components,
+        "contributions": {x: (coefficients[x] * r if r is not None else None) for x, r in ratios.items()},
+        "missing": missing_keys, "flags": flags,
+    }
+
+
+# ---------- Piotroski F-score ----------
+
+# Piotroski (2000), « Value Investing: The Use of Historical Financial Statement Information to
+# Separate Winners from Losers », Journal of Accounting Research 38, 1-41.
+PIOTROSKI_CRITERIA = (
+    "roa_positive", "cfo_positive", "roa_improved", "cfo_exceeds_net_income",
+    "leverage_decreased", "current_ratio_improved", "no_equity_issuance",
+    "gross_margin_improved", "asset_turnover_improved",
+)
+
+
+def piotroski_f_score(ns: NormalizedStatements, year: pd.Timestamp, asset_base: str = "beginning") -> dict:
+    """F-score de Piotroski (9 critères binaires) pour l'exercice `year`, comparé à l'exercice précédent.
+
+    asset_base="beginning" (définition de Piotroski, utilisée par l'interface) : ROA, CFO et rotation
+    de l'actif rapportés à l'actif d'OUVERTURE, levier rapporté à l'actif moyen ; il faut donc trois
+    bilans (t, t-1, t-2) pour les critères de variation. asset_base="end" : variante courante des
+    praticiens, tout rapporté à l'actif de clôture (deux bilans suffisent).
+
+    Dette à long terme hors dettes locatives (poste COMPUSTAT n° 9 de l'article). Émission d'actions
+    jugée sur le nombre d'actions du bilan : une hausse liée à des plans salariés compte donc comme une
+    émission. Un critère non calculable vaut None avec sa raison, et le score est la somme des seuls
+    critères calculables (n_available l'indique) : à ne pas comparer tel quel aux seuils usuels sur 9."""
+    chronological = sorted(ns.years)
+    index = chronological.index(year)
+    prior = chronological[index - 1] if index >= 1 else None
+    prior2 = chronological[index - 2] if index >= 2 else None
+    g = ns.get
+
+    def scaling_assets(y, y_before):
+        if asset_base == "end":
+            return g("total_assets", y)
+        return g("total_assets", y_before) if y_before is not None else None
+
+    def roa(y, y_before):
+        net_income, _flags = _net_income_for_cash_comparison(ns, y)
+        return _div(net_income, scaling_assets(y, y_before))
+
+    def leverage(y, y_before):
+        ltd = g("long_term_debt", y)
+        if asset_base == "end":
+            return _div(ltd, g("total_assets", y))
+        if y_before is None or g("total_assets", y) is None or g("total_assets", y_before) is None:
+            return None
+        return _div(ltd, (g("total_assets", y) + g("total_assets", y_before)) / 2)
+
+    def turnover(y, y_before):
+        return _div(g("revenue", y), scaling_assets(y, y_before))
+
+    def margin(y):
+        return _div(g("gross_profit", y), g("revenue", y))
+
+    def current_ratio(y):
+        return _div(g("current_assets", y), g("current_liabilities", y))
+
+    net_income, ni_flags = _net_income_for_cash_comparison(ns, year)
+    cfo = g("cfo", year)
+    prior_scale = prior2 if asset_base == "beginning" else prior
+    shares_t = g("shares_outstanding", year)
+    shares_p = g("shares_outstanding", prior) if prior is not None else None
+
+    def binary(current, threshold, details, strictly_greater=True):
+        missing = tuple(key for key, value in details.items() if value is None)
+        if current is None or threshold is None:
+            return {"value": None, "details": details, "reason": "missing_inputs", "missing": missing}
+        passed = current > threshold if strictly_greater else current >= threshold
+        return {"value": 1 if passed else 0, "details": details, "reason": None, "missing": ()}
+
+    roa_t = roa(year, prior)
+    roa_p = roa(prior, prior_scale) if prior is not None else None
+    lev_t = leverage(year, prior)
+    lev_p = leverage(prior, prior_scale) if prior is not None else None
+    cr_t, cr_p = current_ratio(year), current_ratio(prior) if prior is not None else None
+    gm_t, gm_p = margin(year), margin(prior) if prior is not None else None
+    turn_t = turnover(year, prior)
+    turn_p = turnover(prior, prior_scale) if prior is not None else None
+
+    criteria = {
+        "roa_positive": binary(roa_t, 0.0, {"roa_t": roa_t}),
+        "cfo_positive": binary(cfo, 0.0, {"cfo_t": cfo}),
+        "roa_improved": binary(roa_t, roa_p, {"roa_t": roa_t, "roa_p": roa_p}),
+        # CFO / actif > ROA revient à CFO > résultat net (même dénominateur).
+        "cfo_exceeds_net_income": binary(cfo, net_income, {"cfo_t": cfo, "net_income_t": net_income}),
+        # Levier en baisse : le critère est rempli si le levier de t est STRICTEMENT inférieur.
+        "leverage_decreased": binary(lev_p, lev_t, {"leverage_t": lev_t, "leverage_p": lev_p}),
+        "current_ratio_improved": binary(cr_t, cr_p, {"current_ratio_t": cr_t, "current_ratio_p": cr_p}),
+        "no_equity_issuance": binary(shares_p, shares_t, {"shares_t": shares_t, "shares_p": shares_p},
+                                     strictly_greater=False),
+        "gross_margin_improved": binary(gm_t, gm_p, {"gross_margin_t": gm_t, "gross_margin_p": gm_p}),
+        "asset_turnover_improved": binary(turn_t, turn_p, {"turnover_t": turn_t, "turnover_p": turn_p}),
+    }
+    available = [c["value"] for c in criteria.values() if c["value"] is not None]
+    return {
+        "year": year, "prior_year": prior, "asset_base": asset_base, "criteria": criteria,
+        "score": sum(available) if available else None, "n_available": len(available),
+        "n_criteria": len(PIOTROSKI_CRITERIA), "flags": ni_flags,
+    }
