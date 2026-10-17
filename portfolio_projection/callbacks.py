@@ -29,11 +29,11 @@ from engine import (
 from i18n import L, PALETTE, PALETTE_CODES, PALETTE_NAMES, PALETTES
 from market_data import (
     get_aligned_returns, get_aligned_returns_for_tickers, get_current_price, get_daily_price_history,
-    get_monthly_returns, get_ticker_name, resolve_isin_to_ticker,
+    get_daily_total_return_history, get_monthly_returns, get_ticker_name, resolve_isin_to_ticker,
 )
 from results import (
     build_envelope_comparison_figure, build_historique_metrics_outputs, build_metric_cards,
-    build_metrics_outputs, build_portfolio_totals_cards, build_real_portfolio_future_figure,
+    build_metrics_outputs, build_performance_cards, build_portfolio_totals_cards, build_real_portfolio_future_figure,
     build_rebalancing_table_data, build_real_vs_simulated_figure, build_schedules, build_sequence_risk_series,
     compute_results, render_objective_result, render_rolling_backtest_result,
 )
@@ -1269,6 +1269,65 @@ def apply_real_pace_to_simulator(n_clicks):
     if schedule.empty:
         raise dash.exceptions.PreventUpdate
     return portfolio_engine.clamp_to_slider(float(schedule.mean()), 100, 1000, 10)
+
+
+@app.callback(
+    Output("tab3-performance-cards", "children"),
+    Input("tab3-refresh-trigger", "data"),
+    Input("tab3-benchmark-ticker-input", "value"),
+    Input("lang-radio", "value"),
+)
+def refresh_performance(_trigger, benchmark_ticker, lang):
+    # Callback séparé de refresh_tab3 (déjà très chargé) : changer de référence ne doit recalculer
+    # que cette section. Les prix et historiques réels sont mis en cache (cached_ttl), donc les
+    # relire ici ne refait pas d'appel réseau.
+    lang = lang or "fr"
+    transactions = portfolio_db.get_transactions()
+    dividends = portfolio_db.get_dividends()
+    if transactions.empty:
+        return html.Div(L(lang, "performance_no_data"), className="text-muted")
+
+    holdings = portfolio_engine.reconstruct_holdings(transactions)
+    first_date = pd.to_datetime(transactions["date"]).min().strftime("%Y-%m-%d")
+    current_value_total = 0.0
+    price_histories = {}
+    for _, row in holdings.iterrows():
+        price = get_current_price(row["ticker"])
+        if price is not None:
+            current_value_total += row["quantity"] * price
+        history = get_daily_price_history(row["ticker"], first_date)
+        if not history.empty:
+            price_histories[row["ticker"]] = history
+
+    today = pd.Timestamp.today().normalize()
+    perf = {
+        "xirr": portfolio_engine.xirr(
+            portfolio_engine.portfolio_cash_flows(transactions, dividends, current_value_total, today)
+        ),
+        "twr": portfolio_engine.time_weighted_return(
+            portfolio_engine.reconstruct_equity_curve(transactions, price_histories), transactions, dividends,
+        ),
+        "real_value": current_value_total,
+    }
+
+    warning = None
+    if benchmark_ticker:
+        benchmark_curve = portfolio_engine.benchmark_equity_curve(
+            transactions, get_daily_total_return_history(benchmark_ticker, first_date),
+        )
+        if benchmark_curve.empty:
+            warning = dbc.Alert(
+                L(lang, "benchmark_unavailable", ticker=benchmark_ticker), color="warning", className="py-1 px-2 mb-2",
+            )
+        else:
+            benchmark_value = float(benchmark_curve.iloc[-1])
+            perf["benchmark_label"] = _ticker_display_label(benchmark_ticker)
+            perf["benchmark_value"] = benchmark_value
+            perf["benchmark_xirr"] = portfolio_engine.xirr(portfolio_engine.benchmark_cash_flows(
+                transactions, benchmark_value, benchmark_curve.index[-1],
+            ))
+
+    return html.Div([warning, build_performance_cards(perf, lang)] if warning else [build_performance_cards(perf, lang)])
 
 
 # ============================================================

@@ -85,6 +85,37 @@ TRANSLATIONS = {
         "metric_pnl": "Plus/moins-value",
         "metric_total_fees": "Frais cumulés",
         "metric_total_dividends": "Dividendes perçus",
+        "section_performance": "Performance réelle",
+        "pct_per_year_unit": "%/an",
+        "benchmark_label": "Indice de référence",
+        "benchmark_help": "Portefeuille fictif : exactement les mêmes versements (mêmes dates, mêmes "
+                           "montants, mêmes frais) investis dans ce ticker au cours de clôture du jour, "
+                           "dividendes réinvestis. Répond à « aurais-je fait mieux en mettant tout "
+                           "sur cet ETF ? ». N'importe quel ticker Yahoo peut être saisi.",
+        "metric_xirr": "XIRR (rendement réel)",
+        "xirr_help": "Rendement annuel pondéré par les flux (money-weighted) : le taux qui égalise "
+                      "tes versements (frais compris) avec les dividendes perçus et la valeur "
+                      "actuelle. Il dépend du moment où tu as investi : c'est le rendement que TU as "
+                      "réellement obtenu sur ton argent.",
+        "metric_twr": "TWR (rendement des placements)",
+        "twr_help": "Rendement pondéré par le temps : les rendements entre deux versements sont "
+                     "chaînés, ce qui neutralise le calendrier des versements (un gros versement juste "
+                     "avant une baisse ne le pénalise pas). Mesure la qualité des placements "
+                     "eux-mêmes, comme la performance publiée d'un fonds.",
+        "twr_cumulative_sub": "cumulé {pct} sur {years} ans",
+        "metric_benchmark_value": "Valeur de la référence",
+        "benchmark_value_sub": "{label} -- réel : {real} (écart {diff})",
+        "metric_benchmark_xirr": "XIRR de la référence",
+        "benchmark_xirr_help": "XIRR du portefeuille fictif investi dans la référence, avec les mêmes "
+                                "flux que le tien : la comparaison directe avec ton XIRR montre ce "
+                                "que tes choix de placement t'ont fait gagner (ou perdre) par an.",
+        "benchmark_xirr_sub": "ton XIRR - référence : {diff} pt/an",
+        "performance_conventions_note": "Conventions : frais inclus dans le coût des achats ; "
+                                         "dividendes comptés comme du cash perçu à leur date (non "
+                                         "réinvestis), positions valorisées aux cours bruts ; "
+                                         "référence dividendes réinvestis ; avant fiscalité.",
+        "performance_no_data": "Ajoute des transactions pour calculer la performance réelle.",
+        "benchmark_unavailable": "Pas de cours disponibles pour la référence {ticker} sur la période.",
         "section_real_vs_simulated": "Réel vs simulé",
         "real_vs_simulated_chart_title": "Valeur réelle vs ce qu'une simulation Monte Carlo aurait donné",
         "real_equity_trace": "Valeur réelle",
@@ -481,6 +512,36 @@ TRANSLATIONS = {
         "metric_pnl": "P&L",
         "metric_total_fees": "Total fees",
         "metric_total_dividends": "Dividends received",
+        "section_performance": "Actual performance",
+        "pct_per_year_unit": "%/yr",
+        "benchmark_label": "Benchmark",
+        "benchmark_help": "Hypothetical portfolio: exactly the same contributions (same dates, same "
+                           "amounts, same fees) invested in this ticker at that day's close, dividends "
+                           "reinvested. Answers \"would I have done better putting everything in this "
+                           "ETF?\". Any Yahoo ticker can be typed in.",
+        "metric_xirr": "XIRR (your return)",
+        "xirr_help": "Money-weighted annual return: the rate that equates your contributions (fees "
+                      "included) with the dividends received and the current value. It depends on when "
+                      "you invested: it's the return YOU actually earned on your money.",
+        "metric_twr": "TWR (investment return)",
+        "twr_help": "Time-weighted return: returns between contributions are chained, which removes "
+                     "the effect of contribution timing (a big contribution just before a drop doesn't "
+                     "penalize it). Measures the quality of the investments themselves, like a fund's "
+                     "published performance.",
+        "twr_cumulative_sub": "cumulative {pct} over {years} years",
+        "metric_benchmark_value": "Benchmark value",
+        "benchmark_value_sub": "{label} -- actual: {real} (gap {diff})",
+        "metric_benchmark_xirr": "Benchmark XIRR",
+        "benchmark_xirr_help": "XIRR of the hypothetical portfolio invested in the benchmark with the "
+                                "same flows as yours: comparing it directly with your XIRR shows what "
+                                "your investment choices gained (or cost) you per year.",
+        "benchmark_xirr_sub": "your XIRR - benchmark: {diff} pt/yr",
+        "performance_conventions_note": "Conventions: fees included in purchase cost; dividends "
+                                         "counted as cash received on their date (not reinvested), "
+                                         "holdings valued at raw prices; benchmark with dividends "
+                                         "reinvested; before tax.",
+        "performance_no_data": "Add transactions to compute actual performance.",
+        "benchmark_unavailable": "No prices available for benchmark {ticker} over the period.",
         "section_real_vs_simulated": "Real vs. simulated",
         "real_vs_simulated_chart_title": "Real value vs. what a Monte Carlo simulation would have given",
         "real_equity_trace": "Real value",

@@ -429,6 +429,72 @@ def build_portfolio_totals_cards(totals: dict, lang: str):
     return dbc.Row(cards)
 
 
+def _pct_per_year(rate, lang):
+    return f"{rate * 100:+.2f} {L(lang, 'pct_per_year_unit')}" if rate is not None else "N/A"
+
+
+def _money(value, signed=False):
+    return (f"{value:+,.0f} €" if signed else f"{value:,.0f} €").replace(",", " ")
+
+
+def build_performance_cards(perf: dict, lang: str):
+    """perf : {"xirr", "twr" (voir portfolio_engine.time_weighted_return), "real_value",
+    "benchmark_label", "benchmark_value", "benchmark_xirr"} -- toutes les valeurs déjà calculées
+    par les moteurs purs, cette fonction ne fait que les mettre en forme. Chaque concept nouveau
+    (XIRR, TWR, référence) porte son infobulle ⓘ, comme le reste de l'appli : ce sont trois
+    lectures différentes de "combien ça a rapporté", faciles à confondre."""
+    def card(label_key, info_key, main_text, sub_text=None, color=None):
+        info_id = f"perf-{label_key}-info"
+        body = [
+            html.H6([
+                L(lang, label_key),
+                html.Span(" ⓘ", id=info_id, style={"cursor": "help"}),
+            ], className="card-subtitle text-muted mb-1"),
+            dbc.Tooltip(L(lang, info_key), target=info_id, placement="top"),
+            html.H5(main_text, className=f"mb-1 text-{color}" if color else "mb-1"),
+        ]
+        if sub_text:
+            body.append(html.Small(sub_text, className="text-muted"))
+        return dbc.Col(dbc.Card(dbc.CardBody(body), className="h-100"), width=3, className="mb-2")
+
+    def sign_color(rate):
+        if rate is None:
+            return None
+        return "success" if rate >= 0 else "danger"
+
+    xirr_real = perf.get("xirr")
+    twr = perf.get("twr")
+    cards = [card("metric_xirr", "xirr_help", _pct_per_year(xirr_real, lang), color=sign_color(xirr_real))]
+
+    if twr is not None:
+        cards.append(card(
+            "metric_twr", "twr_help", _pct_per_year(twr["twr_annualized"], lang),
+            L(lang, "twr_cumulative_sub", pct=f"{twr['twr'] * 100:+.1f} %", years=f"{twr['n_years']:.1f}"),
+            color=sign_color(twr["twr_annualized"]),
+        ))
+    else:
+        cards.append(card("metric_twr", "twr_help", "N/A"))
+
+    bench_value = perf.get("benchmark_value")
+    bench_xirr = perf.get("benchmark_xirr")
+    if bench_value is not None:
+        real_value = perf.get("real_value", 0.0)
+        cards.append(card(
+            "metric_benchmark_value", "benchmark_help", _money(bench_value),
+            L(lang, "benchmark_value_sub", label=perf.get("benchmark_label", ""),
+              real=_money(real_value), diff=_money(real_value - bench_value, signed=True)),
+        ))
+        diff_text = (
+            L(lang, "benchmark_xirr_sub", diff=f"{(xirr_real - bench_xirr) * 100:+.2f}")
+            if xirr_real is not None and bench_xirr is not None else None
+        )
+        cards.append(card(
+            "metric_benchmark_xirr", "benchmark_xirr_help", _pct_per_year(bench_xirr, lang), diff_text,
+            color=sign_color(bench_xirr),
+        ))
+    return dbc.Row(cards)
+
+
 def build_rebalancing_table_data(rebalancing_df: pd.DataFrame, lang: str):
     """rebalancing_df : voir portfolio_engine.compute_rebalancing_plan(). Même forme de retour que
     build_metrics_outputs (table_data, table_columns) : delta_eur toujours affiché avec un signe

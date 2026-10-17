@@ -151,12 +151,35 @@ def get_daily_price_history(ticker: str, start_date: str) -> pd.Series:
     seulement sa valeur actuelle. Série vide si le ticker est invalide ou n'a pas coté sur la
     période. Premier (et seul) point de collecte quotidien de cette app : get_monthly_returns
     ci-dessus ne fait que du mensuel, suffisant pour la calibration Monte Carlo mais pas pour
-    valoriser un achat à sa date exacte."""
+    valoriser un achat à sa date exacte.
+
+    Cours BRUTS (auto_adjust=False), pas ajustés des dividendes comme le fait yfinance par défaut :
+    on veut la valeur de marché réelle des positions à chaque date passée. Un cours ajusté abaisse
+    rétroactivement les cours d'un titre distribuant (ex: CAC.PA, ~70 € ajusté contre ~74 € réel
+    début 2024), ce qui sous-évaluerait la courbe passée et compterait deux fois les dividendes
+    déjà saisis en cash (voir portfolio_engine, section performance réelle)."""
     info = _get_ticker_info(ticker)
     price = info.get("currentPrice") or info.get("regularMarketPrice")
     price_scale = _price_scale_factor(info.get("trailingPE"), info.get("trailingEps"), price)
     try:
-        hist = yf.Ticker(ticker).history(start=start_date, interval="1d")["Close"].dropna()
+        hist = yf.Ticker(ticker).history(start=start_date, interval="1d", auto_adjust=False)["Close"].dropna()
+    except Exception:
+        return pd.Series(dtype=float)
+    return hist / price_scale
+
+
+@cached_ttl(3600)
+def get_daily_total_return_history(ticker: str, start_date: str) -> pd.Series:
+    """Historique quotidien AJUSTÉ des dividendes (dividendes réinvestis) depuis start_date : sert
+    d'indice de référence pour le portefeuille réel (portfolio_engine.benchmark_equity_curve),
+    convention usuelle d'une référence "dividendes réinvestis" -- contrairement à
+    get_daily_price_history, qui veut les cours bruts. Même correction d'échelle pence/livre.
+    Série vide si le ticker est invalide ou n'a pas coté sur la période."""
+    info = _get_ticker_info(ticker)
+    price = info.get("currentPrice") or info.get("regularMarketPrice")
+    price_scale = _price_scale_factor(info.get("trailingPE"), info.get("trailingEps"), price)
+    try:
+        hist = yf.Ticker(ticker).history(start=start_date, interval="1d", auto_adjust=True)["Close"].dropna()
     except Exception:
         return pd.Series(dtype=float)
     return hist / price_scale

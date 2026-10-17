@@ -713,6 +713,9 @@ def build_tab3(lang):
         {"label": portfolio_engine.ticker_display_label(t), "value": t}
         for t in portfolio_engine.known_tickers(transactions_df, dividends_df, weights_df)
     ]
+    benchmark_options = [
+        {"label": portfolio_engine.ticker_display_label(tks["etf"]), "value": tks["etf"]} for tks in TICKERS.values()
+    ]
 
     def ticker_dropdown(dropdown_id, placeholder):
         # dcc.Dropdown plutôt qu'un simple texte libre : reproposer un ticker déjà utilisé en un
@@ -797,6 +800,26 @@ def build_tab3(lang):
             dbc.Button(L(lang, "btn_use_real_pace"), id="tab3-btn-use-real-pace", color="link", size="sm",
                        className="p-0"),
         ], className="mb-3"),
+
+        html.H5(L(lang, "section_performance"), className="section-title", id="anchor-tab3-performance"),
+        dbc.Card(dbc.CardBody([
+            html.Div([
+                html.Div([dbc.Label(L(lang, "benchmark_label"), className="mb-0")] + info_tooltip(
+                    "benchmark-ticker-info", L(lang, "benchmark_help"),
+                )),
+                # Creatable comme les autres menus ticker de l'onglet (voir app.py) : n'importe quel
+                # ticker Yahoo peut servir de référence, pas seulement les ETF de l'univers simulé.
+                # persistence : le choix survit au rechargement et au changement de langue.
+                dcc.Dropdown(
+                    id="tab3-benchmark-ticker-input", options=benchmark_options,
+                    value=TICKERS["MSCI World"]["etf"], clearable=False, searchable=True,
+                    persistence=True, persistence_type="local",
+                    style={"width": "320px", "fontSize": "0.85rem"},
+                ),
+            ], className="mb-3"),
+            dcc.Loading(type="circle", children=[html.Div(id="tab3-performance-cards")]),
+            html.Small(L(lang, "performance_conventions_note"), className="text-muted d-block mt-1"),
+        ]), className="mb-4"),
 
         html.H5(L(lang, "section_real_vs_simulated"), className="section-title", id="anchor-tab3-chart"),
         dbc.Card(dbc.CardBody(

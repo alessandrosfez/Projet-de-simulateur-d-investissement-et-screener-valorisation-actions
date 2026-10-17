@@ -329,3 +329,142 @@ def test_ticker_display_label_known_indice_adds_index_name():
 
 def test_ticker_display_label_unknown_ticker_unchanged():
     assert m.ticker_display_label("AAPL") == "AAPL"
+
+
+# ---------- xirr / portfolio_cash_flows ----------
+
+def test_xirr_single_flow_equals_annualized_return():
+    """Un seul versement puis une valeur finale : le XIRR est exactement le rendement annualisé
+    (exact/365) entre les deux dates."""
+    start, end = pd.Timestamp("2020-01-01"), pd.Timestamp("2023-07-01")
+    years = (end - start).days / 365
+    final = 1000 * 1.08 ** years
+    assert m.xirr([(start, -1000.0), (end, final)]) == pytest.approx(0.08, abs=1e-8)
+
+
+def test_xirr_regular_flows_at_constant_return_recovers_that_return():
+    """Versements mensuels réguliers, chacun capitalisé au même taux annuel jusqu'à la date finale :
+    le XIRR doit retrouver ce taux, quel que soit le calendrier des versements."""
+    rate = 0.06
+    dates = pd.date_range("2018-01-01", periods=36, freq="MS")
+    end = pd.Timestamp("2021-06-15")
+    final = sum(100 * (1 + rate) ** ((end - d).days / 365) for d in dates)
+    flows = [(d, -100.0) for d in dates] + [(end, final)]
+    assert m.xirr(flows) == pytest.approx(rate, abs=1e-7)
+
+
+def test_xirr_negative_return():
+    start, end = pd.Timestamp("2022-01-01"), pd.Timestamp("2023-01-01")
+    assert m.xirr([(start, -1000.0), (end, 900.0)]) == pytest.approx(-0.10, abs=1e-8)
+
+
+def test_xirr_undefined_cases_return_none():
+    assert m.xirr([]) is None
+    assert m.xirr([(pd.Timestamp("2022-01-01"), -1000.0)]) is None
+    assert m.xirr([(pd.Timestamp("2022-01-01"), -1000.0), (pd.Timestamp("2023-01-01"), -5.0)]) is None
+
+
+def test_portfolio_cash_flows_signs_and_fees():
+    transactions = pd.DataFrame([_tx("AAA", "2024-01-01", 1000.0, 10.0, fee_eur=2.0)])
+    dividends = pd.DataFrame([{"ticker": "AAA", "date": "2024-06-01", "amount_eur": 15.0}])
+    flows = m.portfolio_cash_flows(transactions, dividends, 1100.0, "2025-01-01")
+    assert flows == [
+        (pd.Timestamp("2024-01-01"), -1002.0),
+        (pd.Timestamp("2024-06-01"), 15.0),
+        (pd.Timestamp("2025-01-01"), 1100.0),
+    ]
+
+
+def test_portfolio_cash_flows_no_transaction():
+    empty_tx = pd.DataFrame(columns=["ticker", "date", "amount_eur", "price", "fee_eur"])
+    empty_div = pd.DataFrame(columns=["ticker", "date", "amount_eur"])
+    assert m.portfolio_cash_flows(empty_tx, empty_div, 0.0, "2025-01-01") == []
+    assert m.xirr(m.portfolio_cash_flows(empty_tx, empty_div, 0.0, "2025-01-01")) is None
+
+
+# ---------- time_weighted_return ----------
+
+def _constant_growth_prices(start, n_days, annual_rate, start_price=100.0):
+    dates = pd.date_range(start, periods=n_days, freq="D")
+    years = (dates - dates[0]).days / 365
+    return pd.Series(start_price * (1 + annual_rate) ** years, index=dates)
+
+
+def test_twr_independent_of_contribution_timing():
+    """Prix à croissance constante : le TWR doit valoir cette croissance, que l'investisseur ait
+    versé un peu au début et beaucoup à la fin, ou l'inverse -- c'est précisément ce que le TWR
+    neutralise, contrairement au XIRR."""
+    prices = _constant_growth_prices("2020-01-01", 3 * 365 + 1, 0.07)
+    for amounts in ([100.0, 5000.0], [5000.0, 100.0]):
+        transactions = pd.DataFrame([
+            _tx("AAA", "2020-01-01", amounts[0], float(prices.loc["2020-01-01"])),
+            _tx("AAA", "2021-07-01", amounts[1], float(prices.loc["2021-07-01"])),
+        ])
+        curve = m.reconstruct_equity_curve(transactions, {"AAA": prices})
+        empty_div = pd.DataFrame(columns=["ticker", "date", "amount_eur"])
+        result = m.time_weighted_return(curve, transactions, empty_div)
+        assert result["twr_annualized"] == pytest.approx(0.07, abs=1e-4)
+
+
+def test_twr_fees_reduce_return():
+    prices = _constant_growth_prices("2020-01-01", 2 * 365 + 1, 0.05)
+    empty_div = pd.DataFrame(columns=["ticker", "date", "amount_eur"])
+    no_fee = pd.DataFrame([_tx("AAA", "2020-01-01", 1000.0, 100.0)])
+    with_fee = pd.DataFrame([
+        _tx("AAA", "2020-01-01", 1000.0, 100.0),
+        _tx("AAA", "2021-01-01", 1000.0, float(prices.loc["2021-01-01"]), fee_eur=20.0),
+    ])
+    twr_no_fee = m.time_weighted_return(m.reconstruct_equity_curve(no_fee, {"AAA": prices}), no_fee, empty_div)
+    twr_fee = m.time_weighted_return(m.reconstruct_equity_curve(with_fee, {"AAA": prices}), with_fee, empty_div)
+    assert twr_fee["twr"] < twr_no_fee["twr"]
+
+
+def test_twr_dividends_received_in_cash_add_to_return():
+    """Un dividende perçu en cash quitte la courbe de valeur (cours bruts) mais reste du rendement :
+    le TWR doit être supérieur à la seule croissance des cours."""
+    prices = _constant_growth_prices("2020-01-01", 2 * 365 + 1, 0.0)  # cours plats
+    transactions = pd.DataFrame([_tx("AAA", "2020-01-01", 1000.0, 100.0)])
+    dividends = pd.DataFrame([{"ticker": "AAA", "date": "2021-01-01", "amount_eur": 30.0}])
+    curve = m.reconstruct_equity_curve(transactions, {"AAA": prices})
+    result = m.time_weighted_return(curve, transactions, dividends)
+    assert result["twr"] == pytest.approx(0.03, abs=1e-9)
+
+
+def test_twr_no_transaction_returns_none():
+    empty_tx = pd.DataFrame(columns=["ticker", "date", "amount_eur", "price", "fee_eur"])
+    empty_div = pd.DataFrame(columns=["ticker", "date", "amount_eur"])
+    assert m.time_weighted_return(pd.Series(dtype=float), empty_tx, empty_div) is None
+
+
+# ---------- indice de référence ----------
+
+def test_benchmark_same_flows_recovers_benchmark_growth_rate():
+    """Les mêmes flux investis dans une référence à croissance constante : le XIRR du portefeuille
+    fictif doit retrouver ce taux de croissance (sans frais)."""
+    prices = _constant_growth_prices("2019-01-01", 4 * 365 + 1, 0.09)
+    transactions = pd.DataFrame([
+        _tx("REAL", "2019-01-01", 500.0, 10.0),
+        _tx("REAL", "2020-03-15", 800.0, 10.0),
+        _tx("REAL", "2021-11-02", 300.0, 10.0),
+    ])
+    curve = m.benchmark_equity_curve(transactions, prices)
+    end = curve.index[-1]
+    flows = m.benchmark_cash_flows(transactions, float(curve.iloc[-1]), end)
+    assert m.xirr(flows) == pytest.approx(0.09, abs=1e-6)
+
+
+def test_benchmark_buys_on_next_trading_day():
+    """Un achat daté d'un jour sans cotation (week-end) est exécuté à la clôture du jour coté
+    suivant, comme dans reconstruct_equity_curve."""
+    dates = pd.to_datetime(["2024-01-05", "2024-01-08"])  # vendredi, lundi
+    prices = pd.Series([10.0, 20.0], index=dates)
+    transactions = pd.DataFrame([_tx("REAL", "2024-01-06", 100.0, 1.0)])  # samedi
+    curve = m.benchmark_equity_curve(transactions, prices)
+    assert list(curve.index) == [pd.Timestamp("2024-01-08")]
+    assert curve.iloc[0] == pytest.approx(100.0)
+
+
+def test_benchmark_no_transaction_is_empty():
+    empty_tx = pd.DataFrame(columns=["ticker", "date", "amount_eur", "price", "fee_eur"])
+    assert m.benchmark_equity_curve(empty_tx, pd.Series([1.0], index=pd.to_datetime(["2024-01-01"]))).empty
+    assert m.benchmark_cash_flows(empty_tx, 0.0, "2024-01-01") == []

@@ -135,6 +135,181 @@ def compute_totals(transactions: pd.DataFrame, dividends: pd.DataFrame, current_
 
 
 # ============================================================
+# Performance réelle : XIRR, TWR, indice de référence
+# ============================================================
+# Conventions communes, alignées sur compute_totals :
+# - Un achat coûte amount_eur + fee_eur (le cash réellement sorti), mais seul amount_eur devient
+#   des parts (quantité = amount_eur / price, voir reconstruct_holdings) : les frais pèsent donc
+#   sur la performance au lieu d'être ignorés.
+# - Un dividende est un flux de trésorerie PERÇU à sa date (cash sur le compte PEA), pas
+#   réinvesti : le modèle ne crée aucune part à partir d'un dividende, comme compute_totals.
+#   Ce cash compte dans le rendement (sinon un ETF distribuant paraîtrait moins bon qu'un ETF
+#   capitalisant à performance égale), mais n'est pas réintégré dans la courbe de valeur, d'où
+#   son ajout explicite ci-dessous.
+# La courbe de valeur (reconstruct_equity_curve) doit donc être valorisée aux cours BRUTS (non
+#   ajustés des dividendes, voir market_data.get_daily_price_history) : des cours ajustés
+#   intègrent déjà les dividendes passés, qui seraient alors comptés deux fois.
+
+
+def _year_fraction(start: pd.Timestamp, end: pd.Timestamp) -> float:
+    return (end - start).days / 365.0
+
+
+def _purchase_cost(row) -> float:
+    """amount_eur + fee_eur d'une ligne d'achat, frais absents (None/NaN) comptés à 0."""
+    fee = row.get("fee_eur")
+    return float(row["amount_eur"]) + (0.0 if fee is None or pd.isna(fee) else float(fee))
+
+
+def xirr(cash_flows: list[tuple]) -> float | None:
+    """Taux de rendement annuel r (base exact/365) qui annule la valeur actuelle des flux datés
+    [(date, montant), ...] -- négatif = sortie de cash (achat), positif = entrée (dividende,
+    valeur finale). Rendement "pondéré par les flux" (money-weighted) : il dépend du moment où
+    l'argent a été investi, contrairement au TWR.
+
+    Résolu par dichotomie plutôt que par Newton (pas de scipy dans les dépendances) : la VAN est
+    décroissante en r dès que les sorties précèdent les entrées, donc un changement de signe sur
+    [-99,99 %, +1000 %] suffit à garantir la convergence. None s'il y a moins de 2 flux, si tous
+    les flux sont de même signe, ou si aucun taux de cet intervalle n'annule la VAN."""
+    if len(cash_flows) < 2:
+        return None
+    flows = sorted((pd.Timestamp(d), float(a)) for d, a in cash_flows)
+    amounts = [a for _, a in flows]
+    if all(a >= 0 for a in amounts) or all(a <= 0 for a in amounts):
+        return None
+    t0 = flows[0][0]
+    years = [_year_fraction(t0, d) for d, _ in flows]
+
+    def npv(rate: float) -> float:
+        return sum(a / (1 + rate) ** y for a, y in zip(amounts, years))
+
+    low, high = -0.9999, 10.0
+    npv_low, npv_high = npv(low), npv(high)
+    if npv_low * npv_high > 0:
+        return None
+    for _ in range(200):
+        mid = (low + high) / 2
+        npv_mid = npv(mid)
+        if npv_low * npv_mid <= 0:
+            high = mid
+        else:
+            low, npv_low = mid, npv_mid
+        if high - low < 1e-10:
+            break
+    return (low + high) / 2
+
+
+def portfolio_cash_flows(transactions: pd.DataFrame, dividends: pd.DataFrame, current_value_eur: float,
+                         valuation_date) -> list[tuple]:
+    """Flux datés du portefeuille réel pour xirr : chaque achat -(amount_eur + fee_eur), chaque
+    dividende +amount_eur, et la valeur actuelle comme flux final positif à valuation_date (comme
+    si tout était revendu ce jour-là, avant toute fiscalité). Liste vide sans transaction."""
+    if transactions.empty:
+        return []
+    flows = [
+        (pd.Timestamp(row["date"]), -_purchase_cost(row))
+        for _, row in transactions.iterrows()
+    ]
+    if not dividends.empty:
+        flows += [(pd.Timestamp(row["date"]), float(row["amount_eur"])) for _, row in dividends.iterrows()]
+    flows.append((pd.Timestamp(valuation_date), float(current_value_eur)))
+    return flows
+
+
+def _external_flows_by_curve_date(curve_index: pd.DatetimeIndex, transactions: pd.DataFrame,
+                                   dividends: pd.DataFrame) -> pd.Series:
+    """Flux externes regroupés sur la date de cotation où ils prennent effet dans la courbe de
+    valeur : le premier jour coté à partir de leur date (reconstruct_equity_curve fait entrer un
+    achat d'un jour non coté au jour coté suivant), ou le dernier jour de la courbe s'il n'y en a
+    plus. Achat = +(amount_eur + fee_eur) injecté ; dividende = -amount_eur sorti de la position
+    (vers le cash), d'où le signe opposé."""
+    flows = pd.Series(0.0, index=curve_index)
+
+    def add(date, amount):
+        pos = curve_index.searchsorted(pd.Timestamp(date))
+        flows.iloc[min(pos, len(curve_index) - 1)] += amount
+
+    for _, row in transactions.iterrows():
+        add(row["date"], _purchase_cost(row))
+    if not dividends.empty:
+        for _, row in dividends.iterrows():
+            add(row["date"], -float(row["amount_eur"]))
+    return flows
+
+
+def time_weighted_return(equity_curve: pd.Series, transactions: pd.DataFrame,
+                         dividends: pd.DataFrame) -> dict | None:
+    """Rendement pondéré par le temps (TWR) : rendements des sous-périodes séparées par chaque date
+    de flux, chaînés -- neutralise l'effet du calendrier des versements (un gros versement juste
+    avant une baisse ne pénalise pas le TWR), donc mesure la qualité des placements eux-mêmes, là
+    où le XIRR mesure l'expérience réelle de l'investisseur.
+
+    Sur chaque sous-période (date de flux précédente -> date de flux suivante, sur la courbe) :
+    r = (V_fin - flux_externe_fin) / V_début - 1, où V_fin inclut déjà les parts achetées ce
+    jour-là (voir _external_flows_by_curve_date) ; les frais, injectés sans créer de parts,
+    pèsent donc sur la sous-période où ils sont payés. Renvoie {"twr", "twr_annualized",
+    "n_years"} (fractions, pas %), ou None sans courbe exploitable."""
+    curve = equity_curve.dropna()
+    if curve.empty or transactions.empty:
+        return None
+    curve.index = pd.to_datetime(curve.index)
+    flows = _external_flows_by_curve_date(curve.index, transactions, dividends)
+
+    flow_dates = list(flows.index[flows != 0])
+    start = flow_dates[0]
+    boundaries = flow_dates + ([curve.index[-1]] if curve.index[-1] != flow_dates[-1] else [])
+    growth = 1.0
+    for prev, nxt in zip(boundaries[:-1], boundaries[1:]):
+        v_start = float(curve.loc[prev])
+        if v_start <= 0:
+            continue
+        growth *= (float(curve.loc[nxt]) - float(flows.loc[nxt])) / v_start
+    n_years = _year_fraction(start, curve.index[-1])
+    twr = growth - 1
+    twr_annualized = growth ** (1 / n_years) - 1 if n_years > 0 and growth > 0 else None
+    return {"twr": twr, "twr_annualized": twr_annualized, "n_years": n_years}
+
+
+def benchmark_equity_curve(transactions: pd.DataFrame, benchmark_prices: pd.Series) -> pd.Series:
+    """Portefeuille fictif : les MÊMES achats (mêmes dates, mêmes amount_eur) investis dans un
+    ticker de référence, au cours de clôture du premier jour coté à partir de chaque date. Les
+    frais réels (fee_eur) restent dans les flux de comparaison (voir benchmark_cash_flows), pour
+    comparer à coût identique. benchmark_prices est censé être ajusté des dividendes (dividendes
+    réinvestis, convention usuelle d'un indice de référence "dividendes réinvestis", voir
+    market_data.get_daily_total_return_history). Série vide sans transaction ni prix."""
+    prices = benchmark_prices.dropna()
+    if transactions.empty or prices.empty:
+        return pd.Series(name="value", dtype=float)
+    prices = prices.copy()
+    prices.index = pd.to_datetime(prices.index)
+    if prices.index.tz is not None:
+        prices.index = prices.index.tz_localize(None)
+    units = pd.Series(0.0, index=prices.index)
+    for _, row in transactions.iterrows():
+        pos = prices.index.searchsorted(pd.Timestamp(row["date"]))
+        if pos >= len(prices):
+            continue
+        units.iloc[pos] += float(row["amount_eur"]) / float(prices.iloc[pos])
+    held = units.cumsum()
+    first = held[held > 0].index.min()
+    return (held * prices).loc[first:].rename("value")
+
+
+def benchmark_cash_flows(transactions: pd.DataFrame, benchmark_final_value: float, valuation_date) -> list[tuple]:
+    """Flux du portefeuille fictif pour xirr : les mêmes sorties que le réel -(amount_eur +
+    fee_eur), aucun dividende séparé (déjà réinvestis dans les cours ajustés), et la valeur
+    finale du portefeuille fictif à valuation_date."""
+    if transactions.empty:
+        return []
+    flows = [
+        (pd.Timestamp(row["date"]), -_purchase_cost(row))
+        for _, row in transactions.iterrows()
+    ]
+    flows.append((pd.Timestamp(valuation_date), float(benchmark_final_value)))
+    return flows
+
+
+# ============================================================
 # Import CSV (validation structurelle uniquement : pas de vérification réseau du ticker, qui vit
 # dans callbacks.py/market_data.py -- cette couche ne fait que garantir qu'une ligne est
 # exploitable par portfolio_db.insert_*_bulk, pas qu'elle référence un instrument réel.

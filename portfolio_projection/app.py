@@ -81,7 +81,8 @@ function(search_value, current_options) {
     return options.concat([{label: ticker, value: ticker}]);
 }
 """
-for _dropdown_id in ("tab3-tx-ticker-input", "tab3-div-ticker-input", "tab3-weight-ticker-input"):
+for _dropdown_id in ("tab3-tx-ticker-input", "tab3-div-ticker-input", "tab3-weight-ticker-input",
+                     "tab3-benchmark-ticker-input"):
     app.clientside_callback(
         _CREATABLE_TICKER_DROPDOWN_JS,
         Output(_dropdown_id, "options", allow_duplicate=True),

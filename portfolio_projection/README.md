@@ -26,6 +26,10 @@ des projections.
   Trade Republic) des transactions et dividendes, valeur reconstruite dans le
   temps, réel vs simulé, projection depuis aujourd'hui avec la pondération
   actuelle, corrélations entre les lignes détenues, plan de rééquilibrage.
+- **Performance réelle** : XIRR (rendement pondéré par les flux), TWR
+  (rendement pondéré par le temps) et comparaison à un indice de référence
+  choisi (mêmes versements investis dans ce ticker : valeur et XIRR côte à
+  côte avec le réel).
 - **Validation du modèle** : backtest walk-forward qui vérifie si les bandes
   de percentiles sont fiables (taux de couverture observé vs nominal,
   histogramme des PIT), loi de Student et bootstrap par blocs comparés côte
@@ -106,6 +110,31 @@ des projections.
   des réalisations : le modèle utilise la moyenne et la volatilité estimées
   comme si elles étaient connues, sans tenir compte de l'incertitude de ces
   estimations, donc les bandes affichées sont un peu trop étroites.
+- **Dividendes et frais dans la performance réelle** (même convention que
+  les totaux de l'onglet) : un achat coûte montant + frais, mais seul le
+  montant devient des parts, donc les frais pèsent sur le rendement. Un
+  dividende est du cash perçu à sa date, pas réinvesti (le modèle ne crée
+  aucune part à partir d'un dividende) ; il compte quand même dans le XIRR
+  et le TWR, sinon un ETF distribuant paraîtrait moins bon qu'un ETF
+  capitalisant à performance égale. Tout est calculé avant fiscalité.
+- **Cours bruts pour le réel, ajustés pour la référence** : yfinance ajuste
+  par défaut les cours passés des dividendes (CAC.PA début 2024 : ~70 €
+  ajusté contre ~74 € réel). Pour valoriser les positions réelles, on prend
+  les cours bruts : ce sont les vraies valeurs de marché, et les dividendes
+  déjà saisis en cash ne sont pas comptés deux fois. La référence utilise au
+  contraire les cours ajustés (dividendes réinvestis), convention usuelle
+  d'un indice de référence. Elle reçoit les mêmes sorties de cash que le réel
+  (mêmes dates, montant + frais), achetées à la clôture du premier jour coté.
+- **XIRR par dichotomie** : la valeur actuelle nette des flux est
+  décroissante en r dès que les achats précèdent les entrées, donc une
+  dichotomie sur [-99,99 %, +1000 %] converge à coup sûr, sans dépendre de
+  scipy.
+- **XIRR et TWR répondent à deux questions** : le XIRR mesure le rendement
+  réellement obtenu sur ton argent (il dépend du moment des versements), le
+  TWR chaîne les rendements entre deux flux et neutralise ce calendrier
+  (c'est la performance des placements eux-mêmes). Un achat effectué un
+  jour sans cotation prend effet au jour coté suivant, comme dans la
+  courbe de valeur.
 
 ## Installation
 
@@ -127,12 +156,14 @@ L'application est servie sur [http://localhost:8050](http://localhost:8050)
 - `constants.py` : indices/ETF PEA, taux de fiscalité, plafond PEA.
 - `i18n.py` : traductions FR/EN et palettes de couleurs.
 - `market_data.py` : appels yfinance (historique d'indices/ETF, prix courants,
-  résolution d'ISIN, noms d'instruments) et cache disque.
+  cours quotidiens bruts et ajustés, résolution d'ISIN, noms d'instruments)
+  et cache disque.
 - `engine.py` : moteur de calcul pur (simulation Monte Carlo, DCA, frais,
   fiscalité, poids optimaux, mode objectif, validation walk-forward). Aucune
   dépendance Dash/réseau.
 - `portfolio_engine.py` : moteur pur du portefeuille réel (positions, courbe
-  de valeur, rééquilibrage, totaux, validation des imports CSV).
+  de valeur, rééquilibrage, totaux, XIRR, TWR, indice de référence,
+  validation des imports CSV).
 - `portfolio_db.py` : stockage SQLite du portefeuille réel.
 - `charts.py` : constructeurs de graphiques Plotly.
 - `results.py` : agrège les résultats du moteur en métriques/figures affichables.
