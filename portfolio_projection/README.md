@@ -54,6 +54,9 @@ des projections.
   simulation...), interface FR/EN, export/import de configuration en JSON,
   cache disque des téléchargements (`yfinance`) pour limiter les appels
   réseau.
+- **Fraîcheur des données** : un badge discret dans l'en-tête indique la
+  date des données de marché affichées (« données du JJ/MM ») et passe en
+  avertissement au-delà de 7 jours.
 
 ## Notes de conception
 
@@ -155,6 +158,19 @@ des projections.
   même si des dividendes ont été réinvestis par un achat. Le taux est de
   17,2 % après 5 ans et de 30 % (PFU, avec clôture du plan) avant ; aucun
   impôt en moins-value.
+- **Fraîcheur : dernière version connue en cas d'échec** : le cache se
+  rafraîchit toutes les heures, donc en temps normal les données affichées
+  ont moins d'une heure. Elles ne peuvent vieillir que si un
+  rafraîchissement échoue (hors ligne, yfinance indisponible) : dans ce
+  cas, `cached_ttl` sert la dernière version connue avec son horodatage
+  d'origine, au lieu de faire échouer l'écran, et le badge le signale.
+  Les historiques quotidiens lèvent une erreur quand yfinance ne renvoie
+  rien, au lieu de mettre en cache une série vide à la place des bonnes
+  données.
+- **Le badge reflète ce qui est à l'écran** : il prend la plus ancienne
+  des séries servies pendant la session, pas de tout le cache, qui garde
+  aussi des séries que plus aucun écran n'utilise (ancien ticker, ancien
+  horizon) et qui déclencheraient l'avertissement en permanence.
 
 ## Installation
 
@@ -177,8 +193,8 @@ L'application est servie sur [http://localhost:8050](http://localhost:8050)
   5 ans), plafond PEA.
 - `i18n.py` : traductions FR/EN et palettes de couleurs.
 - `market_data.py` : appels yfinance (historique d'indices/ETF, prix courants,
-  cours quotidiens bruts et ajustés, résolution d'ISIN, noms d'instruments)
-  et cache disque.
+  cours quotidiens bruts et ajustés, résolution d'ISIN, noms d'instruments),
+  cache disque et date de téléchargement de chaque série.
 - `engine.py` : moteur de calcul pur (simulation Monte Carlo, DCA, frais,
   fiscalité, poids optimaux, mode objectif, validation walk-forward). Aucune
   dépendance Dash/réseau.
@@ -201,7 +217,9 @@ pytest -v
 
 Les tests couvrent les moteurs de calcul purs (frais, fiscalité, bootstrap,
 DCA, simulation Monte Carlo, poids optimaux, mode objectif, validation
-walk-forward, portefeuille réel), pas la couche interface, ni les appels
+walk-forward, portefeuille réel), la base SQLite (en mémoire) et le cache
+de `market_data.py` (TTL, dernière version connue, fraîcheur) avec yfinance
+remplacé par des doublures : pas la couche interface, et aucun appel
 réseau.
 
 ## Docker

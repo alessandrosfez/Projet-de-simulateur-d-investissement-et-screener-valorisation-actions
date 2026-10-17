@@ -31,6 +31,16 @@ TRANSLATIONS = {
         "lang_label": "Langue",
         "dark_mode_label": "Mode sombre",
         "palette_label": "Palette de couleurs",
+        "freshness_date_format": "%d/%m",
+        "freshness_badge": "données du {date}",
+        "freshness_badge_stale": "données anciennes du {date}",
+        "freshness_help": "Date du plus ancien téléchargement Yahoo Finance parmi les données "
+                           "affichées pendant cette session. Elles sont rafraîchies automatiquement "
+                           "toutes les heures.",
+        "freshness_help_stale": "Certaines données affichées datent de {days} jours : Yahoo Finance n'a "
+                                 "pas pu les rafraîchir (hors ligne ? service indisponible ?), la dernière "
+                                 "version connue est utilisée à la place. Les résultats peuvent ne plus "
+                                 "refléter le marché actuel.",
         "tab_par_indice": "Par indice",
         "tab_portefeuille": "Portefeuille pondéré",
         "tab_portefeuille_reel": "Mon portefeuille réel",
@@ -497,6 +507,14 @@ TRANSLATIONS = {
         "lang_label": "Language",
         "dark_mode_label": "Dark mode",
         "palette_label": "Color palette",
+        "freshness_date_format": "%m/%d",
+        "freshness_badge": "data from {date}",
+        "freshness_badge_stale": "outdated data from {date}",
+        "freshness_help": "Date of the oldest Yahoo Finance download among the data shown during this "
+                           "session. Data is refreshed automatically every hour.",
+        "freshness_help_stale": "Some data shown is {days} days old: Yahoo Finance couldn't refresh it "
+                                 "(offline? service unavailable?), so the last known version is used "
+                                 "instead. Results may no longer reflect the current market.",
         "tab_par_indice": "By index",
         "tab_portefeuille": "Weighted portfolio",
         "tab_portefeuille_reel": "My real portfolio",

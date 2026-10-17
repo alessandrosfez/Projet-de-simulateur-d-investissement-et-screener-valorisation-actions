@@ -47,9 +47,24 @@ def _save_cache_to_disk():
             pass
 
 
+# Horodatage du téléchargement des données réellement RENVOYÉES par cached_ttl pendant ce
+# processus, par clé de cache. Distinct de _cache, qui garde aussi des séries que plus aucun écran
+# n'utilise (ancien ticker, ancien horizon...) : leur âge fausserait la date affichée par le badge
+# de fraîcheur (voir data_freshness), qui doit refléter ce qui est à l'écran.
+_served_download_times: dict = {}
+
+# Au-delà, le badge de fraîcheur passe en avertissement.
+DATA_STALE_AFTER_DAYS = 7
+
+
 def cached_ttl(ttl_seconds: int):
     """Cache mémoire + disque : évite de retélécharger via yfinance à chaque
-    redémarrage du serveur tant que les données ont moins de ttl_seconds."""
+    redémarrage du serveur tant que les données ont moins de ttl_seconds.
+
+    Si le rafraîchissement échoue (hors ligne, yfinance indisponible), sert la dernière version
+    connue plutôt que de faire échouer l'écran, en gardant son horodatage d'origine : c'est ce
+    qui permet au badge de fraîcheur de signaler des données anciennes. Sans version connue,
+    l'erreur remonte comme avant."""
     def decorator(func):
         @functools.wraps(func)
         def wrapper(*args):
@@ -58,13 +73,54 @@ def cached_ttl(ttl_seconds: int):
             if key in _cache:
                 value, timestamp = _cache[key]
                 if now - timestamp < ttl_seconds:
+                    _served_download_times[key] = timestamp
                     return value
-            value = func(*args)
+            try:
+                value = func(*args)
+            except Exception:
+                if key in _cache:
+                    stale_value, stale_timestamp = _cache[key]
+                    _served_download_times[key] = stale_timestamp
+                    return stale_value
+                raise
             _cache[key] = (value, now)
+            _served_download_times[key] = now
             _save_cache_to_disk()
             return value
         return wrapper
     return decorator
+
+
+def get_cache_download_times() -> dict:
+    """Date du dernier téléchargement de chaque série en cache : {(fonction, arguments): datetime}.
+    Inclut les séries que plus aucun écran n'utilise ; pour l'âge des données affichées, voir
+    get_served_download_times."""
+    with _cache_lock:
+        entries = list(_cache.items())
+    return {key: datetime.fromtimestamp(timestamp) for key, (_value, timestamp) in entries}
+
+
+def get_served_download_times() -> list[float]:
+    """Horodatages (time.time()) des téléchargements dont les données ont été servies pendant ce
+    processus."""
+    return list(_served_download_times.values())
+
+
+def data_freshness(download_timestamps: list[float], now: float,
+                   max_age_days: float = DATA_STALE_AFTER_DAYS) -> dict | None:
+    """Âge des données affichées : la plus ANCIENNE des séries servies fait foi (une seule série
+    périmée suffit à fausser un graphique). Renvoie {"oldest" (datetime), "age_days",
+    "is_stale", "n_series"}, ou None si rien n'a encore été servi."""
+    if not download_timestamps:
+        return None
+    oldest = min(download_timestamps)
+    age_days = (now - oldest) / 86400
+    return {
+        "oldest": datetime.fromtimestamp(oldest),
+        "age_days": age_days,
+        "is_stale": age_days > max_age_days,
+        "n_series": len(download_timestamps),
+    }
 
 
 # ============================================================
@@ -144,6 +200,20 @@ def get_current_price(ticker: str) -> float | None:
 
 
 @cached_ttl(3600)
+def _fetch_daily_close(ticker: str, start_date: str, auto_adjust: bool) -> pd.Series:
+    """Couche cachée des deux historiques quotidiens ci-dessous. Lève une exception si yfinance
+    ne renvoie rien (souvent sans erreur explicite en cas de coupure réseau) plutôt que de
+    renvoyer une série vide : une série vide serait mise en cache à la place des bonnes données,
+    alors qu'une exception laisse cached_ttl servir la dernière version connue."""
+    info = _get_ticker_info(ticker)
+    price = info.get("currentPrice") or info.get("regularMarketPrice")
+    price_scale = _price_scale_factor(info.get("trailingPE"), info.get("trailingEps"), price)
+    hist = yf.Ticker(ticker).history(start=start_date, interval="1d", auto_adjust=auto_adjust)["Close"].dropna()
+    if hist.empty:
+        raise ValueError(f"Pas d'historique quotidien pour {ticker}")
+    return hist / price_scale
+
+
 def get_daily_price_history(ticker: str, start_date: str) -> pd.Series:
     """Historique de prix de clôture QUOTIDIEN depuis start_date (ISO "YYYY-MM-DD"), corrigé du
     même décalage d'échelle que get_current_price sur toute la série (pas seulement le dernier
@@ -158,31 +228,22 @@ def get_daily_price_history(ticker: str, start_date: str) -> pd.Series:
     rétroactivement les cours d'un titre distribuant (ex: CAC.PA, ~70 € ajusté contre ~74 € réel
     début 2024), ce qui sous-évaluerait la courbe passée et compterait deux fois les dividendes
     déjà saisis en cash (voir portfolio_engine, section performance réelle)."""
-    info = _get_ticker_info(ticker)
-    price = info.get("currentPrice") or info.get("regularMarketPrice")
-    price_scale = _price_scale_factor(info.get("trailingPE"), info.get("trailingEps"), price)
     try:
-        hist = yf.Ticker(ticker).history(start=start_date, interval="1d", auto_adjust=False)["Close"].dropna()
+        return _fetch_daily_close(ticker, start_date, False)
     except Exception:
         return pd.Series(dtype=float)
-    return hist / price_scale
 
 
-@cached_ttl(3600)
 def get_daily_total_return_history(ticker: str, start_date: str) -> pd.Series:
     """Historique quotidien AJUSTÉ des dividendes (dividendes réinvestis) depuis start_date : sert
     d'indice de référence pour le portefeuille réel (portfolio_engine.benchmark_equity_curve),
     convention usuelle d'une référence "dividendes réinvestis" -- contrairement à
     get_daily_price_history, qui veut les cours bruts. Même correction d'échelle pence/livre.
     Série vide si le ticker est invalide ou n'a pas coté sur la période."""
-    info = _get_ticker_info(ticker)
-    price = info.get("currentPrice") or info.get("regularMarketPrice")
-    price_scale = _price_scale_factor(info.get("trailingPE"), info.get("trailingEps"), price)
     try:
-        hist = yf.Ticker(ticker).history(start=start_date, interval="1d", auto_adjust=True)["Close"].dropna()
+        return _fetch_daily_close(ticker, start_date, True)
     except Exception:
         return pd.Series(dtype=float)
-    return hist / price_scale
 
 
 @cached_ttl(86400)

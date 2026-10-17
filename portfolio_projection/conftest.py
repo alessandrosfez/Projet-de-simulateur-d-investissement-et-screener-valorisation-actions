@@ -15,6 +15,7 @@ import portfolio_db
 @pytest.fixture(autouse=True)
 def isolate_market_data_cache(monkeypatch):
     monkeypatch.setattr(market_data, "_cache", {})
+    monkeypatch.setattr(market_data, "_served_download_times", {})
     monkeypatch.setattr(market_data, "_save_cache_to_disk", lambda: None)
 
 

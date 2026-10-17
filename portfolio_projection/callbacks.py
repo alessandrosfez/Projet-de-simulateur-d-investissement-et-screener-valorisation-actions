@@ -28,8 +28,9 @@ from engine import (
 )
 from i18n import L, PALETTE, PALETTE_CODES, PALETTE_NAMES, PALETTES
 from market_data import (
-    get_aligned_returns, get_aligned_returns_for_tickers, get_current_price, get_daily_price_history,
-    get_daily_total_return_history, get_monthly_returns, get_ticker_name, resolve_isin_to_ticker,
+    data_freshness, get_aligned_returns, get_aligned_returns_for_tickers, get_current_price,
+    get_daily_price_history, get_daily_total_return_history, get_monthly_returns, get_served_download_times,
+    get_ticker_name, resolve_isin_to_ticker,
 )
 from results import (
     build_envelope_comparison_figure, build_historique_metrics_outputs, build_metric_cards,
@@ -1469,3 +1470,32 @@ def run_model_validation(n_clicks, index_name, source, horizon_months, step_mont
     ])
 
     return fig_normal, fig_bootstrap, table_data, table_columns, info_caption, ""
+
+
+# ============================================================
+# 12. CALLBACKS : fraîcheur des données de marché (badge de l'en-tête)
+# ============================================================
+
+@app.callback(
+    Output("data-freshness-badge", "children"),
+    Input("data-freshness-interval", "n_intervals"),
+    Input("lang-radio", "value"),
+)
+def refresh_data_freshness(_n_intervals, lang):
+    lang = lang or "fr"
+    freshness = data_freshness(get_served_download_times(), time.time())
+    if freshness is None:
+        return None
+    date_text = freshness["oldest"].strftime(L(lang, "freshness_date_format"))
+    if freshness["is_stale"]:
+        label = L(lang, "freshness_badge_stale", date=date_text)
+        tooltip = L(lang, "freshness_help_stale", days=int(freshness["age_days"]))
+        color = "warning"
+    else:
+        label = L(lang, "freshness_badge", date=date_text)
+        tooltip = L(lang, "freshness_help")
+        color = "secondary"
+    return [
+        dbc.Badge(label, id="data-freshness-pill", color=color, className="fw-normal", style={"cursor": "help"}),
+        dbc.Tooltip(tooltip, target="data-freshness-pill", placement="bottom"),
+    ]

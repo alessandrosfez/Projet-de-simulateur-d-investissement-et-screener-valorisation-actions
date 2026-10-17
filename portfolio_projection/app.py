@@ -117,6 +117,11 @@ app.layout = dbc.Container([
                 id="dark-mode-switch", label=L("fr", "dark_mode_label"),
                 value=True, persistence=True, persistence_type="local",
             ),
+            # Badge de fraîcheur des données (voir callbacks.refresh_data_freshness) : rafraîchi
+            # périodiquement plutôt qu'à chaque callback, puisque n'importe quel écran peut servir
+            # une nouvelle série à tout moment.
+            html.Div(id="data-freshness-badge", className="mt-1"),
+            dcc.Interval(id="data-freshness-interval", interval=60_000, n_intervals=0),
         ], width=3),
     ], className="mt-2 align-items-start app-header"),
     dbc.Row([
