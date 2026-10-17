@@ -150,6 +150,11 @@ FIELD_SCHEMA: tuple[FieldSpec, ...] = (
     FieldSpec("capex", "cashflow", _cf("Capital Expenditure"), equivalents=_cf("Purchase Of PPE")),
     FieldSpec("fcf", "cashflow", _cf("Free Cash Flow"), derivation=("sum", ("cfo", "capex"))),
     FieldSpec("change_in_working_capital", "cashflow", _cf("Change In Working Capital")),
+    # Émission d'actions ordinaires encaissée dans l'exercice (positive). « Issuance Of Capital Stock »
+    # englobe aussi les actions de préférence : simple voisin. Une ligne absente reste None, jamais 0 :
+    # Yahoo omet la ligne aussi bien quand rien n'a été émis que quand l'information manque.
+    FieldSpec("common_stock_issuance", "cashflow", _cf("Common Stock Issuance"),
+              equivalents=_cf("Issuance Of Capital Stock")),
 )
 
 FIELD_KEYS = tuple(spec.key for spec in FIELD_SCHEMA)
@@ -377,7 +382,8 @@ RATIO_FLAGS = ("group_share_fallback", "broad_receivables", "broad_payables")
 RATIO_REASONS = ("missing_inputs", "non_positive_denominator", "no_prior_year")
 RATIO_DENOMINATORS = ("net_income", "revenue", "cost_of_revenue", "average_total_assets")
 BRIDGE_STEPS = ("net_income", "d_and_a", "change_in_working_capital", "other_items")
-SCORE_FLAGS = ("aqi_neutral_by_definition", "depreciation_includes_amortization", "group_share_equity_fallback")
+SCORE_FLAGS = ("aqi_neutral_by_definition", "depreciation_includes_amortization", "group_share_equity_fallback",
+               "share_count_fallback")
 
 
 def _ratio(formula: str, numerator: float | None, denominator: float | None, components: dict,
@@ -852,9 +858,12 @@ def piotroski_f_score(ns: NormalizedStatements, year: pd.Timestamp, asset_base: 
     praticiens, tout rapporté à l'actif de clôture (deux bilans suffisent).
 
     Dette à long terme hors dettes locatives (poste COMPUSTAT n° 9 de l'article). Émission d'actions
-    jugée sur le nombre d'actions du bilan : une hausse liée à des plans salariés compte donc comme une
-    émission. Un critère non calculable vaut None avec sa raison, et le score est la somme des seuls
-    critères calculables (n_available l'indique) : à ne pas comparer tel quel aux seuils usuels sur 9."""
+    (EQ_OFFER de l'article : « did not issue common equity ») jugée sur l'émission brute du tableau de
+    flux : les augmentations de capital réservées aux salariés comptent, les rachats ne compensent pas,
+    et une division ou une attribution gratuite, qui n'apporte aucun cash, n'y figure pas. Repli signalé
+    (share_count_fallback) sur le nombre d'actions du bilan quand la ligne manque. Un critère non
+    calculable vaut None avec sa raison, et le score est la somme des seuls critères calculables
+    (n_available l'indique) : à ne pas comparer tel quel aux seuils usuels sur 9."""
     chronological = sorted(ns.years)
     index = chronological.index(year)
     prior = chronological[index - 1] if index >= 1 else None
@@ -893,12 +902,22 @@ def piotroski_f_score(ns: NormalizedStatements, year: pd.Timestamp, asset_base: 
     shares_t = g("shares_outstanding", year)
     shares_p = g("shares_outstanding", prior) if prior is not None else None
 
-    def binary(current, threshold, details, strictly_greater=True):
+    def binary(current, threshold, details, strictly_greater=True, flags=()):
         missing = tuple(key for key, value in details.items() if value is None)
         if current is None or threshold is None:
-            return {"value": None, "details": details, "reason": "missing_inputs", "missing": missing}
+            return {"value": None, "details": details, "reason": "missing_inputs", "missing": missing, "flags": flags}
         passed = current > threshold if strictly_greater else current >= threshold
-        return {"value": 1 if passed else 0, "details": details, "reason": None, "missing": ()}
+        return {"value": 1 if passed else 0, "details": details, "reason": None, "missing": (), "flags": flags}
+
+    def no_equity_issuance():
+        issuance = g("common_stock_issuance", year)
+        if issuance is not None:
+            # 0 émis (publié tel quel par Yahoo) >= montant émis : critère rempli.
+            return binary(0.0, issuance, {"equity_issuance_t": issuance}, strictly_greater=False)
+        # Yahoo retraite rétroactivement le nombre d'actions des divisions et attributions gratuites
+        # (vérifié sur NVDA et Air Liquide) : la comparaison reste homogène d'un exercice à l'autre.
+        return binary(shares_p, shares_t, {"shares_t": shares_t, "shares_p": shares_p}, strictly_greater=False,
+                      flags=("share_count_fallback",))
 
     roa_t = roa(year, prior)
     roa_p = roa(prior, prior_scale) if prior is not None else None
@@ -918,8 +937,7 @@ def piotroski_f_score(ns: NormalizedStatements, year: pd.Timestamp, asset_base: 
         # Levier en baisse : le critère est rempli si le levier de t est STRICTEMENT inférieur.
         "leverage_decreased": binary(lev_p, lev_t, {"leverage_t": lev_t, "leverage_p": lev_p}),
         "current_ratio_improved": binary(cr_t, cr_p, {"current_ratio_t": cr_t, "current_ratio_p": cr_p}),
-        "no_equity_issuance": binary(shares_p, shares_t, {"shares_t": shares_t, "shares_p": shares_p},
-                                     strictly_greater=False),
+        "no_equity_issuance": no_equity_issuance(),
         "gross_margin_improved": binary(gm_t, gm_p, {"gross_margin_t": gm_t, "gross_margin_p": gm_p}),
         "asset_turnover_improved": binary(turn_t, turn_p, {"turnover_t": turn_t, "turnover_p": turn_p}),
     }

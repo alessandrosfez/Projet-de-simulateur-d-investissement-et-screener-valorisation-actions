@@ -491,6 +491,7 @@ PIOTROSKI_DETAIL_KINDS = {
     "gross_margin_t": "percent", "gross_margin_p": "percent", "current_ratio_t": "multiple",
     "current_ratio_p": "multiple", "turnover_t": "multiple", "turnover_p": "multiple",
     "cfo_t": "amount", "net_income_t": "amount", "shares_t": "amount", "shares_p": "amount",
+    "equity_issuance_t": "amount",
 }
 
 
@@ -512,6 +513,7 @@ def piotroski_table(results: list[dict], lang: str, dark: bool):
             item = result["criteria"][criterion]
             details = " · ".join(f"{L(lang, f'piotroski_detail_{k}')} {_format_detail(k, v, lang)}"
                                  for k, v in item["details"].items())
+            details = "\n\n".join([details] + [L(lang, f"flag_{flag}") for flag in item["flags"]])
             if item["value"] is None:
                 cells.append(_na_cell(details, lang))
             else:

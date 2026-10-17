@@ -241,8 +241,8 @@ def test_market_value_of_equity_in_reporting_currency():
 # total 41 795 / 43 708, CFO 8 140, dette à long terme 35 384 / 32 876, actif courant 19 071 / 21 442,
 # passif courant 15 568 / 19 511, CA 86 377 / 97 059, marge brute 28 844 / 32 257 ; F-score de 7
 # (levier et rotation de l'actif à 0). L'article rapporte tout à l'actif de CLÔTURE, d'où
-# asset_base="end". Il ne donne pas le nombre d'actions et juge l'émission nulle : on reprend donc un
-# nombre d'actions inchangé.
+# asset_base="end". Il ne donne pas le montant émis et juge l'émission nulle : on reprend donc un
+# nombre d'actions inchangé (critère jugé en repli sur ce nombre, faute de ligne au tableau de flux).
 
 def _lowes():
     return _ns(
@@ -281,9 +281,38 @@ def test_piotroski_beginning_base_needs_three_balance_sheets():
     assert result["score"] == sum(c["value"] for c in result["criteria"].values() if c["value"] is not None)
 
 
-def test_piotroski_equity_issuance_detected_from_share_count():
-    ns = _ns({"Net Income": [10, 8]}, {"Total Assets": [100, 100], "Ordinary Shares Number": [105, 100]}, {})
-    assert m.piotroski_f_score(ns, T, asset_base="end")["criteria"]["no_equity_issuance"]["value"] == 0
+def _issuance_criterion(cashflow: dict, shares: list) -> dict:
+    ns = _ns({"Net Income": [10, 8]}, {"Total Assets": [100, 100], "Ordinary Shares Number": shares}, cashflow)
+    return m.piotroski_f_score(ns, T, asset_base="end")["criteria"]["no_equity_issuance"]
+
+
+def test_piotroski_equity_issuance_judged_on_cash_flow_even_if_share_count_falls():
+    """EQ_OFFER de Piotroski : toute émission brute fait perdre le point, même compensée par des rachats
+    (cas réel de LVMH en 2024 : 53 M€ émis, nombre d'actions en baisse)."""
+    criterion = _issuance_criterion({"Common Stock Issuance": [53e6, 0.0]}, [99, 100])
+    assert criterion["value"] == 0
+    assert criterion["details"] == {"equity_issuance_t": 53e6}
+    assert criterion["flags"] == ()
+
+
+def test_piotroski_published_zero_issuance_passes_despite_bonus_shares():
+    """Une attribution gratuite non retraitée gonflerait le nombre d'actions de 10 % sans aucune
+    émission au tableau de flux : le critère reste rempli."""
+    criterion = _issuance_criterion({"Common Stock Issuance": [0.0, 0.0]}, [110, 100])
+    assert criterion["value"] == 1
+
+
+def test_piotroski_issuance_falls_back_on_broader_capital_stock_line():
+    criterion = _issuance_criterion({"Issuance Of Capital Stock": [5e6, 0.0]}, [100, 100])
+    assert criterion["value"] == 0
+
+
+def test_piotroski_missing_issuance_line_falls_back_on_share_count_with_flag():
+    """Ligne absente (cas d'Apple) : jamais lue comme « 0 émis », repli signalé sur le nombre d'actions."""
+    criterion = _issuance_criterion({}, [105, 100])
+    assert criterion["value"] == 0
+    assert criterion["flags"] == ("share_count_fallback",)
+    assert _issuance_criterion({}, [95, 100])["value"] == 1
 
 
 def test_piotroski_oldest_year_has_no_comparison():

@@ -356,10 +356,11 @@ TRANSLATIONS = {
         "piotroski_current_ratio_improved_help": "Ratio de liquidité générale (actif courant ÷ passif courant) en "
                                                  "hausse sur un an.",
         "piotroski_no_equity_issuance": "Pas d'augmentation de capital",
-        "piotroski_no_equity_issuance_help": "Nombre d'actions du bilan stable ou en baisse : une hausse liée à des "
-                                             "plans salariés ou à des attributions d'actions gratuites (pratique "
-                                             "régulière chez Air Liquide, par exemple) compte aussi comme une "
-                                             "émission, sans qu'aucun capital n'ait été levé.",
+        "piotroski_no_equity_issuance_help": "Aucune émission d'actions ordinaires dans l'exercice, selon le tableau "
+                                             "de flux (définition de l'article). Les augmentations de capital "
+                                             "réservées aux salariés comptent, même modestes, et les rachats ne "
+                                             "compensent pas. Une division ou une attribution d'actions gratuites "
+                                             "n'apporte aucun cash : elle n'y figure pas.",
         "piotroski_gross_margin_improved": "Marge brute en hausse",
         "piotroski_gross_margin_improved_help": "Marge brute (en % du CA) en hausse sur un an.",
         "piotroski_asset_turnover_improved": "Rotation de l'actif en hausse",
@@ -374,6 +375,10 @@ TRANSLATIONS = {
         "piotroski_detail_current_ratio_p": "liquidité t-1",
         "piotroski_detail_shares_t": "actions t",
         "piotroski_detail_shares_p": "actions t-1",
+        "piotroski_detail_equity_issuance_t": "actions émises en t",
+        "flag_share_count_fallback": "Émission d'actions absente du tableau de flux : critère jugé sur le nombre "
+                                     "d'actions du bilan (Yahoo le retraite des divisions et attributions "
+                                     "gratuites). Une hausse liée à des plans salariés compte comme une émission.",
         "piotroski_detail_gross_margin_t": "marge brute t",
         "piotroski_detail_gross_margin_p": "marge brute t-1",
         "piotroski_detail_turnover_t": "rotation t",
@@ -633,6 +638,10 @@ TRANSLATIONS = {
         "field_change_in_working_capital_help": "Effet sur la trésorerie de la variation des stocks, "
                                                 "créances et dettes d'exploitation (négatif quand le BFR "
                                                 "augmente).",
+        "field_common_stock_issuance": "Émission d'actions",
+        "field_common_stock_issuance_help": "Trésorerie encaissée par l'émission d'actions ordinaires dans "
+                                            "l'exercice (augmentations de capital, plans salariés), avant "
+                                            "rachats. Une division ou une attribution gratuite n'y figure pas.",
     },
     "en": {
         "app_title": "Financial analysis: quality and soundness of the accounts (work in progress)",
@@ -950,10 +959,11 @@ TRANSLATIONS = {
         "piotroski_current_ratio_improved_help": "Current ratio (current assets ÷ current liabilities) up over the "
                                                  "year.",
         "piotroski_no_equity_issuance": "No equity issuance",
-        "piotroski_no_equity_issuance_help": "Share count on the balance sheet stable or down: an increase from "
-                                             "employee plans or bonus share allotments (a regular practice at Air "
-                                             "Liquide, for instance) also counts as an issuance, even though no "
-                                             "capital was raised.",
+        "piotroski_no_equity_issuance_help": "No common equity issued during the year, according to the cash flow "
+                                             "statement (the paper's definition). Capital increases reserved for "
+                                             "employees count, however small, and buybacks do not offset them. A "
+                                             "stock split or bonus share allotment brings in no cash, so it does "
+                                             "not appear there.",
         "piotroski_gross_margin_improved": "Gross margin up",
         "piotroski_gross_margin_improved_help": "Gross margin (as % of revenue) up over the year.",
         "piotroski_asset_turnover_improved": "Asset turnover up",
@@ -968,6 +978,10 @@ TRANSLATIONS = {
         "piotroski_detail_current_ratio_p": "liquidity t-1",
         "piotroski_detail_shares_t": "shares t",
         "piotroski_detail_shares_p": "shares t-1",
+        "piotroski_detail_equity_issuance_t": "shares issued in t",
+        "flag_share_count_fallback": "Equity issuance missing from the cash flow statement: criterion judged on the "
+                                     "balance sheet share count (Yahoo restates it for splits and bonus shares). An "
+                                     "increase from employee plans counts as an issuance.",
         "piotroski_detail_gross_margin_t": "gross margin t",
         "piotroski_detail_gross_margin_p": "gross margin t-1",
         "piotroski_detail_turnover_t": "turnover t",
@@ -1215,6 +1229,10 @@ TRANSLATIONS = {
         "field_change_in_working_capital": "Change in working capital",
         "field_change_in_working_capital_help": "Cash effect of changes in inventories, receivables and "
                                                 "operating payables (negative when working capital grows).",
+        "field_common_stock_issuance": "Equity issuance",
+        "field_common_stock_issuance_help": "Cash received from issuing common shares during the year (capital "
+                                            "increases, employee plans), before buybacks. A stock split or bonus "
+                                            "share allotment does not appear here.",
     },
 }
 

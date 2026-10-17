@@ -161,16 +161,25 @@ Yahoo Finance sans retraitement par un analyste.
   calculé pour chaque exercice. Pour le Z d'origine, la capitalisation de
   chaque exercice est historique : cours de clôture du jour de clôture
   (ou du dernier jour coté avant), nombre d'actions du bilan, change du
-  même jour.
+  même jour. Yahoo ajuste rétroactivement le cours et le nombre d'actions
+  des divisions et attributions gratuites postérieures (vérifié sur NVDA
+  et Air Liquide), si bien que leur produit reste la vraie capitalisation.
 - **Piotroski : fidèle à l'article** : ROA et rotation de l'actif rapportés
   à l'actif d'ouverture, levier à l'actif moyen, dette à long terme hors
   dettes locatives. Il faut donc trois bilans pour les critères de
   variation : avec 4 exercices, le F-score est complet pour les deux
   derniers. Un critère non calculable est n.d., et le score est affiché
   sur les seuls critères calculables (« 4 / 6 »), à ne pas comparer tel
-  quel aux seuils sur 9. Le critère « pas d'augmentation de capital » est
-  jugé sur le nombre d'actions, ce qui compte les attributions d'actions
-  gratuites comme une émission (faux positif régulier chez Air Liquide).
+  quel aux seuils sur 9. Le critère « pas d'augmentation de capital »
+  suit lui aussi l'article (« did not issue common equity ») : il est jugé
+  sur l'émission brute d'actions ordinaires du tableau de flux, si bien
+  que les divisions et attributions gratuites, qui n'apportent aucun cash,
+  n'y figurent pas. Les augmentations de capital réservées aux salariés
+  comptent en revanche, et les rachats ne les compensent pas : Air Liquide
+  perd ce point chaque année (139,5 M€ émis en 2025), LVMH en 2024 (53 M€
+  émis, alors que son nombre d'actions baisse). Quand la ligne manque
+  (Apple, par exemple, n'en publie pas), le critère retombe, avec une
+  mention, sur le nombre d'actions du bilan.
 - **Limites communes** : ces scores ont été calibrés sur des sociétés
   américaines, à d'autres époques (1946-1965 pour Altman, 1982-1992 pour
   Beneish, 1976-1996 pour Piotroski) et sous d'autres normes comptables

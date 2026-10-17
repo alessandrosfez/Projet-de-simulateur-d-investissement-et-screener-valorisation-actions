@@ -40,6 +40,7 @@ def _expected_keys() -> set[str]:
     keys |= {f"zone_{zone}" for zone in ("safe", "grey", "distress")}
     for criterion in engine.PIOTROSKI_CRITERIA:
         keys |= {f"piotroski_{criterion}", f"piotroski_{criterion}_help"}
+    keys |= {f"piotroski_detail_{detail}" for detail in layout.PIOTROSKI_DETAIL_KINDS}
     # Vision Transaction Services
     keys |= {f"bridge_line_{key}" for key in engine.NET_DEBT_LINE_KEYS}
     keys |= {f"source_{source}" for source in engine.NET_DEBT_SOURCES}

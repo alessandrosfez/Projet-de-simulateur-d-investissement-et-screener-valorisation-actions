@@ -153,9 +153,12 @@ def _fetch_fx_rate(from_currency: str, to_currency: str) -> float:
 
 @cached_ttl(STATEMENTS_TTL)
 def _fetch_daily_closes(symbol: str, start_date: str) -> pd.Series:
-    """Clôtures quotidiennes BRUTES (auto_adjust=False) : la capitalisation d'une date passée se calcule
-    au cours réellement coté ce jour-là, pas à un cours rétroactivement ajusté des dividendes. Index
-    sans fuseau horaire, pour se comparer directement aux dates de clôture des exercices."""
+    """Clôtures quotidiennes non ajustées des dividendes (auto_adjust=False) : la capitalisation d'une
+    date passée ne doit pas être minorée des dividendes versés depuis. Yahoo ajuste en revanche ces
+    clôtures des divisions et attributions gratuites postérieures, exactement comme il retraite le
+    nombre d'actions du bilan (NVDA fin janvier 2023 : 19,5 $ au lieu d'environ 195 $ cotés, pour
+    24,7 milliards d'actions au lieu de 2,47) : le produit des deux, la capitalisation, reste donc
+    juste. Index sans fuseau horaire, pour se comparer directement aux dates de clôture des exercices."""
     closes = yf.Ticker(symbol).history(start=start_date, interval="1d", auto_adjust=False)["Close"].dropna()
     if closes.empty:
         raise ValueError(f"Pas d'historique pour {symbol}")
