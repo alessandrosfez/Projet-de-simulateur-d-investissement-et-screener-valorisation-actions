@@ -79,6 +79,9 @@ app.layout = dbc.Container([
     ], className="mt-2 align-items-start app-header"),
     html.Div(layout.build_main("fr", {}), id="main-content-container"),
     dcc.Store(id="analysis-ticker-store"),
+    # Saisies de la vision Transaction Services ({ticker: {...}}), conservées pour la session du
+    # navigateur : survivent au changement de langue et au passage d'une société à l'autre.
+    dcc.Store(id="adjustments-store", storage_type="session"),
     dcc.Loading(type="circle", color="#636efa", children=[html.Div(id="results-container", className="px-3")]),
     html.Hr(className="mt-4"),
     html.Div(layout.build_footer("fr"), id="footer-container", className="text-center mb-2"),

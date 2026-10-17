@@ -33,11 +33,19 @@ Yahoo Finance sans retraitement par un analyste.
   les industriels, Z'' pour les autres, choix automatique et bascule
   manuelle, zones sûre / grise / détresse) et Piotroski F-score (9 critères
   détaillés). Chaque indice, ratio ou critère affiche le calcul complet.
+- **Vision Transaction Services** : pont de dette nette de la dette
+  financière brute à la dette nette ajustée (chaque ligne marquée
+  « donnée » ou « hypothèse »), tableaux éditables d'éléments assimilables
+  à de la dette et d'ajustements de l'EBITDA (libellé, montant), puis
+  effet sur la valeur d'entreprise, le multiple VE / EBITDA et le levier
+  dette nette / EBITDA, publiés et ajustés côte à côte. Les saisies sont
+  conservées par société pendant la session.
 - **Devises** : cours et capitalisation ramenés dans la devise des comptes
   (cours en pence à Londres, double cotation), avec le détail du calcul.
 - **Banques et assureurs détectés** : Beneish, Altman, Piotroski, la
-  qualité des résultats et l'analyse du BFR y sont déclarés non
-  applicables, avec un message clair plutôt que des chiffres absurdes.
+  qualité des résultats, l'analyse du BFR et la vision Transaction
+  Services y sont déclarés non applicables, avec un message clair plutôt
+  que des chiffres absurdes.
 - Interface FR/EN, thèmes clair et sombre, cache disque des appels
   yfinance.
 
@@ -163,6 +171,34 @@ Yahoo Finance sans retraitement par un analyste.
   que les IFRS. Les seuils n'ont jamais été réestimés sur des sociétés
   européennes récentes : ce sont des signaux à creuser, pas des verdicts.
   Ils sont non applicables aux banques et assureurs.
+- **Pont de dette nette : ce qui vient des données, ce qui est hypothèse** :
+  dette financière brute (court + long terme, hors dettes locatives ;
+  repli signalé sur la dette totale de Yahoo − dettes locatives),
+  − trésorerie et équivalents au sens strict, puis + dettes locatives
+  IFRS 16 et + engagements de retraite nets d'impôt (taux réglable, 25 %
+  par défaut, IS français : les cotisations futures sont déductibles).
+  Les placements court terme sont affichés pour mémoire, sans être
+  déduits, faute de pouvoir vérifier qu'ils sont mobilisables. Une donnée
+  que Yahoo ne fournit pas (retraites d'Air Liquide, fondues dans ses
+  provisions) apparaît n.d., exclue du total et signalée, jamais à 0
+  silencieusement ; l'utilisateur peut la saisir en hypothèse.
+- **Post-IFRS 16 partout** : l'EBITDA publié exclut les loyers, la dette
+  nette utilisée pour les multiples inclut donc les dettes locatives. La
+  dette nette hors IFRS 16 est affichée pour information seulement : un
+  multiple sur cette base exigerait l'EBITDA après loyers, que yfinance ne
+  fournit pas.
+- **Valeur d'entreprise** = capitalisation actuelle (dans la devise des
+  comptes) + dette nette + intérêts minoritaires : l'EBITDA consolidé
+  couvre 100 % des filiales, la VE doit donc inclure la part des
+  minoritaires. La capitalisation est celle du jour et la dette nette
+  celle de la dernière clôture : décalage de dates habituel, rappelé dans
+  l'interface. Multiples n.d. si l'EBITDA est nul ou négatif.
+- **Saisies de l'utilisateur** : montants en millions, virgule décimale
+  acceptée ; une ligne vide est ignorée, une ligne au montant invalide est
+  signalée plutôt qu'ignorée en silence. Les saisies sont conservées par
+  société dans un Store de session, et les tableaux en sont pré-remplis à
+  chaque reconstruction (changement de langue), pour ne jamais effacer le
+  travail en cours.
 - **Échecs réseau non mis en cache** : les couches cachées de
   `market_data.py` lèvent une exception quand yfinance ne renvoie rien,
   pour qu'un échec ponctuel ne reste pas 24 h en cache à la place des
@@ -193,8 +229,9 @@ L'application est servie sur [http://localhost:8052](http://localhost:8052)
   taux de change) et cache disque. Ne transforme rien.
 - `engine.py` : moteur de calcul pur (normalisation, classement sectoriel,
   conversion des données de marché, qualité des résultats, pont résultat →
-  CFO, BFR en jours, scores de Beneish, Altman et Piotroski). Aucune
-  dépendance Dash, réseau ou disque.
+  CFO, BFR en jours, scores de Beneish, Altman et Piotroski, pont de dette
+  nette, EBITDA ajusté et multiples). Aucune dépendance Dash, réseau ou
+  disque.
 - `charts.py` : constructeurs de graphiques Plotly (cascade, jours de BFR).
 - `layout.py` : construction de l'écran et mise en forme (montants,
   ratios et détail de leur calcul, provenance, tableaux).
@@ -215,7 +252,9 @@ sectoriel, devises, ratios de qualité des résultats et de BFR sur des cas
 calculés à la main) et `market_data.py` avec yfinance remplacé par des
 doublures : aucun appel réseau. `test_scores.py` reproduit un exemple
 chiffré publié pour chaque score (source citée au-dessus de chaque test)
-et couvre les cas limites (donnée manquante, base nulle, seuils). `test_i18n.py` vérifie que chaque clé de
+et couvre les cas limites (donnée manquante, base nulle, seuils).
+`test_transaction.py` vérifie le pont de dette nette, l'EBITDA ajusté, les
+multiples et la lecture des saisies sur des cas calculés à la main. `test_i18n.py` vérifie que chaque clé de
 traduction construite dynamiquement existe en FR et en EN.
 
 ## Docker

@@ -378,6 +378,82 @@ TRANSLATIONS = {
         "piotroski_detail_gross_margin_p": "marge brute t-1",
         "piotroski_detail_turnover_t": "rotation t",
         "piotroski_detail_turnover_p": "rotation t-1",
+        # ---------- Vision Transaction Services ----------
+        "analysis_transaction_services": "vision Transaction Services (dette nette, EBITDA ajusté)",
+        "section_transaction": "Vision Transaction Services",
+        "transaction_intro": "Exercice de référence : {year} (dernier exercice clos). La valeur d'entreprise "
+                             "utilise la capitalisation actuelle et la dette nette de cette clôture : décalage de "
+                             "dates habituel, à garder en tête.",
+        "pension_tax_rate_label": "Taux d'impôt sur les retraites (%)",
+        "pension_tax_rate_help": "Hypothèse : les cotisations futures de retraite sont déductibles, la dette "
+                                 "réelle est donc l'engagement × (1 − taux d'impôt). 25 % par défaut (IS français).",
+        "net_debt_bridge_title": "Pont de dette nette",
+        "col_amount": "Montant ({currency})",
+        "col_source": "Source",
+        "source_data": "Donnée",
+        "source_assumption": "Hypothèse",
+        "source_subtotal": "Sous-total",
+        "source_memo": "Pour mémoire",
+        "bridge_line_current_debt": "Dette financière court terme",
+        "bridge_line_long_term_debt": "Dette financière long terme",
+        "bridge_line_total_debt": "Dette totale (Yahoo, y c. dettes locatives)",
+        "bridge_line_lease_liabilities_deducted": "− Dettes locatives incluses dans la dette totale",
+        "bridge_line_gross_financial_debt": "Dette financière brute (hors IFRS 16)",
+        "bridge_line_cash": "− Trésorerie et équivalents",
+        "bridge_line_net_financial_debt": "Dette financière nette",
+        "bridge_line_short_term_investments_memo": "Placements court terme (non déduits)",
+        "bridge_line_lease_liabilities": "+ Dettes locatives (IFRS 16)",
+        "bridge_line_pension_liabilities": "+ Engagements de retraite (bruts)",
+        "bridge_line_pension_tax_effect": "− Effet d'impôt sur les retraites ({rate} %)",
+        "bridge_line_net_debt_data": "Dette nette (données)",
+        "bridge_line_user_item": "{label}",
+        "bridge_line_adjusted_net_debt": "Dette nette ajustée",
+        "bridge_excluded": "n.d. : non fourni par Yahoo, exclu du total (à saisir en hypothèse si connu).",
+        "bridge_memo_help": "Placements financiers à court terme : non déduits par défaut, faute de pouvoir "
+                            "vérifier qu'ils sont immédiatement mobilisables. À saisir en hypothèse (montant "
+                            "négatif) si tu les retiens.",
+        "flag_gross_debt_from_total_debt": "Dette court terme non fournie : dette brute reconstituée comme dette "
+                                           "totale Yahoo − dettes locatives.",
+        "flag_minority_interest_missing": "Intérêts minoritaires non fournis par Yahoo : exclus de la valeur "
+                                          "d'entreprise (à vérifier dans les comptes publiés).",
+        "net_debt_items_title": "Éléments assimilables à de la dette ou à de la trésorerie (hypothèses)",
+        "net_debt_items_help": "Saisis tes propres éléments, en millions de {currency} : montant positif pour une "
+                               "dette (complément de prix, dividendes à payer, affacturage déconsolidant, litige "
+                               "provisionné...), négatif pour de la trésorerie (créance de cession, placements court "
+                               "terme retenus...).",
+        "ebitda_adjustments_title": "Ajustements de l'EBITDA (éléments non récurrents)",
+        "ebitda_adjustments_help": "Saisis tes ajustements, en millions de {currency} : montant positif pour "
+                                   "réintégrer une charge non récurrente (restructuration, litige ponctuel...), négatif "
+                                   "pour retirer un produit non récurrent (plus-value de cession...).",
+        "col_label": "Libellé",
+        "col_amount_millions": "Montant (M {currency})",
+        "add_row_btn": "Ajouter une ligne",
+        "invalid_rows": "Ligne(s) {rows} ignorée(s) : montant manquant ou non numérique.",
+        "effects_title": "Effet sur les multiples",
+        "col_published": "Publié",
+        "col_adjusted": "Ajusté",
+        "col_change": "Écart",
+        "effects_ebitda": "EBITDA",
+        "effects_ebitda_help": "EBITDA publié (exercice de référence), puis après les ajustements saisis.",
+        "effects_net_debt": "Dette nette",
+        "effects_net_debt_help": "Dette nette issue des seules données, puis après les hypothèses saisies.",
+        "effects_enterprise_value": "Valeur d'entreprise",
+        "effects_enterprise_value_help": "Capitalisation actuelle (devise des comptes) + dette nette + intérêts "
+                                         "minoritaires : l'EBITDA consolidé couvre 100 % des filiales, la valeur "
+                                         "d'entreprise doit donc inclure la part des minoritaires.",
+        "effects_ev_to_ebitda": "VE / EBITDA",
+        "effects_ev_to_ebitda_help": "Multiple de valorisation : valeur d'entreprise ÷ EBITDA. Mesure combien "
+                                     "d'années d'EBITDA paie un acquéreur. À comparer aux pairs du secteur ; un EBITDA "
+                                     "ajusté plus élevé fait mécaniquement baisser le multiple. n.d. si l'EBITDA est "
+                                     "nul ou négatif.",
+        "effects_net_debt_to_ebitda": "Dette nette / EBITDA",
+        "effects_net_debt_to_ebitda_help": "Levier : nombre d'années d'EBITDA pour rembourser la dette nette. "
+                                           "Lecture usuelle : sous 2x confortable, au-delà de 3-4x élevé (zone des "
+                                           "covenants bancaires classiques). n.d. si l'EBITDA est nul ou négatif.",
+        "ifrs16_note": "Dette nette ajustée hors IFRS 16 : {value} (information seulement : un multiple sur cette "
+                       "base exigerait un EBITDA après loyers, que yfinance ne fournit pas).",
+        "market_cap_unavailable": "Capitalisation indisponible dans la devise des comptes : valeur d'entreprise et "
+                                  "VE / EBITDA n.d.",
         "field_revenue": "Chiffre d'affaires",
         "field_revenue_help": "Produits de l'activité ordinaire de l'exercice, hors taxes.",
         "field_cost_of_revenue": "Coût des ventes",
@@ -425,6 +501,9 @@ TRANSLATIONS = {
         "field_total_equity_incl_minorities": "Capitaux propres (y compris minoritaires)",
         "field_total_equity_incl_minorities_help": "Capitaux propres de l'ensemble consolidé, y compris les "
                                                    "intérêts minoritaires.",
+        "field_minority_interest": "Intérêts minoritaires",
+        "field_minority_interest_help": "Part des capitaux propres des filiales revenant aux actionnaires "
+                                        "minoritaires (valeur comptable).",
         "field_total_liabilities": "Total passif (hors capitaux propres)",
         "field_total_liabilities_help": "Ensemble des dettes et provisions. Identité de repli : total actif "
                                         "− capitaux propres y compris minoritaires.",
@@ -824,6 +903,79 @@ TRANSLATIONS = {
         "piotroski_detail_gross_margin_p": "gross margin t-1",
         "piotroski_detail_turnover_t": "turnover t",
         "piotroski_detail_turnover_p": "turnover t-1",
+        "analysis_transaction_services": "Transaction Services view (net debt, adjusted EBITDA)",
+        "section_transaction": "Transaction Services view",
+        "transaction_intro": "Reference fiscal year: {year} (last closed fiscal year). Enterprise value uses the "
+                             "current market cap and the net debt at that year end: a usual date mismatch, to keep "
+                             "in mind.",
+        "pension_tax_rate_label": "Tax rate on pensions (%)",
+        "pension_tax_rate_help": "Assumption: future pension contributions are tax-deductible, so the real debt is "
+                                 "the obligation × (1 − tax rate). 25% by default (French corporate tax).",
+        "net_debt_bridge_title": "Net debt bridge",
+        "col_amount": "Amount ({currency})",
+        "col_source": "Source",
+        "source_data": "Data",
+        "source_assumption": "Assumption",
+        "source_subtotal": "Subtotal",
+        "source_memo": "Memo",
+        "bridge_line_current_debt": "Short-term financial debt",
+        "bridge_line_long_term_debt": "Long-term financial debt",
+        "bridge_line_total_debt": "Total debt (Yahoo, incl. leases)",
+        "bridge_line_lease_liabilities_deducted": "− Lease liabilities included in total debt",
+        "bridge_line_gross_financial_debt": "Gross financial debt (excl. IFRS 16)",
+        "bridge_line_cash": "− Cash and equivalents",
+        "bridge_line_net_financial_debt": "Net financial debt",
+        "bridge_line_short_term_investments_memo": "Short-term investments (not deducted)",
+        "bridge_line_lease_liabilities": "+ Lease liabilities (IFRS 16)",
+        "bridge_line_pension_liabilities": "+ Pension obligations (gross)",
+        "bridge_line_pension_tax_effect": "− Tax effect on pensions ({rate}%)",
+        "bridge_line_net_debt_data": "Net debt (data)",
+        "bridge_line_user_item": "{label}",
+        "bridge_line_adjusted_net_debt": "Adjusted net debt",
+        "bridge_excluded": "n/a: not provided by Yahoo, excluded from the total (enter it as an assumption if known).",
+        "bridge_memo_help": "Short-term financial investments: not deducted by default, since it cannot be checked "
+                            "that they are immediately available. Enter them as an assumption (negative amount) if you "
+                            "retain them.",
+        "flag_gross_debt_from_total_debt": "Short-term debt not provided: gross debt rebuilt as Yahoo total debt − "
+                                           "lease liabilities.",
+        "flag_minority_interest_missing": "Minority interests not provided by Yahoo: excluded from enterprise value "
+                                          "(check the published accounts).",
+        "net_debt_items_title": "Debt-like or cash-like items (assumptions)",
+        "net_debt_items_help": "Enter your own items, in millions of {currency}: positive for debt (earn-out, "
+                               "dividends payable, derecognized factoring, provisioned litigation...), negative for cash "
+                               "(disposal receivable, retained short-term investments...).",
+        "ebitda_adjustments_title": "EBITDA adjustments (non-recurring items)",
+        "ebitda_adjustments_help": "Enter your adjustments, in millions of {currency}: positive to add back a "
+                                   "non-recurring charge (restructuring, one-off litigation...), negative to remove a "
+                                   "non-recurring gain (disposal gain...).",
+        "col_label": "Label",
+        "col_amount_millions": "Amount ({currency} m)",
+        "add_row_btn": "Add a row",
+        "invalid_rows": "Row(s) {rows} ignored: missing or non-numeric amount.",
+        "effects_title": "Effect on multiples",
+        "col_published": "Reported",
+        "col_adjusted": "Adjusted",
+        "col_change": "Change",
+        "effects_ebitda": "EBITDA",
+        "effects_ebitda_help": "Published EBITDA (reference fiscal year), then after the entered adjustments.",
+        "effects_net_debt": "Net debt",
+        "effects_net_debt_help": "Net debt from the data only, then after the entered assumptions.",
+        "effects_enterprise_value": "Enterprise value",
+        "effects_enterprise_value_help": "Current market cap (reporting currency) + net debt + minority interests: "
+                                         "consolidated EBITDA covers 100% of subsidiaries, so enterprise value must "
+                                         "include the minorities' share.",
+        "effects_ev_to_ebitda": "EV / EBITDA",
+        "effects_ev_to_ebitda_help": "Valuation multiple: enterprise value ÷ EBITDA. Measures how many years of EBITDA "
+                                     "a buyer pays. Compare with sector peers; a higher adjusted EBITDA mechanically "
+                                     "lowers the multiple. n/a if EBITDA is zero or negative.",
+        "effects_net_debt_to_ebitda": "Net debt / EBITDA",
+        "effects_net_debt_to_ebitda_help": "Leverage: years of EBITDA needed to repay net debt. Usual reading: below "
+                                           "2x comfortable, above 3-4x high (the range of standard bank covenants). n/a "
+                                           "if EBITDA is zero or negative.",
+        "ifrs16_note": "Adjusted net debt excluding IFRS 16: {value} (information only: a multiple on this basis would "
+                       "require EBITDA after rents, which yfinance does not provide).",
+        "market_cap_unavailable": "Market cap unavailable in the reporting currency: enterprise value and EV / "
+                                  "EBITDA n/a.",
         "field_revenue": "Revenue",
         "field_revenue_help": "Revenue from ordinary activities for the fiscal year, excluding taxes.",
         "field_cost_of_revenue": "Cost of revenue",
@@ -870,6 +1022,9 @@ TRANSLATIONS = {
         "field_total_equity_incl_minorities": "Equity (incl. minorities)",
         "field_total_equity_incl_minorities_help": "Equity of the whole consolidated group, including "
                                                    "minority interests.",
+        "field_minority_interest": "Minority interests",
+        "field_minority_interest_help": "Share of subsidiaries' equity belonging to minority shareholders "
+                                        "(book value).",
         "field_total_liabilities": "Total liabilities (excl. equity)",
         "field_total_liabilities_help": "All debts and provisions. Fallback identity: total assets − equity "
                                         "including minorities.",

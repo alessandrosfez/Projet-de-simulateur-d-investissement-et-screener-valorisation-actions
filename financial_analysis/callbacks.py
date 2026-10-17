@@ -14,10 +14,11 @@ from app_instance import app
 from charts import empty_figure_with_message, make_bridge_waterfall, make_working_capital_days_chart
 from constants import TYPICAL_YFINANCE_YEARS
 from engine import (
-    NormalizedStatements, altman_default_model, altman_z_score, beneish_m_score, cash_conversion, consecutive_pairs,
-    detect_sector_regime, market_value_of_equity, market_values_in_reporting_currency, metric_trend,
-    minor_unit_consistency, net_income_to_cfo_bridge, normalize_statements, piotroski_f_score, price_on_or_before,
-    sloan_accruals, split_currency_unit, working_capital_days,
+    NormalizedStatements, adjusted_ebitda, altman_default_model, altman_z_score, beneish_m_score, cash_conversion,
+    consecutive_pairs, detect_sector_regime, market_value_of_equity, market_values_in_reporting_currency, metric_trend,
+    minor_unit_consistency, net_debt_bridge, net_income_to_cfo_bridge, normalize_statements, parse_user_items,
+    piotroski_f_score, price_on_or_before, sloan_accruals, split_currency_unit, transaction_multiples,
+    working_capital_days,
 )
 from i18n import L, PALETTE, PALETTE_CODES, PALETTE_NAMES, PALETTES
 from market_data import fx_symbol, get_annual_statements, get_company_profile, get_daily_closes, get_fx_rate
@@ -221,14 +222,117 @@ def update_altman(model_choice, lang, dark_mode, store):
     return children
 
 
+def _market_in_reporting_currency(profile: dict) -> dict:
+    quote_major, _divisor = split_currency_unit(profile["quote_currency"])
+    fx_rate = get_fx_rate(quote_major, profile["reporting_currency"])
+    return market_values_in_reporting_currency(
+        profile["price"], profile["market_cap"], profile["quote_currency"], profile["reporting_currency"], fx_rate,
+    )
+
+
+def _transaction_section(normalized: NormalizedStatements, regime: dict, saved: dict, currency: str, lang: str,
+                         dark: bool) -> list:
+    section = [html.H5(L(lang, "section_transaction"), className="section-title")]
+    if not regime["applicable"]["transaction_services"]:
+        return section + [_not_applicable(regime, lang)]
+    return section + [layout.transaction_controls(normalized.years[0], saved, currency, lang, dark)]
+
+
+@app.callback(
+    Output("ts-bridge-container", "children"),
+    Output("ts-effects-container", "children"),
+    Output("ts-input-warnings", "children"),
+    Output("adjustments-store", "data"),
+    Input("ts-net-debt-items", "data"),
+    Input("ts-ebitda-adjustments", "data"),
+    Input("ts-pension-tax-input", "value"),
+    Input("lang-radio", "value"),
+    Input("dark-mode-switch", "value"),
+    State("analysis-ticker-store", "data"),
+    State("adjustments-store", "data"),
+)
+def update_transaction_view(net_debt_rows, ebitda_rows, pension_tax_pct, lang, dark_mode, store, saved_store):
+    """Recalcule le pont, l'EBITDA ajusté et les multiples à chaque saisie, et conserve les saisies de la
+    société dans adjustments-store. Les tableaux sont pré-remplis depuis ce même Store à leur création
+    (voir layout.transaction_controls) : la ré-émission qui suit un changement de langue réécrit donc
+    les mêmes valeurs, sans rien effacer."""
+    lang = lang or "fr"
+    dark = bool(dark_mode)
+    if not store or not store.get("ticker"):
+        raise dash.exceptions.PreventUpdate
+    ticker = store["ticker"]
+    normalized = _load_normalized(ticker)
+    if not normalized.years:
+        raise dash.exceptions.PreventUpdate
+    year = normalized.years[0]
+    profile = get_company_profile(ticker)
+    currency = profile["reporting_currency"] or L(lang, "na")
+    tax_rate = (pension_tax_pct if pension_tax_pct is not None else 25) / 100
+
+    net_debt_items, invalid_debt = parse_user_items(net_debt_rows)
+    ebitda_items, invalid_ebitda = parse_user_items(ebitda_rows)
+    bridge = net_debt_bridge(normalized, year, pension_tax_rate=tax_rate, user_items=net_debt_items)
+    ebitda = adjusted_ebitda(normalized.get("ebitda", year), ebitda_items)
+    market = _market_in_reporting_currency(profile)
+    minorities = normalized.get("minority_interest", year)
+    published = transaction_multiples(market["market_cap"], minorities, bridge["net_debt_data"], ebitda["published"])
+    adjusted = transaction_multiples(market["market_cap"], minorities, bridge["adjusted_net_debt"], ebitda["adjusted"])
+
+    effects = layout.effects_table(
+        {"ebitda": ebitda["published"], "net_debt": bridge["net_debt_data"], **published},
+        {"ebitda": ebitda["adjusted"], "net_debt": bridge["adjusted_net_debt"], **adjusted}, lang, dark,
+    )
+    notes = []
+    if bridge["adjusted_net_debt_excl_ifrs16"] is not None:
+        notes.append(html.Div(L(lang, "ifrs16_note",
+                                value=f"{layout.format_amount(bridge['adjusted_net_debt_excl_ifrs16'], lang)} {currency}")))
+    notes += [html.Div(L(lang, f"flag_{flag}")) for flag in bridge["flags"] + published["flags"]]
+    if market["market_cap"] is None:
+        notes.append(html.Div(L(lang, "market_cap_unavailable")))
+    warnings = []
+    for rows in (invalid_debt, invalid_ebitda):
+        if rows:
+            warnings.append(dbc.Alert(L(lang, "invalid_rows", rows=", ".join(map(str, rows))), color="warning",
+                                      className="py-1 px-2 mb-2"))
+
+    saved_store = dict(saved_store or {})
+    saved_store[ticker] = {"net_debt_items": net_debt_rows, "ebitda_adjustments": ebitda_rows,
+                           "pension_tax_rate_pct": pension_tax_pct}
+    return (layout.net_debt_bridge_table(bridge, currency, lang, dark),
+            html.Div([effects, html.Div(notes, className="text-muted mt-2", style={"fontSize": "0.8rem"})]),
+            warnings, saved_store)
+
+
+def _append_empty_row(n_clicks, rows):
+    if not n_clicks:
+        raise dash.exceptions.PreventUpdate
+    return (rows or []) + [{"label": "", "amount": ""}]
+
+
+app.callback(
+    Output("ts-net-debt-items", "data", allow_duplicate=True),
+    Input("ts-add-net-debt-item", "n_clicks"),
+    State("ts-net-debt-items", "data"),
+    prevent_initial_call=True,
+)(_append_empty_row)
+
+app.callback(
+    Output("ts-ebitda-adjustments", "data", allow_duplicate=True),
+    Input("ts-add-ebitda-adjustment", "n_clicks"),
+    State("ts-ebitda-adjustments", "data"),
+    prevent_initial_call=True,
+)(_append_empty_row)
+
+
 @app.callback(
     Output("results-container", "children"),
     Input("analysis-ticker-store", "data"),
     Input("lang-radio", "value"),
     Input("dark-mode-switch", "value"),
     Input("palette-dropdown", "value"),
+    State("adjustments-store", "data"),
 )
-def render_analysis(store, lang, dark_mode, palette_code):
+def render_analysis(store, lang, dark_mode, palette_code, saved_store):
     lang = lang or "fr"
     dark = bool(dark_mode)
     palette = PALETTES.get(palette_code, PALETTE)
@@ -244,11 +348,7 @@ def render_analysis(store, lang, dark_mode, palette_code):
 
     profile = get_company_profile(ticker)
     regime = detect_sector_regime(profile["sector"], profile["industry"])
-    quote_major, _divisor = split_currency_unit(profile["quote_currency"])
-    fx_rate = get_fx_rate(quote_major, profile["reporting_currency"])
-    market = market_values_in_reporting_currency(
-        profile["price"], profile["market_cap"], profile["quote_currency"], profile["reporting_currency"], fx_rate,
-    )
+    market = _market_in_reporting_currency(profile)
     consistency = minor_unit_consistency(
         profile["price"], profile["trailing_pe"], profile["trailing_eps"], market["divisor"],
     )
@@ -270,6 +370,7 @@ def render_analysis(store, lang, dark_mode, palette_code):
         *_earnings_quality_section(normalized, regime, lang, dark),
         *_working_capital_section(normalized, regime, lang, dark, palette),
         *_scores_section(normalized, regime, lang, dark),
+        *_transaction_section(normalized, regime, (saved_store or {}).get(ticker, {}), reporting, lang, dark),
         html.H5(L(lang, "section_statements"), className="section-title"),
         html.Small(L(lang, "amounts_unit", currency=reporting), className="text-muted d-block"),
         html.Small(L(lang, "statements_legend"), className="text-muted d-block mb-2"),

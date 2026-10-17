@@ -93,6 +93,7 @@ FIELD_SCHEMA: tuple[FieldSpec, ...] = (
     FieldSpec("current_liabilities", "balance", _bal("Current Liabilities")),
     FieldSpec("equity", "balance", _bal("Stockholders Equity"), equivalents=_bal("Common Stock Equity")),
     FieldSpec("total_equity_incl_minorities", "balance", _bal("Total Equity Gross Minority Interest")),
+    FieldSpec("minority_interest", "balance", _bal("Minority Interest")),
     FieldSpec(
         "total_liabilities", "balance", _bal("Total Liabilities Net Minority Interest"),
         derivation=("diff", ("total_assets", "total_equity_incl_minorities")),
@@ -255,7 +256,9 @@ def _resolve_field(spec: FieldSpec, frames: dict[str, pd.DataFrame], year: pd.Ti
 # résultat net n'y mesure rien de la qualité du résultat.
 # piotroski : ses critères de liquidité (ratio de liquidité générale) et de marge brute n'ont pas de
 # sens pour une banque ou un assureur, comme les deux autres scores.
-ANALYSES = ("beneish", "altman", "piotroski", "working_capital", "earnings_quality")
+# transaction_services : dette nette / EBITDA et VE / EBITDA n'ont pas de sens pour une banque, dont
+# l'EBITDA reconstitué est gonflé par les charges d'intérêts (matière première de l'activité).
+ANALYSES = ("beneish", "altman", "piotroski", "working_capital", "earnings_quality", "transaction_services")
 
 
 def detect_sector_regime(sector: str | None, industry: str | None) -> dict:
@@ -920,4 +923,159 @@ def piotroski_f_score(ns: NormalizedStatements, year: pd.Timestamp, asset_base: 
         "year": year, "prior_year": prior, "asset_base": asset_base, "criteria": criteria,
         "score": sum(available) if available else None, "n_available": len(available),
         "n_criteria": len(PIOTROSKI_CRITERIA), "flags": ni_flags,
+    }
+
+
+# ============================================================
+# VISION TRANSACTION SERVICES : dette nette, EBITDA ajusté, multiples
+# ============================================================
+# Chaque ligne du pont porte sa source : "data" (donnée Yahoo), "assumption" (hypothèse : taux
+# d'impôt, élément saisi par l'utilisateur), "subtotal" (calculé) ou "memo" (pour information, non
+# compté). Une donnée absente n'est jamais prise pour 0 : sa ligne est n.d. et signalée comme exclue.
+
+# Taux d'impôt par défaut pour l'effet fiscal sur les engagements de retraite : IS français (25 %).
+DEFAULT_PENSION_TAX_RATE = 0.25
+# Les montants saisis dans l'interface sont en millions de la devise des comptes.
+USER_AMOUNT_UNIT = 1e6
+# Lignes possibles du pont, sources et mentions (listées pour que l'interface puisse toutes les
+# traduire : voir test_i18n.py).
+NET_DEBT_LINE_KEYS = (
+    "current_debt", "long_term_debt", "total_debt", "lease_liabilities_deducted", "gross_financial_debt", "cash",
+    "net_financial_debt", "short_term_investments_memo", "lease_liabilities", "pension_liabilities",
+    "pension_tax_effect", "net_debt_data", "user_item", "adjusted_net_debt",
+)
+NET_DEBT_SOURCES = ("data", "assumption", "subtotal", "memo")
+TRANSACTION_FLAGS = ("gross_debt_from_total_debt", "minority_interest_missing")
+
+
+def parse_user_items(rows: list[dict] | None, unit: float = USER_AMOUNT_UNIT) -> tuple[list[dict], list[int]]:
+    """Lignes saisies par l'utilisateur ({"label", "amount"} en millions) -> (éléments valides en unités,
+    numéros de lignes invalides). Une ligne entièrement vide est ignorée (ligne ajoutée puis jamais
+    remplie) ; une ligne avec un montant non numérique est signalée plutôt qu'ignorée en silence. Un
+    libellé manquant est remplacé par le numéro de ligne, pour que l'élément reste identifiable."""
+    items, invalid = [], []
+    for i, row in enumerate(rows or [], start=1):
+        label = str(row.get("label") or "").strip()
+        raw = row.get("amount")
+        if raw is None or str(raw).strip() == "":
+            if label:
+                invalid.append(i)
+            continue
+        try:
+            amount = float(str(raw).replace(",", ".").replace(" ", ""))
+        except ValueError:
+            invalid.append(i)
+            continue
+        items.append({"label": label or f"#{i}", "amount": amount * unit})
+    return items, invalid
+
+
+def net_debt_bridge(ns: NormalizedStatements, year: pd.Timestamp, pension_tax_rate: float = DEFAULT_PENSION_TAX_RATE,
+                    user_items: list[dict] | None = None) -> dict:
+    """Pont de dette nette d'un exercice, de la dette financière brute à la dette nette ajustée.
+
+    1. Dette financière brute = dette court terme + dette long terme, hors dettes locatives. Repli
+       signalé : dette totale Yahoo - dettes locatives (Yahoo inclut les dettes locatives dans sa dette
+       totale).
+    2. - trésorerie et équivalents (définition stricte) = dette financière nette. Les placements court
+       terme sont affichés pour mémoire, non déduits : yfinance ne permet pas de vérifier qu'ils sont
+       immédiatement mobilisables ; l'utilisateur peut les retenir en hypothèse.
+    3. + dettes locatives IFRS 16 (cohérent avec l'EBITDA publié, qui est post-IFRS 16) et + engagements
+       de retraite nets d'impôt (cotisations futures déductibles) = dette nette (données).
+    4. + éléments assimilables saisis par l'utilisateur (signe + pour une dette, - pour de la
+       trésorerie) = dette nette ajustée.
+
+    Renvoie aussi la dette nette hors IFRS 16, affichée à titre d'information : un multiple sur cette
+    base exigerait un EBITDA après loyers, que yfinance ne fournit pas."""
+    g = ns.get
+    lines = []
+    flags = []
+
+    def line(key, value, source, **extra):
+        lines.append({"key": key, "value": value, "source": source, **extra})
+
+    current_debt, long_term_debt = g("current_debt", year), g("long_term_debt", year)
+    if current_debt is not None and long_term_debt is not None:
+        gross_debt = current_debt + long_term_debt
+        line("current_debt", current_debt, "data")
+        line("long_term_debt", long_term_debt, "data")
+    else:
+        total_debt, leases = g("total_debt", year), g("lease_liabilities", year)
+        gross_debt = total_debt - leases if total_debt is not None and leases is not None else None
+        if gross_debt is not None:
+            flags.append("gross_debt_from_total_debt")
+            line("total_debt", total_debt, "data")
+            line("lease_liabilities_deducted", -leases, "data")
+        else:
+            line("current_debt", current_debt, "data")
+            line("long_term_debt", long_term_debt, "data")
+    line("gross_financial_debt", gross_debt, "subtotal")
+
+    cash = g("cash", year)
+    line("cash", -cash if cash is not None else None, "data")
+    net_financial_debt = gross_debt - cash if gross_debt is not None and cash is not None else None
+    line("net_financial_debt", net_financial_debt, "subtotal")
+    short_term_investments = None
+    cash_and_sti = g("cash_and_short_term_investments", year)
+    if cash_and_sti is not None and cash is not None and cash_and_sti > cash:
+        short_term_investments = cash_and_sti - cash
+        line("short_term_investments_memo", -short_term_investments, "memo")
+
+    leases = g("lease_liabilities", year)
+    line("lease_liabilities", leases, "data", excluded=leases is None)
+    pensions = g("pension_liabilities", year)
+    line("pension_liabilities", pensions, "data", excluded=pensions is None)
+    pension_tax = -pensions * pension_tax_rate if pensions is not None else None
+    if pensions is not None:
+        line("pension_tax_effect", pension_tax, "assumption", rate=pension_tax_rate)
+
+    net_debt_data = None
+    if net_financial_debt is not None:
+        net_debt_data = net_financial_debt + (leases or 0.0) + (pensions or 0.0) + (pension_tax or 0.0)
+    line("net_debt_data", net_debt_data, "subtotal")
+
+    user_total = 0.0
+    for item in user_items or []:
+        line("user_item", item["amount"], "assumption", label=item["label"])
+        user_total += item["amount"]
+    adjusted = net_debt_data + user_total if net_debt_data is not None else None
+    line("adjusted_net_debt", adjusted, "subtotal")
+
+    return {
+        "year": year, "lines": lines, "flags": tuple(flags),
+        "net_financial_debt": net_financial_debt, "net_debt_data": net_debt_data, "adjusted_net_debt": adjusted,
+        "adjusted_net_debt_excl_ifrs16": adjusted - leases if adjusted is not None and leases is not None else None,
+        "excluded": tuple(key for key, value in (("lease_liabilities", leases), ("pension_liabilities", pensions))
+                          if value is None),
+        "short_term_investments": short_term_investments,
+    }
+
+
+def adjusted_ebitda(ebitda_published: float | None, adjustments: list[dict] | None) -> dict:
+    """EBITDA publié + ajustements saisis (signe + : réintègre une charge non récurrente, - : retire un
+    produit non récurrent). n.d. si l'EBITDA publié manque : un « EBITDA ajusté » construit sur rien
+    ne serait que la somme des ajustements."""
+    adjustments = adjustments or []
+    total = sum(item["amount"] for item in adjustments)
+    return {
+        "published": ebitda_published, "adjustments": adjustments, "total_adjustments": total,
+        "adjusted": ebitda_published + total if ebitda_published is not None else None,
+    }
+
+
+def transaction_multiples(market_cap: float | None, minority_interest: float | None, net_debt: float | None,
+                          ebitda: float | None) -> dict:
+    """Valeur d'entreprise = capitalisation + dette nette + intérêts minoritaires (l'EBITDA consolidé
+    inclut 100 % des filiales, la VE doit donc inclure la part des minoritaires), puis VE / EBITDA et
+    dette nette / EBITDA. Minoritaires absents chez Yahoo : exclus de la VE et signalés, jamais pris
+    pour 0 en silence. Multiples n.d. si l'EBITDA est nul ou négatif (non interprétables)."""
+    flags = ("minority_interest_missing",) if minority_interest is None else ()
+    ev = market_cap + net_debt + (minority_interest or 0.0) if market_cap is not None and net_debt is not None else None
+    positive_ebitda = ebitda is not None and ebitda > 0
+    return {
+        "enterprise_value": ev,
+        "ev_to_ebitda": ev / ebitda if ev is not None and positive_ebitda else None,
+        "net_debt_to_ebitda": net_debt / ebitda if net_debt is not None and positive_ebitda else None,
+        "flags": flags,
+        "reason": None if positive_ebitda else ("missing_inputs" if ebitda is None else "non_positive_denominator"),
     }

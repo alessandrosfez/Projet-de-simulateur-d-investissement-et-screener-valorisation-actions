@@ -324,6 +324,10 @@ def detail_table(table_id: str, first_column: str, column_names: list[str], rows
         conditional.append({"if": {"column_id": column_id, "filter_query": f"{{_state_{column_id}}} = na"}, "color": muted})
         conditional.append({"if": {"column_id": column_id, "filter_query": f"{{_state_{column_id}}} = flagged"},
                             "fontStyle": "italic"})
+        conditional.append({"if": {"column_id": column_id, "filter_query": f"{{_state_{column_id}}} = subtotal"},
+                            "fontWeight": "600"})
+        conditional.append({"if": {"column_id": column_id, "filter_query": f"{{_state_{column_id}}} = memo"},
+                            "fontStyle": "italic", "color": muted})
     return dash_table.DataTable(
         id=table_id, columns=columns, data=data, tooltip_data=tooltips, tooltip_delay=0, tooltip_duration=None,
         style_header=style_header, style_cell=style_cell, style_data=style_data,
@@ -540,6 +544,106 @@ def altman_controls(lang: str):
         ),
         html.Div(id="altman-container"),
     ])
+
+
+# ============================================================
+# Vision Transaction Services
+# ============================================================
+
+EFFECT_ROWS = ("ebitda", "net_debt", "enterprise_value", "ev_to_ebitda", "net_debt_to_ebitda")
+EMPTY_USER_ROWS = [{"label": "", "amount": ""}, {"label": "", "amount": ""}]
+
+
+def user_items_table(table_id: str, rows: list[dict] | None, lang: str, currency: str, dark: bool):
+    """Tableau éditable de saisies (libellé, montant en millions). Montant en texte plutôt qu'en nombre :
+    accepte la virgule décimale française, la conversion et la validation se font dans
+    engine.parse_user_items, qui signale une saisie invalide au lieu de l'ignorer en silence."""
+    style_header, style_cell, style_data = table_style_overrides(dark)
+    return dash_table.DataTable(
+        id=table_id,
+        columns=[{"name": L(lang, "col_label"), "id": "label", "type": "text"},
+                 {"name": L(lang, "col_amount_millions", currency=currency), "id": "amount", "type": "text"}],
+        data=rows if rows else [dict(r) for r in EMPTY_USER_ROWS],
+        editable=True, row_deletable=True,
+        style_header=style_header, style_cell=style_cell, style_data=style_data,
+        style_cell_conditional=[{"if": {"column_id": "label"}, "textAlign": "left", "minWidth": "300px"}],
+        style_table={"overflowX": "auto", "maxWidth": "620px"},
+    )
+
+
+def transaction_controls(year: pd.Timestamp, saved: dict, currency: str, lang: str, dark: bool):
+    """Section Transaction Services : taux d'impôt sur les retraites, pont de dette nette, saisies de
+    l'utilisateur et effets sur les multiples. Les tableaux de saisie sont pré-remplis avec les saisies
+    déjà faites pour cette société (voir callbacks.update_transaction_view, qui les conserve) : ils sont
+    recréés à chaque changement de langue, un défaut vide effacerait le travail de l'utilisateur."""
+    return html.Div([
+        html.Small(L(lang, "transaction_intro", year=format_year(year, lang)), className="text-muted d-block mb-2"),
+        html.Div([dbc.Label(L(lang, "pension_tax_rate_label"), className="mb-0")]
+                 + info_tooltip("pension-tax-info", L(lang, "pension_tax_rate_help"))),
+        dcc.Input(id="ts-pension-tax-input", type="number", min=0, max=100, step=0.5,
+                  value=saved.get("pension_tax_rate_pct", 25), className="form-control form-control-sm mb-3",
+                  style={"width": "100px"}),
+        html.H6(L(lang, "net_debt_bridge_title"), className="mt-2"),
+        html.Div(id="ts-bridge-container"),
+        html.H6(L(lang, "net_debt_items_title"), className="mt-3"),
+        html.Small(L(lang, "net_debt_items_help", currency=currency), className="text-muted d-block mb-1"),
+        user_items_table("ts-net-debt-items", saved.get("net_debt_items"), lang, currency, dark),
+        dbc.Button(L(lang, "add_row_btn"), id="ts-add-net-debt-item", color="link", size="sm", className="p-0 mb-2"),
+        html.H6(L(lang, "ebitda_adjustments_title"), className="mt-3"),
+        html.Small(L(lang, "ebitda_adjustments_help", currency=currency), className="text-muted d-block mb-1"),
+        user_items_table("ts-ebitda-adjustments", saved.get("ebitda_adjustments"), lang, currency, dark),
+        dbc.Button(L(lang, "add_row_btn"), id="ts-add-ebitda-adjustment", color="link", size="sm", className="p-0 mb-2"),
+        html.Div(id="ts-input-warnings"),
+        html.H6(L(lang, "effects_title"), className="mt-3"),
+        html.Div(id="ts-effects-container"),
+    ])
+
+
+def net_debt_bridge_table(bridge: dict, currency: str, lang: str, dark: bool):
+    """Une ligne par étape du pont, avec son montant et sa source (donnée, hypothèse, sous-total, pour
+    mémoire). Ligne de donnée absente : n.d., avec en infobulle la mention qu'elle est exclue du total."""
+    rows = []
+    for line in bridge["lines"]:
+        label = L(lang, f"bridge_line_{line['key']}", label=line.get("label", ""),
+                  rate=f"{line.get('rate', 0) * 100:g}")
+        source = line["source"]
+        if line["value"] is None:
+            amount_cell = _na_cell(L(lang, "bridge_excluded") if line.get("excluded") else "", lang)
+        else:
+            state = {"subtotal": "subtotal", "memo": "memo"}.get(source, "ok")
+            tooltip = L(lang, "bridge_memo_help") if source == "memo" else None
+            amount_cell = {"text": format_amount(line["value"], lang), "state": state, "tooltip": tooltip}
+        source_cell = {"text": L(lang, f"source_{source}"), "state": "memo" if source == "memo" else
+                       ("subtotal" if source == "subtotal" else "ok")}
+        rows.append({"label": label, "help": "", "cells": [amount_cell, source_cell]})
+    return detail_table("table-net-debt-bridge", L(lang, "col_item"),
+                        [L(lang, "col_amount", currency=currency), L(lang, "col_source")], rows, dark)
+
+
+def effects_table(published: dict, adjusted: dict, lang: str, dark: bool):
+    """Publié, ajusté et écart pour l'EBITDA, la dette nette, la valeur d'entreprise et les deux
+    multiples. published / adjusted : {"ebitda", "net_debt", "enterprise_value", "ev_to_ebitda",
+    "net_debt_to_ebitda"} (montants en unités, multiples en x)."""
+    rows = []
+    for key in EFFECT_ROWS:
+        is_multiple = key in ("ev_to_ebitda", "net_debt_to_ebitda")
+        before, after = published.get(key), adjusted.get(key)
+
+        def fmt(value, signed=False):
+            if value is None:
+                return L(lang, "na")
+            return format_ratio(value, "multiple", lang, signed=signed) if is_multiple else (
+                ("+" if signed and value > 0 else "") + format_amount(value, lang))
+
+        change = after - before if before is not None and after is not None else None
+        cells = [
+            {"text": fmt(before), "state": "na" if before is None else "ok"},
+            {"text": fmt(after), "state": "na" if after is None else "subtotal"},
+            {"text": fmt(change, signed=True), "state": "na" if change is None else "ok"},
+        ]
+        rows.append({"label": L(lang, f"effects_{key}"), "help": L(lang, f"effects_{key}_help"), "cells": cells})
+    return detail_table("table-effects", L(lang, "col_metric"),
+                        [L(lang, "col_published"), L(lang, "col_adjusted"), L(lang, "col_change")], rows, dark)
 
 
 def _stat(label: str, value_text: str, extra=None):
