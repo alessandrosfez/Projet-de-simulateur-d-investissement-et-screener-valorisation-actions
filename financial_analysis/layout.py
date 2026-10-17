@@ -105,6 +105,8 @@ def provenance_text(origin: dict, lang: str) -> str:
     if source in ("published", "equivalent"):
         statement = L(lang, f"statement_{origin['statement']}")
         return L(lang, f"prov_{source}", label=origin["label"], statement=statement)
+    if source == "imported":
+        return L(lang, "prov_imported")
     if source == "derived":
         return L(lang, "prov_derived", formula=_formula_text(origin["operator"], origin["operands"], lang))
     if origin.get("reason") == "derivation_inputs_missing":
@@ -113,6 +115,8 @@ def provenance_text(origin: dict, lang: str) -> str:
             formula=_formula_text(origin["operator"], origin["operands"], lang),
             missing=", ".join(L(lang, f"field_{key}") for key in origin["missing_operands"]),
         )
+    if origin.get("reason") == "not_in_import":
+        return L(lang, "prov_missing_not_in_import")
     return L(lang, "prov_missing_not_in_yfinance")
 
 
@@ -440,9 +444,10 @@ def beneish_summary(result: dict, lang: str):
 ZONE_STATES = {"safe": "good", "grey": "warn", "distress": "bad"}
 
 
-def altman_table(results: list[dict], lang: str, dark: bool):
+def altman_table(results: list[dict], lang: str, dark: bool, imported: bool = False):
     """Une colonne par exercice (du plus récent au plus ancien) : X1 à X5, Z, zone. Infobulle de chaque
-    ratio : numérateur ÷ dénominateur = valeur, puis contribution (coefficient x ratio)."""
+    ratio : numérateur ÷ dénominateur = valeur, puis contribution (coefficient x ratio). imported : la
+    capitalisation vient de la ligne market_cap du fichier, pas des cours, d'où un autre message."""
     model = results[0]["model"]
     coefficients = ALTMAN_MODELS[model]["coefficients"]
     columns = [format_year(r["year"], lang) for r in results]
@@ -462,7 +467,7 @@ def altman_table(results: list[dict], lang: str, dark: bool):
             if component["value"] is None:
                 text = formula
                 if component["numerator_key"] == "market_value_of_equity" and component["numerator"] is None:
-                    text += "\n\n" + L(lang, "altman_mve_unavailable")
+                    text += "\n\n" + L(lang, "altman_mve_unavailable_import" if imported else "altman_mve_unavailable")
                 cells.append(_na_cell(text, lang))
                 continue
             contribution = L(lang, "contribution_text", coefficient=f"{coefficient:g}", value=f"{component['value']:.3f}",
@@ -819,6 +824,63 @@ def company_card(ticker: str, profile: dict, regime: dict, market: dict, lang: s
     ]), className="mb-3")
 
 
+IMPORT_UNIT_NAMES = {1.0: "import_unit_units", 1e3: "import_unit_thousands", 1e6: "import_unit_millions",
+                     1e9: "import_unit_billions"}
+
+
+def _unit_text(unit: float, lang: str) -> str:
+    """Unité de saisie du fichier en toutes lettres (« millions »), ou le multiplicateur s'il est inhabituel."""
+    key = IMPORT_UNIT_NAMES.get(float(unit))
+    return L(lang, key) if key else f"× {unit:g}"
+
+
+def import_card(filename: str, meta: dict, regime: dict, latest_market_cap: float | None,
+                latest_year: pd.Timestamp | None, lang: str):
+    """Carte d'une société importée : pas de cours ni de change, seulement ce que déclare le fichier, et
+    la capitalisation de la dernière clôture qui sert aux multiples."""
+    currency = meta.get("currency") or L(lang, "na")
+    if latest_market_cap is not None and latest_year is not None:
+        cap_text = f"{format_amount(latest_market_cap, lang)} {currency}"
+        cap_label = L(lang, "label_market_cap_at", year=format_year(latest_year, lang))
+    else:
+        cap_text, cap_label = L(lang, "na"), L(lang, "label_market_cap")
+    header = html.Div([
+        html.H5(meta.get("company") or filename, className="mb-1 d-inline"),
+        dbc.Badge(L(lang, "badge_imported"), color="info", className="ms-2 align-text-bottom"),
+        dbc.Badge(L(lang, f"regime_{regime['regime']}"), color="secondary" if regime["regime"] == "general" else "warning",
+                  className="ms-2 align-text-bottom"),
+    ], className="mb-2")
+    return dbc.Card(dbc.CardBody([
+        header,
+        dbc.Row([
+            _stat(L(lang, "label_source_file"), filename),
+            _stat(L(lang, "label_sector"), meta.get("sector") or L(lang, "na")),
+            _stat(L(lang, "label_industry"), meta.get("industry") or L(lang, "na")),
+            _stat(L(lang, "label_reporting_currency"), currency),
+            _stat(L(lang, "label_import_unit"), _unit_text(meta.get("unit") or 1.0, lang)),
+            _stat(cap_label, cap_text),
+        ]),
+    ]), className="mb-3")
+
+
+def import_feedback(result: dict | None, filename: str, lang: str):
+    """Résultat d'un import : nombre d'exercices lus, ou la liste complète des erreurs (ligne, détail)."""
+    if result is None:
+        return dbc.Alert(L(lang, "import_error_unreadable_file"), color="danger", className="py-1 px-2 mb-0")
+    if result["errors"]:
+        items = []
+        for error in result["errors"]:
+            text = L(lang, f"import_error_{error['code']}", detail=error["detail"] or "")
+            if error["line"] is not None:
+                text = L(lang, "import_error_at_line", line=error["line"], text=text)
+            items.append(html.Li(text))
+        return dbc.Alert([html.Div(L(lang, "import_rejected", filename=filename)), html.Ul(items, className="mb-0")],
+                         color="danger", className="py-1 px-2 mb-0")
+    dataset = result["dataset"]
+    return dbc.Alert(L(lang, "import_success", filename=filename, n=len(dataset["years"])), color="success",
+                     className="py-1 px-2 mb-0")
+
+
 def analysis_alerts(profile: dict, regime: dict, market: dict, consistency: dict, lang: str) -> list:
     """Bandeaux d'avertissement : analyses non applicables (banque/assureur), prudence sectorielle,
     conversion de devise impossible ou incohérente. Toujours affichés AVANT les chiffres, pour que
@@ -875,7 +937,25 @@ def build_main(lang, v=None):
                 dbc.Button(L(lang, "analyze_btn"), id="analyze-btn", color="primary"),
                 width="auto", className="d-flex align-items-end",
             ),
-        ], className="mb-3 gx-3"),
+        ], className="mb-2 gx-3"),
+        # Import d'états financiers : remplace Yahoo pour l'analyse (société radiée, plus d'historique).
+        dbc.Row([
+            dbc.Col([
+                html.Div([dbc.Label(L(lang, "import_label"), className="mb-0")]
+                         + info_tooltip("import-info", L(lang, "import_help"))),
+                dcc.Upload(
+                    id="statements-upload", children=html.Div(L(lang, "import_upload")), multiple=False,
+                    style={"borderWidth": "1px", "borderStyle": "dashed", "borderRadius": "10px", "padding": "0.5rem 1rem",
+                           "textAlign": "center", "cursor": "pointer", "width": "420px"},
+                ),
+            ], width="auto"),
+            dbc.Col([
+                dbc.Button(L(lang, "import_template_btn"), id="statements-template-btn", color="secondary",
+                           outline=True, size="sm"),
+                dcc.Download(id="statements-template-download"),
+            ], width="auto", className="d-flex align-items-end"),
+        ], className="mb-2 gx-3"),
+        html.Div(id="statements-import-feedback", className="mb-3", style={"maxWidth": "760px"}),
     ], className="pt-3 px-3")
 
 

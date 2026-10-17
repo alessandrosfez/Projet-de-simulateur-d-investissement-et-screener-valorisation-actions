@@ -111,8 +111,10 @@ TRANSLATIONS = {
                            "strictement identique (souvent plus large) : à garder en tête.",
         "prov_derived": "Dérivé : {formula}.",
         "prov_missing_not_in_yfinance": "n.d. : poste absent des données yfinance pour cet exercice.",
-        "prov_missing_derivation": "n.d. : absent des données yfinance, et non dérivable ({formula}) faute "
+        "prov_missing_derivation": "n.d. : poste absent des données, et non dérivable ({formula}) faute "
                                    "de : {missing}.",
+        "prov_imported": "Importé : montant saisi dans le fichier.",
+        "prov_missing_not_in_import": "n.d. : poste absent du fichier importé pour cet exercice.",
         # ---------- Postes ----------
         # ---------- Qualité des résultats ----------
         "section_earnings_quality": "Qualité des résultats",
@@ -642,6 +644,74 @@ TRANSLATIONS = {
         "field_common_stock_issuance_help": "Trésorerie encaissée par l'émission d'actions ordinaires dans "
                                             "l'exercice (augmentations de capital, plans salariés), avant "
                                             "rachats. Une division ou une attribution gratuite n'y figure pas.",
+        # ---------- Import d'états financiers ----------
+        "import_label": "Ou importer des états financiers (CSV)",
+        "import_help": "Remplace Yahoo Finance pour l'analyse : société radiée, cas d'école, ou plus de 4 "
+                       "exercices. Une ligne par poste (clé interne), une colonne par date de clôture : "
+                       "télécharge le modèle pour le format exact. À la moindre erreur, le fichier est refusé "
+                       "en entier, avec la liste des lignes à corriger.",
+        "import_upload": "Glisse le fichier ici, ou clique pour le choisir",
+        "import_template_btn": "Télécharger le modèle",
+        "import_template_filename": "modele_etats_financiers.csv",
+        "import_col_key": "poste",
+        "import_col_label": "libelle",
+        "field_market_cap_import": "Capitalisation boursière à la clôture (facultatif)",
+        "import_template_comment_1": "Modèle d'import d'états financiers (outil Analyse financière). Les lignes "
+                                     "commençant par # sont des commentaires, sauf les métadonnées ci-dessous.",
+        "import_template_comment_2": "Une ligne par poste : clé interne en 1re colonne (à ne pas modifier), libellé "
+                                     "en 2e colonne (ignoré à l'import), puis un montant par date de clôture.",
+        "import_template_comment_3": "Dates de clôture au format AAAA-MM-JJ ou JJ/MM/AAAA : adapte les en-têtes aux "
+                                     "exercices de la société, et ajoute autant de colonnes que nécessaire.",
+        "import_template_comment_4": "Cellule vide ou n.d. : donnée non disponible, jamais lue comme 0. Écris 0 pour "
+                                     "un montant nul (un tiret seul est refusé). Les postes calculables (marge "
+                                     "brute, FCF...) peuvent rester vides.",
+        "import_template_comment_5": "Montants dans l'unité indiquée (unites, milliers, millions, milliards). Coût "
+                                     "des ventes et charges d'intérêts en positif, capex en négatif comme au "
+                                     "tableau de flux. Régime : general, bank ou insurer. Ligne market_cap "
+                                     "facultative.",
+        "import_error_at_line": "Ligne {line} : {text}",
+        "import_rejected": "Import de « {filename} » refusé, rien n'a été importé :",
+        "import_success": "« {filename} » importé : {n} exercice(s). L'analyse ci-dessous porte sur ce fichier ; "
+                          "analyse un ticker pour revenir à Yahoo Finance.",
+        "import_error_unreadable_file": "Fichier illisible ou vide : un CSV avec une ligne d'en-tête est attendu "
+                                        "(voir le modèle).",
+        "import_error_no_year_columns": "Aucune colonne d'exercice : les en-têtes doivent être des dates de "
+                                        "clôture (AAAA-MM-JJ ou JJ/MM/AAAA).",
+        "import_error_bare_year": "En-tête « {detail} » : année seule. La date de clôture complète est attendue "
+                                  "(ex. {detail}-12-31), pour ne pas deviner celle d'un exercice décalé.",
+        "import_error_duplicate_year": "Date de clôture « {detail} » présente deux fois.",
+        "import_error_unknown_meta": "Métadonnée inconnue « {detail} » (attendu : societe, devise, unite, regime, "
+                                     "secteur, industrie).",
+        "import_error_bad_unit": "Unité « {detail} » non reconnue (unites, milliers, millions, milliards, ou un "
+                                 "multiplicateur positif).",
+        "import_error_bad_regime": "Régime « {detail} » non reconnu (general, bank ou insurer).",
+        "import_error_missing_key": "Montants sans clé de poste en première colonne.",
+        "import_error_unknown_key": "Clé de poste inconnue « {detail} » (la liste des clés est dans le modèle).",
+        "import_error_duplicate_key": "Poste « {detail} » présent deux fois.",
+        "import_error_ambiguous_dash": "Tiret seul dans la colonne {detail} : écris 0 si le montant est nul, laisse "
+                                       "vide s'il n'est pas disponible.",
+        "import_error_unreadable_amount": "Montant illisible ({detail}).",
+        "import_error_no_values": "Aucun montant saisi.",
+        "import_coverage_note": "Données importées depuis « {filename} » : {n} exercice(s) ({years}). Chiffres tels "
+                                "que saisis, sans contrôle de cohérence avec les comptes publiés.",
+        "import_market_cap_note": "Capitalisation : celle déclarée dans le fichier à la clôture du {year}, pas un "
+                                  "cours du jour.",
+        "market_cap_unavailable_import": "Capitalisation absente du fichier (ligne market_cap) : valeur d'entreprise "
+                                         "et VE / EBITDA n.d.",
+        "altman_mve_unavailable_import": "Capitalisation à la clôture absente du fichier (ligne market_cap) : Z "
+                                         "d'origine n.d. pour cet exercice, bascule sur Z'' possible.",
+        "altman_auto_choice_import": "Choix automatique : {model}, d'après le secteur déclaré dans le fichier "
+                                     "(« {sector} »). Le Z d'origine est réservé aux secteurs Yahoo Industrials et "
+                                     "Basic Materials, proches de l'échantillon d'industriels sur lequel il a été "
+                                     "calibré.",
+        "badge_imported": "Fichier importé",
+        "label_source_file": "Fichier",
+        "label_import_unit": "Unité de saisie",
+        "label_market_cap_at": "Capitalisation au {year}",
+        "import_unit_units": "unités",
+        "import_unit_thousands": "milliers",
+        "import_unit_millions": "millions",
+        "import_unit_billions": "milliards",
     },
     "en": {
         "app_title": "Financial analysis: quality and soundness of the accounts (work in progress)",
@@ -732,8 +802,10 @@ TRANSLATIONS = {
                            "strictly identical (often broader): keep it in mind.",
         "prov_derived": "Derived: {formula}.",
         "prov_missing_not_in_yfinance": "n/a: item missing from yfinance data for this fiscal year.",
-        "prov_missing_derivation": "n/a: missing from yfinance data, and not derivable ({formula}) for lack "
+        "prov_missing_derivation": "n/a: item missing from the data, and not derivable ({formula}) for lack "
                                    "of: {missing}.",
+        "prov_imported": "Imported: amount entered in the file.",
+        "prov_missing_not_in_import": "n/a: item missing from the imported file for this fiscal year.",
         "section_earnings_quality": "Earnings quality",
         "section_bridge": "From net income to operating cash flow",
         "section_working_capital": "Working capital in days",
@@ -1233,6 +1305,72 @@ TRANSLATIONS = {
         "field_common_stock_issuance_help": "Cash received from issuing common shares during the year (capital "
                                             "increases, employee plans), before buybacks. A stock split or bonus "
                                             "share allotment does not appear here.",
+        # ---------- Financial statements import ----------
+        "import_label": "Or import financial statements (CSV)",
+        "import_help": "Replaces Yahoo Finance for the analysis: delisted company, textbook case, or more than 4 "
+                       "fiscal years. One row per item (internal key), one column per closing date: download the "
+                       "template for the exact format. On any error, the whole file is rejected, with the list "
+                       "of rows to fix.",
+        "import_upload": "Drop the file here, or click to choose it",
+        "import_template_btn": "Download the template",
+        "import_template_filename": "financial_statements_template.csv",
+        "import_col_key": "item",
+        "import_col_label": "label",
+        "field_market_cap_import": "Market capitalization at year end (optional)",
+        "import_template_comment_1": "Financial statements import template (Financial analysis tool). Lines starting "
+                                     "with # are comments, except the metadata below.",
+        "import_template_comment_2": "One row per item: internal key in the 1st column (do not change it), label in "
+                                     "the 2nd column (ignored on import), then one amount per closing date.",
+        "import_template_comment_3": "Closing dates as YYYY-MM-DD or DD/MM/YYYY: adapt the headers to the company's "
+                                     "fiscal years, and add as many columns as needed.",
+        "import_template_comment_4": "Empty cell or n/a: data not available, never read as 0. Write 0 for a nil "
+                                     "amount (a lone dash is rejected). Computable items (gross profit, FCF...) "
+                                     "can be left empty.",
+        "import_template_comment_5": "Amounts in the stated unit (units, thousands, millions, billions). Cost of "
+                                     "revenue and interest expense as positive numbers, capex as negative as in the "
+                                     "cash flow statement. Regime: general, bank or insurer. market_cap row "
+                                     "optional.",
+        "import_error_at_line": "Line {line}: {text}",
+        "import_rejected": "Import of \"{filename}\" rejected, nothing was imported:",
+        "import_success": "\"{filename}\" imported: {n} fiscal year(s). The analysis below uses this file; analyze a "
+                          "ticker to go back to Yahoo Finance.",
+        "import_error_unreadable_file": "Unreadable or empty file: a CSV with a header row is expected (see the "
+                                        "template).",
+        "import_error_no_year_columns": "No fiscal year column: headers must be closing dates (YYYY-MM-DD or "
+                                        "DD/MM/YYYY).",
+        "import_error_bare_year": "Header \"{detail}\": year only. The full closing date is expected (e.g. "
+                                  "{detail}-12-31), so as not to guess that of a non-calendar fiscal year.",
+        "import_error_duplicate_year": "Closing date \"{detail}\" appears twice.",
+        "import_error_unknown_meta": "Unknown metadata \"{detail}\" (expected: company, currency, unit, regime, "
+                                     "sector, industry).",
+        "import_error_bad_unit": "Unit \"{detail}\" not recognized (units, thousands, millions, billions, or a "
+                                 "positive multiplier).",
+        "import_error_bad_regime": "Regime \"{detail}\" not recognized (general, bank or insurer).",
+        "import_error_missing_key": "Amounts without an item key in the first column.",
+        "import_error_unknown_key": "Unknown item key \"{detail}\" (the list of keys is in the template).",
+        "import_error_duplicate_key": "Item \"{detail}\" appears twice.",
+        "import_error_ambiguous_dash": "Lone dash in column {detail}: write 0 if the amount is nil, leave empty if it "
+                                       "is not available.",
+        "import_error_unreadable_amount": "Unreadable amount ({detail}).",
+        "import_error_no_values": "No amount entered.",
+        "import_coverage_note": "Data imported from \"{filename}\": {n} fiscal year(s) ({years}). Figures as entered, "
+                                "with no consistency check against the published accounts.",
+        "import_market_cap_note": "Market cap: as stated in the file at the {year} year end, not a current price.",
+        "market_cap_unavailable_import": "Market cap missing from the file (market_cap row): enterprise value and EV / "
+                                         "EBITDA n/a.",
+        "altman_mve_unavailable_import": "Market cap at year end missing from the file (market_cap row): original Z "
+                                         "n/a for this fiscal year, switching to Z'' is possible.",
+        "altman_auto_choice_import": "Automatic choice: {model}, based on the sector stated in the file (\"{sector}\"). "
+                                     "The original Z is reserved for the Yahoo sectors Industrials and Basic "
+                                     "Materials, close to the manufacturing sample it was calibrated on.",
+        "badge_imported": "Imported file",
+        "label_source_file": "File",
+        "label_import_unit": "Input unit",
+        "label_market_cap_at": "Market cap at {year}",
+        "import_unit_units": "units",
+        "import_unit_thousands": "thousands",
+        "import_unit_millions": "millions",
+        "import_unit_billions": "billions",
     },
 }
 

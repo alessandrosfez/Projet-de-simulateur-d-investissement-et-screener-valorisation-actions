@@ -5,6 +5,7 @@ données (market_data.py), les fait passer par le moteur pur (engine.py) et met 
 (layout.py).
 """
 import base64
+from dataclasses import dataclass
 
 import dash
 import dash_bootstrap_components as dbc
@@ -16,12 +17,14 @@ from app_instance import app
 from charts import empty_figure_with_message, make_bridge_waterfall, make_working_capital_days_chart
 from constants import TYPICAL_YFINANCE_YEARS
 from engine import (
-    DEFAULT_BENFORD_MIN_AMOUNT, NormalizedStatements, adjusted_ebitda, benford_first_digit_test,
-    financial_statement_amounts, guess_amount_column, read_ledger_csv, select_benford_amounts, altman_default_model, altman_z_score, beneish_m_score, cash_conversion,
-    consecutive_pairs, detect_sector_regime, market_value_of_equity, market_values_in_reporting_currency, metric_trend,
-    minor_unit_consistency, net_debt_bridge, net_income_to_cfo_bridge, normalize_statements, parse_user_items,
-    piotroski_f_score, price_on_or_before, sloan_accruals, split_currency_unit, transaction_multiples,
-    working_capital_days,
+    DEFAULT_BENFORD_MIN_AMOUNT, FIELD_KEYS, IMPORT_MARKET_CAP_KEY, NormalizedStatements, adjusted_ebitda,
+    benford_first_digit_test, financial_statement_amounts, guess_amount_column, read_ledger_csv,
+    select_benford_amounts, altman_default_model, altman_z_score, beneish_m_score, cash_conversion,
+    consecutive_pairs, detect_sector_regime, imported_market_caps, imported_statement_amounts, market_value_of_equity,
+    market_values_in_reporting_currency, metric_trend, minor_unit_consistency, net_debt_bridge,
+    net_income_to_cfo_bridge, normalize_imported, normalize_statements, parse_statements_csv, parse_user_items,
+    piotroski_f_score, price_on_or_before, regime_from_import, sloan_accruals, split_currency_unit,
+    statements_csv_template, transaction_multiples, working_capital_days,
 )
 from i18n import L, PALETTE, PALETTE_CODES, PALETTE_NAMES, PALETTES
 from market_data import fx_symbol, get_annual_statements, get_company_profile, get_daily_closes, get_fx_rate
@@ -36,6 +39,53 @@ def _load_normalized(ticker: str) -> NormalizedStatements:
     des DataFrames par le navigateur."""
     statements = get_annual_statements(ticker)
     return normalize_statements(statements["income"], statements["balance"], statements["cashflow"])
+
+
+@dataclass
+class AnalysisContext:
+    """Ce dont chaque callback d'analyse a besoin, que les comptes viennent de Yahoo (ticker) ou d'un
+    fichier importé (dataset, voir engine.parse_statements_csv). key identifie la société dans
+    adjustments-store ; market suit la forme de engine.market_values_in_reporting_currency."""
+    key: str
+    normalized: NormalizedStatements
+    profile: dict
+    regime: dict
+    market: dict
+    ticker: str | None = None
+    dataset: dict | None = None
+    filename: str | None = None
+
+    @property
+    def imported(self) -> bool:
+        return self.dataset is not None
+
+
+def _load_context(store: dict | None) -> AnalysisContext | None:
+    """Contexte de l'analyse demandée, None si rien n'est à analyser. Un fichier importé remplace
+    entièrement Yahoo : pas de cours ni de change, la seule donnée de marché est la capitalisation
+    déclarée à chaque clôture (ligne market_cap), celle de la dernière clôture servant aux multiples."""
+    if not store:
+        return None
+    if store.get("source") == "import":
+        dataset, filename = store["dataset"], store.get("filename") or ""
+        meta = dataset["meta"]
+        normalized = normalize_imported(dataset)
+        latest_cap = imported_market_caps(dataset).get(normalized.years[0]) if normalized.years else None
+        profile = {"name": meta.get("company") or filename, "sector": meta.get("sector"),
+                   "industry": meta.get("industry"), "quote_currency": None, "reporting_currency": meta.get("currency"),
+                   "price": None, "market_cap": latest_cap, "shares_outstanding": None, "trailing_pe": None,
+                   "trailing_eps": None}
+        market = {"price": None, "market_cap": latest_cap, "fx_rate": None, "divisor": 1.0,
+                  "quote_major_currency": None, "reporting_currency": meta.get("currency"), "reason": None}
+        return AnalysisContext(key=f"import:{filename}", normalized=normalized, profile=profile,
+                               regime=regime_from_import(meta), market=market, dataset=dataset, filename=filename)
+    ticker = store.get("ticker")
+    if not ticker:
+        return None
+    profile = get_company_profile(ticker)
+    return AnalysisContext(key=ticker, normalized=_load_normalized(ticker), profile=profile,
+                           regime=detect_sector_regime(profile["sector"], profile["industry"]),
+                           market=_market_in_reporting_currency(profile), ticker=ticker)
 
 # ============================================================
 # Habillage global (langue, palette, thème), même logique que stock_valuation
@@ -208,23 +258,24 @@ def _market_values_at_year_end(ticker: str, normalized: NormalizedStatements, pr
 )
 def update_altman(model_choice, lang, dark_mode, store):
     lang = lang or "fr"
-    if not store or not store.get("ticker"):
+    ctx = _load_context(store)
+    if ctx is None or not ctx.normalized.years:
         raise dash.exceptions.PreventUpdate
-    ticker = store["ticker"]
-    normalized = _load_normalized(ticker)
-    if not normalized.years:
-        raise dash.exceptions.PreventUpdate
-    profile = get_company_profile(ticker)
+    normalized, profile = ctx.normalized, ctx.profile
     children = []
     if not model_choice or model_choice == "auto":
         model = altman_default_model(profile["sector"])
-        children.append(html.Small(L(lang, "altman_auto_choice", model=L(lang, f"altman_model_{model}"),
+        choice_key = "altman_auto_choice_import" if ctx.imported else "altman_auto_choice"
+        children.append(html.Small(L(lang, choice_key, model=L(lang, f"altman_model_{model}"),
                                      sector=profile["sector"] or L(lang, "na")), className="text-muted d-block mb-2"))
     else:
         model = model_choice
-    market_values = _market_values_at_year_end(ticker, normalized, profile) if model == "original" else {}
+    market_values = {}
+    if model == "original":
+        market_values = (imported_market_caps(ctx.dataset) if ctx.imported
+                         else _market_values_at_year_end(ctx.ticker, normalized, profile))
     results = [altman_z_score(normalized, year, model, market_values.get(year)) for year in normalized.years]
-    children.append(layout.altman_table(results, lang, bool(dark_mode)))
+    children.append(layout.altman_table(results, lang, bool(dark_mode), imported=ctx.imported))
     return children
 
 
@@ -264,22 +315,19 @@ def update_transaction_view(net_debt_rows, ebitda_rows, pension_tax_pct, lang, d
     les mêmes valeurs, sans rien effacer."""
     lang = lang or "fr"
     dark = bool(dark_mode)
-    if not store or not store.get("ticker"):
+    ctx = _load_context(store)
+    if ctx is None or not ctx.normalized.years:
         raise dash.exceptions.PreventUpdate
-    ticker = store["ticker"]
-    normalized = _load_normalized(ticker)
-    if not normalized.years:
-        raise dash.exceptions.PreventUpdate
+    normalized = ctx.normalized
     year = normalized.years[0]
-    profile = get_company_profile(ticker)
-    currency = profile["reporting_currency"] or L(lang, "na")
+    currency = ctx.profile["reporting_currency"] or L(lang, "na")
     tax_rate = (pension_tax_pct if pension_tax_pct is not None else 25) / 100
 
     net_debt_items, invalid_debt = parse_user_items(net_debt_rows)
     ebitda_items, invalid_ebitda = parse_user_items(ebitda_rows)
     bridge = net_debt_bridge(normalized, year, pension_tax_rate=tax_rate, user_items=net_debt_items)
     ebitda = adjusted_ebitda(normalized.get("ebitda", year), ebitda_items)
-    market = _market_in_reporting_currency(profile)
+    market = ctx.market
     minorities = normalized.get("minority_interest", year)
     published = transaction_multiples(market["market_cap"], minorities, bridge["net_debt_data"], ebitda["published"])
     adjusted = transaction_multiples(market["market_cap"], minorities, bridge["adjusted_net_debt"], ebitda["adjusted"])
@@ -294,7 +342,9 @@ def update_transaction_view(net_debt_rows, ebitda_rows, pension_tax_pct, lang, d
                                 value=f"{layout.format_amount(bridge['adjusted_net_debt_excl_ifrs16'], lang)} {currency}")))
     notes += [html.Div(L(lang, f"flag_{flag}")) for flag in bridge["flags"] + published["flags"]]
     if market["market_cap"] is None:
-        notes.append(html.Div(L(lang, "market_cap_unavailable")))
+        notes.append(html.Div(L(lang, "market_cap_unavailable_import" if ctx.imported else "market_cap_unavailable")))
+    elif ctx.imported:
+        notes.append(html.Div(L(lang, "import_market_cap_note", year=layout.format_year(year, lang))))
     warnings = []
     for rows in (invalid_debt, invalid_ebitda):
         if rows:
@@ -302,7 +352,7 @@ def update_transaction_view(net_debt_rows, ebitda_rows, pension_tax_pct, lang, d
                                       className="py-1 px-2 mb-2"))
 
     saved_store = dict(saved_store or {})
-    saved_store[ticker] = {"net_debt_items": net_debt_rows, "ebitda_adjustments": ebitda_rows,
+    saved_store[ctx.key] = {"net_debt_items": net_debt_rows, "ebitda_adjustments": ebitda_rows,
                            "pension_tax_rate_pct": pension_tax_pct}
     return (layout.net_debt_bridge_table(bridge, currency, lang, dark),
             html.Div([effects, html.Div(notes, className="text-muted mt-2", style={"fontSize": "0.8rem"})]),
@@ -344,23 +394,26 @@ def render_analysis(store, lang, dark_mode, palette_code, saved_store):
     palette = PALETTES.get(palette_code, PALETTE)
     if not store:
         return html.Div(L(lang, "results_placeholder"), className="text-muted")
-    ticker = store.get("ticker") or ""
-    if not ticker:
+    ctx = _load_context(store)
+    if ctx is None:
         return dbc.Alert(L(lang, "error_empty_ticker"), color="warning")
-
-    normalized = _load_normalized(ticker)
+    normalized, profile, regime, market = ctx.normalized, ctx.profile, ctx.regime, ctx.market
     if not normalized.years:
-        return dbc.Alert(L(lang, "error_no_data", ticker=ticker), color="danger")
-
-    profile = get_company_profile(ticker)
-    regime = detect_sector_regime(profile["sector"], profile["industry"])
-    market = _market_in_reporting_currency(profile)
-    consistency = minor_unit_consistency(
-        profile["price"], profile["trailing_pe"], profile["trailing_eps"], market["divisor"],
-    )
+        return dbc.Alert(L(lang, "error_no_data", ticker=ctx.ticker), color="danger")
 
     years_text = ", ".join(layout.format_year(year, lang) for year in normalized.years)
     reporting = profile["reporting_currency"] or L(lang, "na")
+    if ctx.imported:
+        # Ni cours ni BPA pour un fichier importé : pas de contrôle de sous-unité à faire.
+        consistency = {"empirical_ratio": None, "expected_divisor": 1.0, "consistent": None}
+        card = layout.import_card(ctx.filename, ctx.dataset["meta"], regime, market["market_cap"], normalized.years[0], lang)
+        coverage = L(lang, "import_coverage_note", n=len(normalized.years), years=years_text, filename=ctx.filename)
+    else:
+        consistency = minor_unit_consistency(
+            profile["price"], profile["trailing_pe"], profile["trailing_eps"], market["divisor"],
+        )
+        card = layout.company_card(ctx.ticker, profile, regime, market, lang)
+        coverage = L(lang, "coverage_note", typical=TYPICAL_YFINANCE_YEARS, n=len(normalized.years), years=years_text)
     statement_blocks = []
     for statement in ("income", "balance", "cashflow"):
         statement_blocks += [
@@ -369,14 +422,13 @@ def render_analysis(store, lang, dark_mode, palette_code, saved_store):
         ]
     # Couverture rappelée AVANT les analyses : toutes reposent sur ces ~4 exercices.
     return html.Div([
-        layout.company_card(ticker, profile, regime, market, lang),
+        card,
         *layout.analysis_alerts(profile, regime, market, consistency, lang),
-        dbc.Alert(L(lang, "coverage_note", typical=TYPICAL_YFINANCE_YEARS, n=len(normalized.years), years=years_text),
-                  color="light", className="py-2"),
+        dbc.Alert(coverage, color="light", className="py-2"),
         *_earnings_quality_section(normalized, regime, lang, dark),
         *_working_capital_section(normalized, regime, lang, dark, palette),
         *_scores_section(normalized, regime, lang, dark),
-        *_transaction_section(normalized, regime, (saved_store or {}).get(ticker, {}), reporting, lang, dark),
+        *_transaction_section(normalized, regime, (saved_store or {}).get(ctx.key, {}), reporting, lang, dark),
         html.H5(L(lang, "section_statements"), className="section-title"),
         html.Small(L(lang, "amounts_unit", currency=reporting), className="text-muted d-block"),
         html.Small(L(lang, "statements_legend"), className="text-muted d-block mb-2"),
@@ -396,9 +448,10 @@ def render_analysis(store, lang, dark_mode, palette_code, saved_store):
 def update_bridge(year_value, lang, dark_mode, palette_code, store):
     lang = lang or "fr"
     dark = bool(dark_mode)
-    if not year_value or not store or not store.get("ticker"):
+    ctx = _load_context(store) if year_value else None
+    if ctx is None:
         raise dash.exceptions.PreventUpdate
-    normalized = _load_normalized(store["ticker"])
+    normalized = ctx.normalized
     year = pd.Timestamp(year_value)
     if year not in normalized.years:
         raise dash.exceptions.PreventUpdate
@@ -484,10 +537,11 @@ def update_benford(source, column, sign, min_amount, file_store, analysis_store,
     palette = PALETTES.get(palette_code, PALETTE)
     min_amount = float(min_amount) if min_amount is not None else DEFAULT_BENFORD_MIN_AMOUNT
     if source == "statements":
-        ticker = (analysis_store or {}).get("ticker")
-        if not ticker:
+        ctx = _load_context(analysis_store)
+        if ctx is None:
             return html.Div(L(lang, "benford_no_ticker"), className="text-muted")
-        raw_values = financial_statement_amounts(get_annual_statements(ticker))
+        raw_values = (imported_statement_amounts(ctx.dataset) if ctx.imported
+                      else financial_statement_amounts(get_annual_statements(ctx.ticker)))
         demo = True
     else:
         if not file_store or not column or column not in file_store["columns"]:
@@ -496,3 +550,59 @@ def update_benford(source, column, sign, min_amount, file_store, analysis_store,
         demo = False
     amounts, counts = select_benford_amounts(raw_values, sign=sign or "positive", min_amount=min_amount)
     return layout.benford_result_view(benford_first_digit_test(amounts), counts, demo, lang, dark, palette)
+
+
+# ============================================================
+# Import d'états financiers (CSV)
+# ============================================================
+
+@app.callback(
+    Output("analysis-ticker-store", "data", allow_duplicate=True),
+    Output("statements-import-feedback", "children"),
+    Input("statements-upload", "contents"),
+    State("statements-upload", "filename"),
+    State("lang-radio", "value"),
+    prevent_initial_call=True,
+)
+def import_statements(contents, filename, lang):
+    """Un fichier valide devient la société analysée (remplace Yahoo) ; un fichier en erreur est refusé
+    en entier, avec la liste des erreurs, et l'analyse affichée reste inchangée. Le dataset voyage dans
+    analysis-ticker-store : quelques centaines de montants, et tous les callbacks d'analyse le lisent
+    déjà."""
+    lang = lang or "fr"
+    if not contents:  # composant recréé au changement de langue
+        raise dash.exceptions.PreventUpdate
+    text = _decode_upload(contents)
+    result = parse_statements_csv(text) if text is not None else None
+    feedback = layout.import_feedback(result, filename or "", lang)
+    if result is None or result["errors"]:
+        return dash.no_update, feedback
+    return {"source": "import", "filename": filename or "", "dataset": result["dataset"]}, feedback
+
+
+TEMPLATE_META_KEYS = {"fr": ("societe", "devise", "unite", "regime", "secteur", "industrie"),
+                      "en": ("company", "currency", "unit", "regime", "sector", "industry")}
+TEMPLATE_META_DEFAULTS = ("", "EUR", "millions", "general", "", "")
+TEMPLATE_YEARS = 4
+
+
+@app.callback(
+    Output("statements-template-download", "data"),
+    Input("statements-template-btn", "n_clicks"),
+    State("lang-radio", "value"),
+    prevent_initial_call=True,
+)
+def download_statements_template(n_clicks, lang):
+    lang = lang or "fr"
+    if not n_clicks:
+        raise dash.exceptions.PreventUpdate
+    labels = {"_key": L(lang, "import_col_key"), "_label": L(lang, "import_col_label"),
+              **{key: L(lang, f"field_{key}") for key in FIELD_KEYS},
+              IMPORT_MARKET_CAP_KEY: L(lang, "field_market_cap_import")}
+    comments = [L(lang, f"import_template_comment_{i}") for i in range(1, 6)]
+    meta_lines = list(zip(TEMPLATE_META_KEYS.get(lang, TEMPLATE_META_KEYS["fr"]), TEMPLATE_META_DEFAULTS))
+    last_closed = pd.Timestamp.today().year - 1
+    years = [f"{year}-12-31" for year in range(last_closed, last_closed - TEMPLATE_YEARS, -1)]
+    text = statements_csv_template(labels, comments, meta_lines, years)
+    # BOM UTF-8 : sans lui, Excel ouvre le fichier en Windows-1252 et abîme les accents des libellés.
+    return dcc.send_string("﻿" + text, L(lang, "import_template_filename"))

@@ -226,6 +226,28 @@ def normalize_statements(income: pd.DataFrame | None, balance: pd.DataFrame | No
     return NormalizedStatements(years=years, values=values, provenance=provenance)
 
 
+def _derive(spec: FieldSpec, year: pd.Timestamp,
+            resolved: dict[str, dict[pd.Timestamp, float | None]]) -> tuple[float | None, tuple[str, ...]]:
+    """Valeur de l'identité comptable de repli de `spec`, ou les opérandes qui manquent."""
+    if spec.derivation is None:
+        return None, ()
+    operator, operands = spec.derivation
+    operand_values = [resolved[key].get(year) for key in operands]
+    missing_operands = tuple(key for key, v in zip(operands, operand_values) if v is None)
+    if missing_operands:
+        return None, missing_operands
+    numbers = [v for v in operand_values if v is not None]
+    return (sum(numbers) if operator == "sum" else numbers[0] - sum(numbers[1:])), ()
+
+
+def _missing_origin(spec: FieldSpec, missing_operands: tuple[str, ...], reason: str) -> dict:
+    if spec.derivation is not None:
+        operator, operands = spec.derivation
+        return {"source": "missing", "reason": "derivation_inputs_missing",
+                "operator": operator, "operands": operands, "missing_operands": missing_operands}
+    return {"source": "missing", "reason": reason}
+
+
 def _resolve_field(spec: FieldSpec, frames: dict[str, pd.DataFrame], year: pd.Timestamp,
                    resolved: dict[str, dict[pd.Timestamp, float | None]]) -> tuple[float | None, dict]:
     for statement, label in spec.published:
@@ -233,28 +255,16 @@ def _resolve_field(spec: FieldSpec, frames: dict[str, pd.DataFrame], year: pd.Ti
         if value is not None:
             return value, {"source": "published", "statement": statement, "label": label}
 
-    missing_operands: tuple[str, ...] = ()
-    if spec.derivation is not None:
+    derived, missing_operands = _derive(spec, year, resolved)
+    if derived is not None:
         operator, operands = spec.derivation
-        operand_values = [resolved[key].get(year) for key in operands]
-        missing_operands = tuple(key for key, v in zip(operands, operand_values) if v is None)
-        if not missing_operands:
-            numbers = [v for v in operand_values if v is not None]
-            total = sum(numbers) if operator == "sum" else numbers[0] - sum(numbers[1:])
-            return total, {"source": "derived", "operator": operator, "operands": operands}
+        return derived, {"source": "derived", "operator": operator, "operands": operands}
 
     for statement, label in spec.equivalents:
         value = _lookup(frames, statement, label, year)
         if value is not None:
             return value, {"source": "equivalent", "statement": statement, "label": label}
-
-    if spec.derivation is not None:
-        operator, operands = spec.derivation
-        return None, {
-            "source": "missing", "reason": "derivation_inputs_missing",
-            "operator": operator, "operands": operands, "missing_operands": missing_operands,
-        }
-    return None, {"source": "missing", "reason": "not_in_yfinance"}
+    return None, _missing_origin(spec, missing_operands, "not_in_yfinance")
 
 
 # ============================================================
@@ -1301,3 +1311,250 @@ def financial_statement_amounts(frames: dict[str, pd.DataFrame]) -> list[float]:
             values = pd.to_numeric(clean[year], errors="coerce").dropna()
             by_year.setdefault(year, set()).update(float(v) for v in values if v != 0)
     return [value for year in sorted(by_year) for value in sorted(by_year[year])]
+
+
+# ============================================================
+# IMPORT D'ÉTATS FINANCIERS (CSV)
+# ============================================================
+# Remplace Yahoo pour une analyse : société radiée, cas d'école, ou plus de 4 exercices. Le fichier
+# utilise les clés internes de FIELD_SCHEMA (indépendantes des libellés Yahoo) : une ligne par poste,
+# une colonne par date de clôture, et des métadonnées en lignes « # clé = valeur ». La validation est
+# stricte : la moindre erreur refuse tout l'import et chaque erreur est listée avec sa ligne, plutôt
+# qu'un import partiel dont l'utilisateur ne saurait pas ce qui a été écarté.
+
+# Poste hors schéma : capitalisation à chaque clôture (Z d'origine d'Altman, multiples), qu'aucun
+# cours ne permet de reconstituer pour une société radiée.
+IMPORT_MARKET_CAP_KEY = "market_cap"
+IMPORT_KEYS = FIELD_KEYS + (IMPORT_MARKET_CAP_KEY,)
+# Métadonnées reconnues (nom français du modèle, alias anglais acceptés).
+IMPORT_META_KEYS = {
+    "societe": "company", "société": "company", "company": "company",
+    "devise": "currency", "currency": "currency",
+    "unite": "unit", "unité": "unit", "unit": "unit",
+    "regime": "regime", "régime": "regime",
+    "secteur": "sector", "sector": "sector",
+    "industrie": "industry", "industry": "industry",
+}
+IMPORT_REGIMES = ("general", "bank", "insurer")
+IMPORT_UNIT_WORDS = {
+    "unites": 1.0, "unités": 1.0, "units": 1.0, "milliers": 1e3, "thousands": 1e3,
+    "millions": 1e6, "milliards": 1e9, "billions": 1e9,
+}
+IMPORT_ERRORS = (
+    "unreadable_file", "no_year_columns", "bare_year", "duplicate_year", "unknown_meta", "bad_unit",
+    "bad_regime", "missing_key", "unknown_key", "duplicate_key", "ambiguous_dash", "unreadable_amount",
+    "no_values",
+)
+# Cellule explicitement non disponible : lue comme None. Un tiret, qui signifie souvent « néant » (0)
+# dans un rapport annuel mais parfois « non publié », est refusé : 0 ou vide, à l'utilisateur de dire.
+_IMPORT_NA_TOKENS = ("n.d.", "nd", "n/a", "na", "n.a.")
+_IMPORT_DASHES = ("-", "–", "—")
+_META_LINE = re.compile(r"^#\s*([A-Za-zÀ-ÿ_]+)\s*=\s*(.*)$")
+_ISO_DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+_FR_DATE = re.compile(r"^\d{1,2}/\d{1,2}/\d{4}$")
+
+
+def _parse_year_header(text: str) -> pd.Timestamp | str | None:
+    """Date de clôture d'un en-tête de colonne (« 2018-12-31 » ou « 31/12/2018 »), "bare_year" pour une
+    année seule (« 2018 », refusée : la date de clôture d'un exercice décalé serait devinée), None pour
+    une colonne qui n'est pas un exercice (libellé)."""
+    text = text.strip()
+    try:
+        if _ISO_DATE.match(text):
+            return pd.Timestamp(text).normalize()
+        if _FR_DATE.match(text):
+            return pd.Timestamp(pd.to_datetime(text, dayfirst=True)).normalize()
+    except (ValueError, OverflowError):
+        return None
+    if re.fullmatch(r"(19|20)\d{2}", text):
+        return "bare_year"
+    return None
+
+
+def _parse_unit(raw: str) -> float | None:
+    word = raw.strip().lower()
+    if word in IMPORT_UNIT_WORDS:
+        return IMPORT_UNIT_WORDS[word]
+    value = parse_amount(word)
+    return value if value is not None and value > 0 else None
+
+
+def parse_statements_csv(text: str) -> dict:
+    """Fichier d'états financiers (format du modèle statements_csv_template) -> {"dataset", "errors"}.
+
+    dataset (sérialisable en JSON, pour un dcc.Store) : meta (company, currency, sector, industry,
+    regime, unit), years (dates ISO, de la plus récente à la plus ancienne), values[clé][date] et
+    market_cap[date], montants multipliés par l'unité, None pour une cellule vide. dataset vaut None dès
+    qu'une erreur est relevée ; errors : [{"code", "line", "detail"}], line = numéro de ligne du fichier."""
+    errors: list[dict] = []
+
+    def error(code: str, line: int | None = None, detail: str | None = None):
+        errors.append({"code": code, "line": line, "detail": detail})
+
+    lines = text.splitlines()
+    meta: dict = {"company": None, "currency": None, "sector": None, "industry": None, "regime": None,
+                  "unit": 1.0}
+    data_lines: list[tuple[int, str]] = []
+    for number, line in enumerate(lines, start=1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("#"):
+            match = _META_LINE.match(stripped)
+            if match is None:
+                continue  # commentaire libre
+            key, value = match.group(1).lower(), match.group(2).strip()
+            if key not in IMPORT_META_KEYS:
+                error("unknown_meta", number, key)
+                continue
+            target = IMPORT_META_KEYS[key]
+            if target == "unit":
+                unit = _parse_unit(value) if value else 1.0
+                if unit is None:
+                    error("bad_unit", number, value)
+                else:
+                    meta["unit"] = unit
+            elif target == "regime":
+                if value and value.lower() not in IMPORT_REGIMES:
+                    error("bad_regime", number, value)
+                else:
+                    meta["regime"] = value.lower() or None
+            else:
+                meta[target] = value or None
+            continue
+        data_lines.append((number, line))
+
+    if not data_lines:
+        error("unreadable_file")
+        return {"dataset": None, "errors": errors}
+    sample = "\n".join(line for _number, line in data_lines[:50])
+    try:
+        delimiter = csv.Sniffer().sniff(sample, delimiters=";,\t|").delimiter
+    except csv.Error:
+        delimiter = ";" if sample.count(";") >= sample.count(",") else ","
+    rows = [(number, next(csv.reader([line], delimiter=delimiter))) for number, line in data_lines]
+
+    header_number, header = rows[0]
+    year_columns: dict[int, pd.Timestamp] = {}
+    for index, cell in enumerate(header[1:], start=1):
+        parsed = _parse_year_header(cell)
+        if parsed == "bare_year":
+            error("bare_year", header_number, cell.strip())
+        elif isinstance(parsed, pd.Timestamp):
+            if parsed in year_columns.values():
+                error("duplicate_year", header_number, cell.strip())
+            else:
+                year_columns[index] = parsed
+    if not year_columns and not any(e["code"] == "bare_year" for e in errors):
+        error("no_year_columns", header_number)
+
+    unit = meta["unit"]
+    iso = {index: year.strftime("%Y-%m-%d") for index, year in year_columns.items()}
+    values: dict[str, dict[str, float | None]] = {key: {d: None for d in iso.values()} for key in IMPORT_KEYS}
+    seen: set[str] = set()
+    for number, row in rows[1:]:
+        key = row[0].strip().lower() if row else ""
+        cells = {index: (row[index].strip() if index < len(row) else "") for index in year_columns}
+        if not key:
+            if any(cells.values()):
+                error("missing_key", number)
+            continue
+        if key not in IMPORT_KEYS:
+            error("unknown_key", number, key)
+            continue
+        if key in seen:
+            error("duplicate_key", number, key)
+            continue
+        seen.add(key)
+        for index, cell in cells.items():
+            column = header[index].strip()
+            if not cell or cell.lower() in _IMPORT_NA_TOKENS:
+                continue
+            if cell in _IMPORT_DASHES:
+                error("ambiguous_dash", number, column)
+                continue
+            amount = parse_amount(cell)
+            if amount is None:
+                error("unreadable_amount", number, f"{column} : {cell}")
+                continue
+            values[key][iso[index]] = amount * unit
+
+    if not errors and not any(v is not None for key in FIELD_KEYS for v in values[key].values()):
+        error("no_values")
+    if errors:
+        return {"dataset": None, "errors": errors}
+    years = sorted(iso.values(), reverse=True)
+    market_cap = values.pop(IMPORT_MARKET_CAP_KEY)
+    return {"dataset": {"meta": meta, "years": years, "values": values, "market_cap": market_cap}, "errors": []}
+
+
+def normalize_imported(dataset: dict) -> NormalizedStatements:
+    """Données importées sous le schéma FIELD_SCHEMA. Mêmes identités comptables de repli que pour
+    Yahoo (marge brute = CA - coût des ventes...), signalées comme dérivées ; pas de poste voisin, le
+    fichier ne contenant que des postes exacts. Exercices sans aucune valeur écartés, comme pour Yahoo."""
+    candidate_years = sorted((pd.Timestamp(year) for year in dataset["years"]), reverse=True)
+    raw = dataset["values"]
+    values: dict[str, dict[pd.Timestamp, float | None]] = {key: {} for key in FIELD_KEYS}
+    provenance: dict[str, dict[pd.Timestamp, dict]] = {key: {} for key in FIELD_KEYS}
+    for year in candidate_years:
+        iso = year.strftime("%Y-%m-%d")
+        for spec in FIELD_SCHEMA:
+            value = raw.get(spec.key, {}).get(iso)
+            if value is not None:
+                values[spec.key][year], provenance[spec.key][year] = float(value), {"source": "imported"}
+                continue
+            derived, missing_operands = _derive(spec, year, values)
+            if derived is not None:
+                operator, operands = spec.derivation
+                values[spec.key][year] = derived
+                provenance[spec.key][year] = {"source": "derived", "operator": operator, "operands": operands}
+            else:
+                values[spec.key][year] = None
+                provenance[spec.key][year] = _missing_origin(spec, missing_operands, "not_in_import")
+    years = [year for year in candidate_years if any(values[key][year] is not None for key in FIELD_KEYS)]
+    for key in FIELD_KEYS:
+        values[key] = {year: values[key][year] for year in years}
+        provenance[key] = {year: provenance[key][year] for year in years}
+    return NormalizedStatements(years=years, values=values, provenance=provenance)
+
+
+def regime_from_import(meta: dict) -> dict:
+    """Régime déclaré dans le fichier (general / bank / insurer), sinon déduit de l'industrie comme
+    pour Yahoo : sans l'un ni l'autre, analyse en régime général avec l'avertissement habituel."""
+    if meta.get("regime"):
+        regime = meta["regime"]
+        return {"regime": regime, "caution": None, "applicable": {a: regime == "general" for a in ANALYSES},
+                "sector": meta.get("sector"), "industry": meta.get("industry")}
+    return detect_sector_regime(meta.get("sector"), meta.get("industry"))
+
+
+def imported_market_caps(dataset: dict) -> dict[pd.Timestamp, float | None]:
+    return {pd.Timestamp(year): value for year, value in dataset.get("market_cap", {}).items()}
+
+
+def imported_statement_amounts(dataset: dict) -> list[float]:
+    """Démonstration Benford sur un fichier importé : montants non nuls saisis (capitalisation exclue),
+    une valeur identique n'étant comptée qu'une fois par exercice, comme financial_statement_amounts."""
+    by_year: dict[str, set[float]] = {}
+    for by_date in dataset["values"].values():
+        for year, value in by_date.items():
+            if value:
+                by_year.setdefault(year, set()).add(float(value))
+    return [value for year in sorted(by_year) for value in sorted(by_year[year])]
+
+
+def statements_csv_template(labels: dict[str, str], comments: list[str], meta_lines: list[tuple[str, str]],
+                            years: list[str]) -> str:
+    """Modèle à remplir : commentaires, métadonnées, puis une ligne par clé d'IMPORT_KEYS avec son
+    libellé (colonne ignorée à l'import) et des cellules vides. Séparateur « ; », celui d'Excel en
+    français. Les libellés et commentaires viennent de l'interface (moteur sans dépendance i18n)."""
+    out = io.StringIO()
+    for comment in comments:
+        out.write(f"# {comment}\n")
+    for key, value in meta_lines:
+        out.write(f"# {key} = {value}\n")
+    writer = csv.writer(out, delimiter=";", lineterminator="\n")
+    writer.writerow([labels["_key"], labels["_label"], *years])
+    for key in IMPORT_KEYS:
+        writer.writerow([key, labels[key], *([""] * len(years))])
+    return out.getvalue()

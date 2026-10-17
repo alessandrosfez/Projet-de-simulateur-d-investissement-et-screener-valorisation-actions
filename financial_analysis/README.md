@@ -20,6 +20,12 @@ Yahoo Finance sans retraitement par un analyste.
   infobulle d'où vient son chiffre, et chaque poste a sa définition.
 - **Couverture affichée** : yfinance ne fournit qu'environ 4 exercices,
   l'interface le rappelle à côté des chiffres.
+- **Import d'états financiers (CSV)** : pour une société radiée, un cas
+  d'école ou plus de 4 exercices, un fichier remplace Yahoo pour toute
+  l'analyse. Le modèle téléchargeable comporte une ligne par poste du
+  schéma interne et une colonne par date de clôture, avec en tête des
+  métadonnées (société, devise, unité, régime, secteur) et une ligne
+  facultative de capitalisation à chaque clôture.
 - **Qualité des résultats** : conversion du résultat en cash (CFO / résultat
   net, FCF / résultat net) et ratio d'accruals de Sloan, par exercice, avec
   le détail de chaque calcul en infobulle.
@@ -127,6 +133,29 @@ Yahoo Finance sans retraitement par un analyste.
   de conversion sont n.d. plutôt que de supposer des stocks nuls. Les
   postes « Receivables »/« Payables » de Yahoo, plus larges, ne servent
   qu'en repli, avec la mention « surestimé ».
+- **Import : une seule source par analyse, aucun import partiel** :
+  - **Remplacer plutôt que compléter** : le fichier remplace Yahoo au lieu
+    de prolonger son historique. Un même tableau ne mélange donc jamais
+    deux sources aux définitions possiblement différentes (le « Total
+    Revenue » de Yahoo et le chiffre d'affaires d'un rapport annuel).
+  - **Clés internes** (`revenue`, `ebit`...) plutôt que libellés Yahoo :
+    le fichier reste indépendant de yfinance et se remplit à la main depuis
+    un rapport annuel. Les identités comptables de repli s'appliquent comme
+    pour Yahoo (marge brute = CA − coût des ventes), signalées comme
+    dérivées, et chaque cellule importée l'indique en infobulle.
+  - **Validation stricte** : à la moindre erreur, le fichier est refusé en
+    entier, avec chaque erreur et sa ligne. C'est le cas d'une clé
+    inconnue, d'un montant illisible, d'un doublon, d'une unité ou d'un
+    régime invalide, ou d'une année seule en en-tête (la date de clôture
+    d'un exercice décalé serait devinée). Un tiret seul est refusé aussi :
+    selon le rapport, il signifie « néant » ou « non publié », c'est à
+    l'utilisateur d'écrire 0 ou de laisser vide. Une cellule vide n'est
+    jamais lue comme 0.
+  - **Données de marché** : un fichier n'a ni cours ni change. La seule
+    donnée de marché est la capitalisation déclarée à chaque clôture : elle
+    sert au Z d'origine d'Altman et, pour la dernière clôture, aux
+    multiples, signalés comme tels. Aucun contrôle de cohérence n'est fait
+    avec les comptes publiés : les chiffres sont analysés tels que saisis.
 - **Banques et assureurs** : la conversion en cash et les accruals y sont
   aussi non applicables, leur CFO étant dominé par les flux de dépôts et de
   crédits (des dizaines de milliards d'une année sur l'autre).
@@ -313,6 +342,10 @@ Beneish, formes et moyennes de groupes d'Altman), applique à la main les
 définitions de Piotroski, garde des exemples secondaires étiquetés comme
 vérifications arithmétiques, et couvre les cas limites (donnée manquante,
 base nulle, seuils).
+`test_import.py` vérifie la lecture et la validation du CSV d'états
+financiers (chaque erreur avec sa ligne, cellule vide jamais lue comme 0),
+et qu'un même jeu de chiffres, lu par le chemin Yahoo ou importé, donne
+exactement les mêmes postes normalisés.
 `test_transaction.py` vérifie le pont de dette nette, l'EBITDA ajusté, les
 multiples et la lecture des saisies sur des cas calculés à la main.
 `test_benford.py` vérifie qu'un échantillon conforme généré

@@ -47,6 +47,11 @@ def _expected_keys() -> set[str]:
     keys |= {f"flag_{flag}" for flag in engine.TRANSACTION_FLAGS}
     for row in layout.EFFECT_ROWS:
         keys |= {f"effects_{row}", f"effects_{row}_help"}
+    # Import d'états financiers
+    keys |= {f"import_error_{code}" for code in engine.IMPORT_ERRORS}
+    keys |= {"prov_imported", "prov_missing_not_in_import"}
+    keys |= set(layout.IMPORT_UNIT_NAMES.values())
+    keys |= {f"import_template_comment_{i}" for i in range(1, 6)}
     return keys
 
 
