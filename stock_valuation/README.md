@@ -54,13 +54,24 @@ valeurs à double cotation (AstraZeneca et Shell facturent en USD tout en
 cotant à Londres en GBp). Sans correction, un DCF sur n'importe quelle
 valeur du FTSE 100 ressortait ~100x trop bas par rapport au prix affiché,
 silencieusement (aucune erreur, juste un chiffre qui semblait juste
-"très bearish"). Le module corrige ce décalage (`market_data.
-_price_scale_factor`) en le déduisant empiriquement du P/E déjà correct
-fourni par Yahoo (`prix / (P/E × BPA)`), ce qui fonctionne quelle que soit
-la devise de reporting sans avoir à la connaître à l'avance. La
-valorisation par comparables, elle, n'a jamais été affectée : en travaillant
-par ratio au prix courant plutôt qu'en reconstruisant un prix à partir du
-P/E des pairs, l'unité du BPA n'entre jamais en jeu.
+"très bearish"). Une première correction déduisait le décalage
+empiriquement du P/E fourni par Yahoo (`prix / (P/E × BPA)`,
+`market_data._price_scale_factor`). Elle ne mesure en fait que la
+sous-unité : Yahoo exprime le BPA dans la devise de cotation, pas dans
+celle des comptes (Shell : comptes en USD, BPA en livres, ratio de 100
+exactement). Le DCF des doubles cotations restait donc faussé de l'écart
+de change (environ 33 % pour l'USD). Et la valeur d'entreprise mélangeait
+une capitalisation en livres avec une dette en pence, ce qui faussait d'un
+facteur ~100 les comparables VE/EBITDA de toutes les valeurs de Londres.
+Les montants des états financiers sont désormais ramenés dans l'unité du
+cours par le change réel (devise des comptes → devise de cotation, taux
+Yahoo) puis le diviseur de sous-unité, et la capitalisation par le seul
+diviseur (`market_data._statement_to_price_units`). L'ancien facteur sert
+de repli quand une devise ou le taux de change manque. Un test vérifie
+l'invariant qui aurait détecté le bug : au même multiple que lui-même, un
+titre doit valoir exactement son cours. La valorisation par comparables
+P/E n'a jamais été affectée : en travaillant par ratio au prix courant,
+l'unité du BPA n'entre jamais en jeu.
 
 **Comparables toujours calculés au sein du même secteur.** Le panier de
 pairs est filtré sur le secteur du titre sélectionné, indépendamment du
@@ -101,11 +112,13 @@ L'application est servie sur [http://localhost:8051](http://localhost:8051)
 
 ```bash
 pip install -r requirements-dev.txt
-pytest test_engine.py -v
+pytest -v
 ```
 
-Les tests couvrent le moteur de calcul pur (DCF, valorisation par
-comparables), pas la couche interface, ni les appels réseau.
+`test_engine.py` couvre le moteur de calcul pur (DCF, valorisation par
+comparables). `test_market_data.py` couvre la couche yfinance avec un
+yfinance simulé, sans appel réseau : conversion de change et d'unités,
+repli du FCF annuel sur le TTM. La couche interface n'est pas testée.
 
 ## Docker
 

@@ -72,7 +72,12 @@ def _get_ticker_info(ticker: str) -> dict:
 def _price_scale_factor(trailing_pe, trailing_eps, current_price) -> float:
     """Certaines places (Londres notamment) cotent le prix en pence alors que le BPA
     est en livres (ou vice versa) : on déduit un facteur d'échelle du P/E déjà
-    correct fourni par Yahoo, pour garder les calculs historiques cohérents."""
+    correct fourni par Yahoo, pour garder les calculs historiques cohérents.
+
+    Ne mesure QUE la sous-unité, jamais le change : Yahoo exprime le BPA dans la devise
+    de cotation, pas dans celle des comptes (Shell : comptes en USD, BPA en livres,
+    ratio de 100 exactement). Suffit pour le P/E historique (cours / BPA), pas pour
+    convertir des montants des états financiers (voir _statement_to_price_units)."""
     if trailing_pe and trailing_eps and current_price:
         implied_price = trailing_pe * trailing_eps
         if implied_price > 0:
@@ -80,6 +85,53 @@ def _price_scale_factor(trailing_pe, trailing_eps, current_price) -> float:
             if ratio > 5:
                 return round(ratio)
     return 1.0
+
+
+# Sous-unités monétaires utilisées par Yahoo pour certains cours : (devise principale, diviseur).
+# À Londres, le cours est en pence (GBp) mais la capitalisation en livres.
+MINOR_CURRENCY_UNITS = {"GBp": ("GBP", 100), "GBX": ("GBP", 100), "ZAc": ("ZAR", 100), "ILA": ("ILS", 100)}
+
+
+@cached_ttl(3600)
+def _fetch_fx_rate(from_currency: str, to_currency: str) -> float:
+    """Dernière clôture de la paire Yahoo "XXXYYY=X" (1 XXX en YYY). Lève une exception si la paire
+    n'a pas de cours, pour qu'un échec ne soit pas mis en cache."""
+    closes = yf.Ticker(f"{from_currency}{to_currency}=X").history(period="5d")["Close"].dropna()
+    if closes.empty or float(closes.iloc[-1]) <= 0:
+        raise ValueError(f"Pas de cours pour {from_currency}{to_currency}=X")
+    return float(closes.iloc[-1])
+
+
+def get_fx_rate(from_currency: str, to_currency: str) -> float | None:
+    if from_currency == to_currency:
+        return 1.0
+    try:
+        return _fetch_fx_rate(from_currency, to_currency)
+    except Exception:
+        return None
+
+
+def _statement_to_price_units(info: dict) -> tuple[float, float]:
+    """(facteur des montants des états financiers, facteur de la capitalisation) pour les ramener
+    dans l'unité du cours affiché, et pouvoir les comparer au cours ou les diviser par le nombre
+    d'actions.
+
+    Les états financiers (FCF, dette, trésorerie, y compris les champs totalDebt/totalCash/
+    freeCashflow de Ticker.info) sont dans la devise des comptes (financialCurrency) ; le cours
+    dans la devise de cotation, parfois en sous-unité (pence) ; la capitalisation dans la devise
+    de cotation principale (livres). Facteur des états = change (comptes -> cotation) x diviseur
+    de sous-unité ; facteur de la capitalisation = diviseur seul. Shell : 1 USD = 0,75 GBP, x 100
+    pence. Sans devise connue ou sans taux de change, repli sur l'ancien facteur empirique
+    (_price_scale_factor), qui ne corrige que la sous-unité."""
+    quote, reporting = info.get("currency"), info.get("financialCurrency")
+    if quote and reporting:
+        major, divisor = MINOR_CURRENCY_UNITS.get(quote, (quote, 1))
+        fx = get_fx_rate(reporting, major)
+        if fx is not None:
+            return fx * divisor, float(divisor)
+    price = info.get("currentPrice") or info.get("regularMarketPrice")
+    legacy = _price_scale_factor(info.get("trailingPE"), info.get("trailingEps"), price)
+    return legacy, legacy
 
 
 @cached_ttl(3600)
@@ -285,15 +337,17 @@ def get_dcf_inputs(ticker: str) -> dict:
     du tout pour ce titre (fréquent pour certaines actions non américaines), à l'appelant de gérer
     ce cas comme "DCF indisponible".
 
-    FCF/dette/trésorerie sont remis à l'échelle du prix courant via _price_scale_factor : certaines
-    places (Londres notamment) cotent le prix en pence (GBp) alors que les états financiers (FCF,
-    dette, trésorerie, BPA) sont en livres, voire dans une autre devise de reporting pour les valeurs
-    à double cotation (ex : AstraZeneca, Shell facturent en USD) — sans cette correction, le DCF
-    ressortirait ~100x trop bas par rapport au prix affiché (le facteur est déduit empiriquement du
-    P/E déjà correct fourni par Yahoo, donc fonctionne quelle que soit la devise de reporting)."""
+    FCF/dette/trésorerie et capitalisation sont ramenés dans l'unité du cours affiché via
+    _statement_to_price_units : certaines places (Londres notamment) cotent le prix en pence (GBp)
+    alors que les états financiers sont en livres, voire dans une autre devise pour les valeurs à
+    double cotation (Shell et AstraZeneca publient en USD, Unilever en EUR). L'ancien facteur
+    empirique ne corrigeait que les pence : le DCF de ces valeurs était faussé de l'écart de change
+    (environ 33 % pour l'USD), et la valeur d'entreprise mélangeait une capitalisation en livres avec
+    une dette en pence, ce qui faussait d'un facteur ~100 les comparables VE/EBITDA de toutes les
+    valeurs de Londres."""
     info = _get_ticker_info(ticker)
     price = info.get("currentPrice") or info.get("regularMarketPrice")
-    price_scale = _price_scale_factor(info.get("trailingPE"), info.get("trailingEps"), price)
+    price_scale, market_cap_scale = _statement_to_price_units(info)
 
     fcf_history = _get_annual_fcf_history(ticker)
     fcf_history_records = []
@@ -316,13 +370,11 @@ def get_dcf_inputs(ticker: str) -> dict:
     total_debt = (info.get("totalDebt") or 0) * price_scale
     total_cash = (info.get("totalCash") or 0) * price_scale
     market_cap = info.get("marketCap")
-    # Recalculée à partir de market_cap (déjà dans la bonne unité : Yahoo le calcule depuis le
-    # cours coté, jamais affecté par le décalage pence/livre) + dette nette déjà remise à
-    # l'échelle ci-dessus, plutôt que lue directement sur Ticker.info["enterpriseValue"] : ce
-    # dernier pourrait hériter du même décalage d'unité que la dette/trésorerie brutes sans qu'on
-    # puisse le corriger après coup (contrairement au ratio enterpriseToEbitda, sans dimension et
-    # donc insensible à ce décalage, lui gardé tel quel).
-    enterprise_value = (market_cap + total_debt - total_cash) if market_cap else None
+    # Recalculée plutôt que lue sur Ticker.info["enterpriseValue"], et entièrement dans l'unité du
+    # cours : la capitalisation Yahoo est en devise principale (livres, pas pence), d'où son propre
+    # facteur, la dette nette étant déjà convertie ci-dessus. Le ratio enterpriseToEbitda, sans
+    # dimension, est gardé tel quel.
+    enterprise_value = (market_cap * market_cap_scale + total_debt - total_cash) if market_cap else None
     return {
         "fcf": fcf,
         "fcf_history": fcf_history_records,
