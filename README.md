@@ -9,8 +9,10 @@ troisième à *les comptes sont-ils fiables et solides ?*
   Carlo d'un plan d'épargne (par indice ou portefeuille pondéré),
   calibrée sur l'historique réel d'indices et d'ETF disponibles en PEA :
   quelle trajectoire de capital attendre d'un plan d'épargne donné, avec
-  quelle incertitude. Il suit aussi un PEA réellement constitué
-  (transactions, performance, jalons fiscaux).
+  quelle incertitude. Un onglet « Mon portefeuille réel » suit aussi le
+  PEA effectivement constitué (achats, dividendes, performance,
+  rééquilibrage, jalons fiscaux) et le confronte à ce que la simulation
+  aurait prévu.
 - **[`stock_valuation/`](stock_valuation/)** : écran de valorisation
   d'actions individuelles (P/E sectoriel, DCF, comparables) sur CAC 40,
   DAX 40, FTSE 100 et un échantillon d'actions américaines : une fois le

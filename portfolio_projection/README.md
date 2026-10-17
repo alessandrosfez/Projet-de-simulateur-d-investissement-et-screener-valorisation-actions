@@ -9,9 +9,9 @@ scénarios possibles (percentiles), pas un chiffre garanti. Projet frère :
 [`../stock_valuation`](../stock_valuation) (valorisation d'actions
 individuelles), indépendant de celui-ci.
 
-Un onglet **Mon portefeuille réel** permet aussi de suivre un PEA réellement
-constitué (transactions, dividendes, valeur effective, rééquilibrage) à côté
-des projections.
+Un onglet **Mon portefeuille réel** suit le PEA effectivement constitué
+(achats, dividendes, valeur dans le temps, rééquilibrage) et le compare à ce
+qu'une simulation aurait donné.
 
 ## Fonctionnalités
 
@@ -19,7 +19,7 @@ des projections.
   percentiles) ou Historique (croissance brute réellement observée, base 100,
   sans apports/frais/fiscalité — un vrai "qu'a fait le marché ?", avec ses
   propres statistiques : rendement annualisé, volatilité, max drawdown).
-- **Onglets de simulation** : par indice (chaque indice simulé isolément) ou
+- **Deux onglets de simulation** : par indice (chaque indice simulé isolément) ou
   portefeuille pondéré (plusieurs allocations comparées avec les mêmes
   tirages aléatoires, rééquilibrage mensuel).
 - **Mon portefeuille réel** : saisie ou import CSV (format maison ou export
@@ -50,6 +50,11 @@ des projections.
   choc de marché optionnel (ampleur, durée, timing aléatoire ou fixe).
 - **Mode objectif** : calcule l'apport mensuel nécessaire pour atteindre un
   capital cible.
+- **Portefeuille réel** : saisie des achats et dividendes (ou import CSV,
+  dont l'export Trade Republic), courbe de valeur reconstruite jour par jour,
+  totaux (capital investi, frais, dividendes, P&L), plan de rééquilibrage vers des
+  pondérations cibles, graphique « réel vs simulé », et reprise du rythme
+  d'apport réel comme paramètre de simulation. Stockage SQLite local.
 - Infobulles (ⓘ) sur les concepts clés (Sharpe, drawdown, méthode de
   simulation...), interface FR/EN, export/import de configuration en JSON,
   cache disque des téléchargements (`yfinance`) pour limiter les appels
@@ -201,8 +206,9 @@ L'application est servie sur [http://localhost:8050](http://localhost:8050)
 - `portfolio_engine.py` : moteur pur du portefeuille réel (positions, courbe
   de valeur, rééquilibrage, totaux, XIRR, TWR, indice de référence, jalons
   PEA et fiscalité latente, validation des imports CSV).
-- `portfolio_db.py` : stockage SQLite du portefeuille réel et réglages,
-  avec migrations versionnées du schéma.
+- `portfolio_db.py` : stockage SQLite du portefeuille réel (transactions,
+  dividendes, pondérations cibles) et réglages, avec migrations versionnées
+  du schéma.
 - `charts.py` : constructeurs de graphiques Plotly.
 - `results.py` : agrège les résultats du moteur en métriques/figures affichables.
 - `layout.py` : construction de la sidebar et des quatre onglets.
