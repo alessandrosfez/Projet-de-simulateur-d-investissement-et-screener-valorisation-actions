@@ -9,4 +9,4 @@ dark-mode-switch), pour permettre le changement de thème sans rechargement.
 from dash import Dash
 
 app = Dash(__name__, suppress_callback_exceptions=True)
-app.title = "Analyse financière"
+app.title = "Analyse financière (en travaux)"

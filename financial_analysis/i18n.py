@@ -19,7 +19,7 @@ PALETTE = PALETTES["default"]
 
 TRANSLATIONS = {
     "fr": {
-        "app_title": "Analyse financière : qualité et solidité des comptes",
+        "app_title": "Analyse financière : qualité et solidité des comptes (en travaux)",
         "app_subtitle": "Lecture des états financiers d'une société dans l'esprit d'une due diligence "
                         "(audit, Transaction Services) : les comptes sont-ils fiables et solides ? Ce "
                         "sont des signaux à creuser, pas des verdicts.",
@@ -635,7 +635,7 @@ TRANSLATIONS = {
                                                 "augmente).",
     },
     "en": {
-        "app_title": "Financial analysis: quality and soundness of the accounts",
+        "app_title": "Financial analysis: quality and soundness of the accounts (work in progress)",
         "app_subtitle": "Reading a company's financial statements in the spirit of due diligence (audit, "
                         "Transaction Services): are the accounts reliable and sound? These are signals "
                         "to investigate, not verdicts.",
