@@ -8,6 +8,7 @@ import dash_bootstrap_components as dbc
 import pandas as pd
 from dash import dash_table, dcc, html
 
+from charts import make_benford_chart
 from constants import CAC40_TICKERS
 from engine import (
     ALTMAN_MODELS, BENEISH_COEFFICIENTS, BENEISH_INDICES, BENEISH_REFERENCE_MEANS, BENEISH_THRESHOLD, FIELD_SCHEMA,
@@ -27,7 +28,10 @@ TABLE_BASE_CELL_STYLE = {"fontSize": "0.82rem", "textAlign": "right", "padding":
 
 # Champs dont la valeur doit survivre à un changement de langue (voir gv() et
 # callbacks.rebuild_on_language_change).
-TAB_STATE_FIELDS = [("ticker-input", "value")]
+TAB_STATE_FIELDS = [
+    ("ticker-input", "value"), ("benford-source-radio", "value"), ("benford-column-dropdown", "value"),
+    ("benford-sign-radio", "value"), ("benford-min-amount-input", "value"),
+]
 
 
 def table_style_overrides(dark: bool):
@@ -644,6 +648,123 @@ def effects_table(published: dict, adjusted: dict, lang: str, dark: bool):
         rows.append({"label": L(lang, f"effects_{key}"), "help": L(lang, f"effects_{key}_help"), "cells": cells})
     return detail_table("table-effects", L(lang, "col_metric"),
                         [L(lang, "col_published"), L(lang, "col_adjusted"), L(lang, "col_change")], rows, dark)
+
+
+# ============================================================
+# Loi de Benford
+# ============================================================
+
+def benford_file_info(file_store: dict | None, lang: str):
+    if not file_store:
+        return ""
+    return html.Small(L(lang, "benford_file_loaded", filename=file_store["filename"], rows=file_store["n_rows"],
+                        cols=len(file_store["columns"])), className="text-muted")
+
+
+def build_benford(lang: str, v: dict | None, file_store: dict | None):
+    """Section Benford, indépendante de la société analysée en mode CSV. Reconstruite à chaque changement
+    de langue : le fichier importé n'y vit pas (il est dans benford-file-store, hors de la zone
+    reconstruite), seules les options de colonne en sont recalculées ici."""
+    v = v or {}
+    columns = list((file_store or {}).get("columns", {}))
+    column_value = gv(v, "benford-column-dropdown", (file_store or {}).get("guessed_column"))
+    if column_value not in columns:
+        column_value = (file_store or {}).get("guessed_column")
+    return html.Div([
+        html.H5(L(lang, "section_benford"), className="section-title"),
+        html.P(L(lang, "benford_intro"), className="text-muted", style={"fontSize": "0.85rem"}),
+        dbc.Label(L(lang, "benford_source_label"), className="mb-0"),
+        dcc.RadioItems(
+            id="benford-source-radio",
+            options=[{"label": f" {L(lang, 'benford_source_csv')}", "value": "csv"},
+                     {"label": f" {L(lang, 'benford_source_statements')}", "value": "statements"}],
+            value=gv(v, "benford-source-radio", "csv"), labelStyle={"display": "block"}, className="mb-2",
+        ),
+        dcc.Upload(
+            id="benford-upload", children=html.Div(L(lang, "benford_upload")), multiple=False,
+            style={"borderWidth": "1px", "borderStyle": "dashed", "borderRadius": "10px", "padding": "1rem",
+                   "textAlign": "center", "cursor": "pointer", "maxWidth": "620px"},
+            className="mb-1",
+        ),
+        html.Div(benford_file_info(file_store, lang), id="benford-file-info", className="mb-2"),
+        dbc.Row([
+            dbc.Col([
+                dbc.Label(L(lang, "benford_column_label"), className="mb-0"),
+                dcc.Dropdown(id="benford-column-dropdown", options=[{"label": c, "value": c} for c in columns],
+                             value=column_value, clearable=False, style={"width": "240px"}),
+            ], width="auto"),
+            dbc.Col([
+                html.Div([dbc.Label(L(lang, "benford_sign_label"), className="mb-0")]
+                         + info_tooltip("benford-sign-info", L(lang, "benford_sign_help"))),
+                dcc.RadioItems(
+                    id="benford-sign-radio",
+                    options=[{"label": f" {L(lang, 'benford_sign_positive')}", "value": "positive"},
+                             {"label": f" {L(lang, 'benford_sign_negative')}", "value": "negative"}],
+                    value=gv(v, "benford-sign-radio", "positive"), labelStyle={"display": "block"},
+                ),
+            ], width="auto"),
+            dbc.Col([
+                html.Div([dbc.Label(L(lang, "benford_min_amount_label"), className="mb-0")]
+                         + info_tooltip("benford-min-info", L(lang, "benford_min_amount_help"))),
+                dcc.Input(id="benford-min-amount-input", type="number", min=0, step=1,
+                          value=gv(v, "benford-min-amount-input", 10), className="form-control form-control-sm",
+                          style={"width": "110px"}),
+            ], width="auto"),
+        ], className="mb-3 gx-4"),
+    ], className="px-3")
+
+
+def benford_result_view(result: dict, counts: dict | None, demo: bool, lang: str, dark: bool, palette) -> list:
+    """Résultat du test : avertissements d'abord (démonstration, taille d'échantillon), puis MAD et zone de
+    Nigrini, χ² et p-value, histogramme observé contre attendu et tableau par chiffre."""
+    children = []
+    if demo:
+        children.append(dbc.Alert(L(lang, "benford_demo_warning"), color="warning", className="py-2"))
+    if counts is not None:
+        children.append(html.Small(L(lang, "benford_counts", **counts), className="text-muted d-block mb-2"))
+    if result["n"] == 0:
+        return children + [dbc.Alert(L(lang, "benford_empty"), color="secondary", className="py-2")]
+    expected_mad = f"{result['expected_mad']:.4f}"
+    if result["sample_warning"] in ("not_interpretable", "caution"):
+        color = "danger" if result["sample_warning"] == "not_interpretable" else "warning"
+        children.append(dbc.Alert(L(lang, f"benford_warning_{result['sample_warning']}", n=result["n"],
+                                    expected_mad=expected_mad), color=color, className="py-2"))
+
+    zone_state = {"close": "success", "acceptable": "success", "marginal": "warning", "nonconformity": "danger"}
+
+    def stat(label_key, value_text, help_key=None, color=None):
+        label = [L(lang, label_key)] + (info_tooltip(f"{label_key}-info", L(lang, help_key)) if help_key else [])
+        return dbc.Col([html.Small(label, className="text-muted d-block"),
+                        html.H6(value_text, className=f"mb-0 text-{color}" if color else "mb-0")], width=3, className="mb-2")
+
+    children.append(dbc.Card(dbc.CardBody([
+        dbc.Row([
+            stat("col_count", f"{result['n']:,}".replace(",", " ")),
+            stat("benford_mad_label", f"{result['mad']:.4f}", "benford_mad_help"),
+            stat("benford_conformity_label", L(lang, f"conformity_{result['conformity']}"), "benford_mad_help",
+                 color=zone_state[result["conformity"]]),
+            stat("benford_chi2_label", f"{result['chi2']:.1f} (p = {result['p_value']:.3g})", "benford_chi2_help"),
+        ]),
+        html.Small(L(lang, "benford_expected_mad", n=result["n"], value=expected_mad), className="text-muted"),
+    ]), className="mb-2"))
+    labels = {k: L(lang, f"benford_{k}") for k in ("observed", "expected", "digit", "frequency")}
+    children.append(dcc.Graph(figure=make_benford_chart(result["observed"], result["expected"], labels,
+                                                        L(lang, "benford_chart_title"), dark=dark, palette=palette),
+                              config=GRAPH_CONFIG))
+    style_header, style_cell, style_data = table_style_overrides(dark)
+    rows = [{
+        "digit": d, "count": result["counts"][d], "observed": f"{result['observed'][d] * 100:.1f}",
+        "expected": f"{result['expected'][d] * 100:.1f}",
+        "deviation": f"{(result['observed'][d] - result['expected'][d]) * 100:+.1f}",
+    } for d in sorted(result["expected"])]
+    children.append(dash_table.DataTable(
+        id="table-benford", data=rows,
+        columns=[{"name": L(lang, key), "id": col} for key, col in (
+            ("col_digit", "digit"), ("col_count", "count"), ("col_observed_pct", "observed"),
+            ("col_expected_pct", "expected"), ("col_deviation_pct", "deviation"))],
+        style_header=style_header, style_cell=style_cell, style_data=style_data, style_table={"maxWidth": "620px"},
+    ))
+    return children
 
 
 def _stat(label: str, value_text: str, extra=None):

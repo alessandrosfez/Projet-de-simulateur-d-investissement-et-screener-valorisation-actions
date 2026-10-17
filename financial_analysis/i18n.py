@@ -454,6 +454,75 @@ TRANSLATIONS = {
                        "base exigerait un EBITDA après loyers, que yfinance ne fournit pas).",
         "market_cap_unavailable": "Capitalisation indisponible dans la devise des comptes : valeur d'entreprise et "
                                   "VE / EBITDA n.d.",
+        # ---------- Loi de Benford ----------
+        "section_benford": "Loi de Benford",
+        "benford_intro": "Dans de nombreux jeux de montants « naturels » (écritures, factures), le premier chiffre "
+                         "significatif vaut 1 dans 30 % des cas et 9 dans moins de 5 %. Un écart marqué peut signaler "
+                         "des montants inventés ou arrondis, mais aussi une population atypique (prix fixes, plafonds "
+                         "d'approbation) : c'est un outil de ciblage, pas une preuve. Il faut des centaines, idéalement "
+                         "des milliers de montants : importe un grand livre ou une liste d'écritures.",
+        "benford_source_label": "Source des montants",
+        "benford_source_csv": "Fichier CSV (grand livre, écritures)",
+        "benford_source_statements": "États financiers de la société analysée (démonstration)",
+        "benford_upload": "Glisse un fichier CSV ici, ou clique pour le choisir",
+        "benford_file_loaded": "{filename} : {rows} lignes, {cols} colonnes.",
+        "benford_file_unreadable": "Fichier illisible : un CSV avec une ligne d'en-tête est attendu (séparateur « ; », "
+                                   "« , », tabulation ou « | », encodage UTF-8 ou Windows).",
+        "benford_column_label": "Colonne de montant",
+        "benford_sign_label": "Montants analysés",
+        "benford_sign_positive": "Positifs",
+        "benford_sign_negative": "Négatifs (en valeur absolue)",
+        "benford_sign_help": "Positifs et négatifs sont analysés séparément, comme le recommande Nigrini : factures et "
+                             "avoirs obéissent à des logiques différentes, les mélanger peut masquer une anomalie.",
+        "benford_min_amount_label": "Montant minimal (valeur absolue)",
+        "benford_min_amount_help": "Les très petits montants (frais, arrondis) relèvent souvent d'une autre logique et "
+                                   "faussent la distribution : exclus sous ce seuil (10 par défaut, pratique de "
+                                   "Nigrini).",
+        "benford_no_file": "Importe un fichier CSV pour lancer le test.",
+        "benford_no_ticker": "Analyse d'abord une société (en haut de page) pour la démonstration sur ses états "
+                             "financiers.",
+        "benford_counts": "{kept} montant(s) retenu(s) sur {total} : {unreadable} illisible(s), {zero} nul(s), "
+                          "{other_sign} de l'autre signe, {below_min} sous le montant minimal.",
+        "benford_demo_warning": "Démonstration : les états financiers d'une seule société ne fournissent que quelques "
+                                "centaines de montants, en partie agrégés (totaux, sous-totaux) et donc dépendants les "
+                                "uns des autres. Ce n'est pas un test fiable : pour une vraie analyse, importe un grand "
+                                "livre.",
+        "benford_warning_not_interpretable": "{n} montants seulement : résultat non interprétable. Sous conformité "
+                                             "parfaite, le MAD attendu par le seul hasard vaut ici {expected_mad}, "
+                                             "au-delà de la borne « acceptable » de Nigrini (0,012) : même des données "
+                                             "parfaitement conformes paraîtraient non conformes. Il faut au moins 400 "
+                                             "montants.",
+        "benford_warning_caution": "{n} montants : à interpréter avec prudence. Le MAD attendu par le seul hasard vaut "
+                                   "ici {expected_mad}, au-dessus de la borne de « conformité étroite » (0,006) : cette "
+                                   "zone n'est pas atteignable par hasard sous 1 500 montants environ.",
+        "benford_empty": "Aucun montant exploitable avec ces réglages.",
+        "benford_mad_label": "MAD (écart absolu moyen)",
+        "benford_mad_help": "Mesure l'écart moyen entre fréquences observées et attendues. Formule : moyenne sur les 9 "
+                            "chiffres de |observé − Benford|. Bornes de Nigrini (2012) pour le premier chiffre : "
+                            "≤ 0,006 conformité étroite, ≤ 0,012 acceptable, ≤ 0,015 marginale, au-delà non-conformité. "
+                            "Indépendant de la taille de l'échantillon, c'est l'indicateur qui fait foi.",
+        "benford_conformity_label": "Conformité (Nigrini)",
+        "conformity_close": "conformité étroite",
+        "conformity_acceptable": "conformité acceptable",
+        "conformity_marginal": "conformité marginale",
+        "conformity_nonconformity": "non-conformité",
+        "benford_chi2_label": "χ² (8 degrés de liberté)",
+        "benford_chi2_help": "Test du khi-deux : Σ (effectif observé − attendu)² ÷ attendu, comparé à une loi du χ² à 8 "
+                             "degrés de liberté (p-value < 0,05 : écart significatif). Sa puissance croît avec la taille : "
+                             "sur des dizaines de milliers de montants, il rejette la conformité pour des écarts "
+                             "minimes, d'où la préférence de Nigrini pour le MAD.",
+        "benford_p_value_label": "p-value",
+        "benford_expected_mad": "MAD attendu par le seul hasard pour {n} montants : {value}.",
+        "benford_chart_title": "Premier chiffre : observé vs loi de Benford",
+        "benford_observed": "Observé",
+        "benford_expected": "Benford",
+        "benford_digit": "Premier chiffre",
+        "benford_frequency": "Fréquence (%)",
+        "col_digit": "Chiffre",
+        "col_count": "Effectif",
+        "col_observed_pct": "Observé (%)",
+        "col_expected_pct": "Benford (%)",
+        "col_deviation_pct": "Écart (pts)",
         "field_revenue": "Chiffre d'affaires",
         "field_revenue_help": "Produits de l'activité ordinaire de l'exercice, hors taxes.",
         "field_cost_of_revenue": "Coût des ventes",
@@ -976,6 +1045,71 @@ TRANSLATIONS = {
                        "require EBITDA after rents, which yfinance does not provide).",
         "market_cap_unavailable": "Market cap unavailable in the reporting currency: enterprise value and EV / "
                                   "EBITDA n/a.",
+        "section_benford": "Benford's law",
+        "benford_intro": "In many sets of \"natural\" amounts (entries, invoices), the first significant digit is 1 "
+                         "about 30% of the time and 9 less than 5%. A marked deviation may signal made-up or rounded "
+                         "amounts, but also an atypical population (fixed prices, approval limits): it is a targeting "
+                         "tool, not proof. Hundreds, ideally thousands, of amounts are needed: import a general ledger "
+                         "or a list of entries.",
+        "benford_source_label": "Source of the amounts",
+        "benford_source_csv": "CSV file (general ledger, entries)",
+        "benford_source_statements": "Financial statements of the analyzed company (demonstration)",
+        "benford_upload": "Drop a CSV file here, or click to choose one",
+        "benford_file_loaded": "{filename}: {rows} rows, {cols} columns.",
+        "benford_file_unreadable": "Unreadable file: a CSV with a header row is expected (\";\", \",\", tab or \"|\" "
+                                   "separator, UTF-8 or Windows encoding).",
+        "benford_column_label": "Amount column",
+        "benford_sign_label": "Amounts analyzed",
+        "benford_sign_positive": "Positive",
+        "benford_sign_negative": "Negative (absolute value)",
+        "benford_sign_help": "Positive and negative amounts are analyzed separately, as Nigrini recommends: invoices and "
+                             "credit notes follow different logics, mixing them can hide an anomaly.",
+        "benford_min_amount_label": "Minimum amount (absolute value)",
+        "benford_min_amount_help": "Very small amounts (fees, rounding) often follow another logic and distort the "
+                                   "distribution: excluded below this threshold (10 by default, Nigrini's practice).",
+        "benford_no_file": "Import a CSV file to run the test.",
+        "benford_no_ticker": "Analyze a company first (top of the page) for the demonstration on its financial "
+                             "statements.",
+        "benford_counts": "{kept} amount(s) kept out of {total}: {unreadable} unreadable, {zero} zero, {other_sign} of "
+                          "the other sign, {below_min} below the minimum amount.",
+        "benford_demo_warning": "Demonstration: a single company's financial statements only provide a few hundred "
+                                "amounts, partly aggregated (totals, subtotals) and therefore dependent on each other. "
+                                "This is not a reliable test: for a real analysis, import a general ledger.",
+        "benford_warning_not_interpretable": "Only {n} amounts: result not interpretable. Under perfect conformity, the "
+                                             "MAD expected from chance alone is {expected_mad} here, beyond Nigrini's "
+                                             "\"acceptable\" bound (0.012): even perfectly conforming data would look "
+                                             "nonconforming. At least 400 amounts are needed.",
+        "benford_warning_caution": "{n} amounts: interpret with caution. The MAD expected from chance alone is "
+                                   "{expected_mad} here, above the \"close conformity\" bound (0.006): that zone cannot "
+                                   "be reached by chance below roughly 1,500 amounts.",
+        "benford_empty": "No usable amount with these settings.",
+        "benford_mad_label": "MAD (mean absolute deviation)",
+        "benford_mad_help": "Measures the average gap between observed and expected frequencies. Formula: mean over the 9 "
+                            "digits of |observed − Benford|. Nigrini (2012) first-digit bounds: ≤ 0.006 close "
+                            "conformity, ≤ 0.012 acceptable, ≤ 0.015 marginal, beyond that nonconformity. Independent of "
+                            "sample size, it is the indicator that prevails.",
+        "benford_conformity_label": "Conformity (Nigrini)",
+        "conformity_close": "close conformity",
+        "conformity_acceptable": "acceptable conformity",
+        "conformity_marginal": "marginal conformity",
+        "conformity_nonconformity": "nonconformity",
+        "benford_chi2_label": "χ² (8 degrees of freedom)",
+        "benford_chi2_help": "Chi-square test: Σ (observed − expected count)² ÷ expected, compared with a χ² distribution "
+                             "with 8 degrees of freedom (p-value < 0.05: significant gap). Its power grows with size: on "
+                             "tens of thousands of amounts it rejects conformity for tiny gaps, hence Nigrini's "
+                             "preference for the MAD.",
+        "benford_p_value_label": "p-value",
+        "benford_expected_mad": "MAD expected from chance alone for {n} amounts: {value}.",
+        "benford_chart_title": "First digit: observed vs Benford's law",
+        "benford_observed": "Observed",
+        "benford_expected": "Benford",
+        "benford_digit": "First digit",
+        "benford_frequency": "Frequency (%)",
+        "col_digit": "Digit",
+        "col_count": "Count",
+        "col_observed_pct": "Observed (%)",
+        "col_expected_pct": "Benford (%)",
+        "col_deviation_pct": "Gap (pts)",
         "field_revenue": "Revenue",
         "field_revenue_help": "Revenue from ordinary activities for the fiscal year, excluding taxes.",
         "field_cost_of_revenue": "Cost of revenue",

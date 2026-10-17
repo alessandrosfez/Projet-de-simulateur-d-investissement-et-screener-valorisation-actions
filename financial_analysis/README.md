@@ -40,6 +40,12 @@ Yahoo Finance sans retraitement par un analyste.
   effet sur la valeur d'entreprise, le multiple VE / EBITDA et le levier
   dette nette / EBITDA, publiés et ajustés côte à côte. Les saisies sont
   conservées par société pendant la session.
+- **Loi de Benford** : test du premier chiffre sur un grand livre ou une
+  liste d'écritures importé en CSV (colonne de montant au choix, formats
+  européens reconnus), avec le MAD et les zones de conformité de Nigrini,
+  un test du χ², l'histogramme observé contre attendu et un avertissement
+  de taille d'échantillon. Une démonstration sur les états financiers de
+  la société analysée est disponible, signalée comme telle.
 - **Devises** : cours et capitalisation ramenés dans la devise des comptes
   (cours en pence à Londres, double cotation), avec le détail du calcul.
 - **Banques et assureurs détectés** : Beneish, Altman, Piotroski, la
@@ -199,6 +205,36 @@ Yahoo Finance sans retraitement par un analyste.
   société dans un Store de session, et les tableaux en sont pré-remplis à
   chaque reconstruction (changement de langue), pour ne jamais effacer le
   travail en cours.
+- **Benford : MAD et χ²** : P(d) = log10(1 + 1/d) pour le premier chiffre
+  significatif. Le MAD (moyenne sur les 9 chiffres de |observé −
+  attendu|) est classé selon les bornes de Nigrini (2012, p. 160) : ≤ 0,006
+  conformité étroite, ≤ 0,012 acceptable, ≤ 0,015 marginale, au-delà
+  non-conformité. Le χ² à 8 degrés de liberté est affiché aussi, mais sa
+  puissance croît avec la taille : il rejette la conformité pour des écarts
+  minimes sur de gros fichiers, d'où la préférence de Nigrini pour le MAD.
+  La p-value est calculée en forme exacte (pour un nombre pair de degrés de
+  liberté, P(χ² > x) = e^(−x/2) Σ (x/2)^i / i!), sans scipy ; elle redonne
+  les valeurs critiques tabulées (15,507 à 5 %, 20,090 à 1 %).
+- **Benford : seuil de taille justifié** : sous conformité parfaite, chaque
+  fréquence ne s'écarte de sa probabilité que par bruit d'échantillonnage,
+  et le MAD attendu vaut ≈ 0,235 / √N (σ√(2/π) moyenné sur les 9 chiffres).
+  Il dépasse la borne « acceptable » (0,012) tant que N < ~380 et la borne
+  « étroite » (0,006) tant que N < ~1 530 : sous 400 montants, même des
+  données parfaitement conformes paraîtraient en moyenne non conformes
+  (résultat déclaré non interprétable) ; sous 1 500, la conformité étroite
+  n'est pas atteignable par hasard (prudence). Un test le vérifie sur des
+  échantillons de 100 montants tirés selon Benford, dont le MAD moyen
+  dépasse 0,015.
+- **Benford : quels montants** : positifs et négatifs analysés séparément
+  (recommandation de Nigrini, factures et avoirs obéissant à des logiques
+  différentes), montants sous 10 exclus par défaut (seuil réglable), et le
+  décompte de ce qui est écarté est affiché. Les montants sont lus en
+  texte brut puis convertis (« 1 234,56 », « 1.234,56 », « 1,234.56 »,
+  parenthèses comptables) : une lecture automatique prendrait « 1.234 »
+  européen pour 1,234. Les états financiers ne fournissent que quelques
+  centaines de montants, en partie agrégés et donc dépendants : leur
+  analyse reste une démonstration, avec les doublons exacts d'un même
+  exercice retirés (le résultat net figure dans deux états).
 - **Échecs réseau non mis en cache** : les couches cachées de
   `market_data.py` lèvent une exception quand yfinance ne renvoie rien,
   pour qu'un échec ponctuel ne reste pas 24 h en cache à la place des
@@ -230,8 +266,8 @@ L'application est servie sur [http://localhost:8052](http://localhost:8052)
 - `engine.py` : moteur de calcul pur (normalisation, classement sectoriel,
   conversion des données de marché, qualité des résultats, pont résultat →
   CFO, BFR en jours, scores de Beneish, Altman et Piotroski, pont de dette
-  nette, EBITDA ajusté et multiples). Aucune dépendance Dash, réseau ou
-  disque.
+  nette, EBITDA ajusté et multiples, loi de Benford et lecture des CSV).
+  Aucune dépendance Dash, réseau ou disque.
 - `charts.py` : constructeurs de graphiques Plotly (cascade, jours de BFR).
 - `layout.py` : construction de l'écran et mise en forme (montants,
   ratios et détail de leur calcul, provenance, tableaux).
@@ -254,7 +290,10 @@ doublures : aucun appel réseau. `test_scores.py` reproduit un exemple
 chiffré publié pour chaque score (source citée au-dessus de chaque test)
 et couvre les cas limites (donnée manquante, base nulle, seuils).
 `test_transaction.py` vérifie le pont de dette nette, l'EBITDA ajusté, les
-multiples et la lecture des saisies sur des cas calculés à la main. `test_i18n.py` vérifie que chaque clé de
+multiples et la lecture des saisies sur des cas calculés à la main.
+`test_benford.py` vérifie qu'un échantillon conforme généré
+synthétiquement passe, qu'un échantillon uniforme échoue, que les seuils
+de taille se déclenchent, et la lecture des montants et des CSV. `test_i18n.py` vérifie que chaque clé de
 traduction construite dynamiquement existe en FR et en EN.
 
 ## Docker

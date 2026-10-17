@@ -83,6 +83,12 @@ app.layout = dbc.Container([
     # navigateur : survivent au changement de langue et au passage d'une société à l'autre.
     dcc.Store(id="adjustments-store", storage_type="session"),
     dcc.Loading(type="circle", color="#636efa", children=[html.Div(id="results-container", className="px-3")]),
+    # Module Benford : ses contrôles sont reconstruits au changement de langue, mais le fichier importé
+    # (benford-file-store) et le résultat (benford-result) restent hors de cette zone, pour ne jamais
+    # perdre l'import ni dépendre de l'ordre d'exécution entre reconstruction et calcul.
+    dcc.Store(id="benford-file-store"),
+    html.Div(layout.build_benford("fr", {}, None), id="benford-container"),
+    dcc.Loading(type="circle", color="#636efa", children=[html.Div(id="benford-result", className="px-3")]),
     html.Hr(className="mt-4"),
     html.Div(layout.build_footer("fr"), id="footer-container", className="text-center mb-2"),
     dcc.Interval(id="resize-kick", interval=300, n_intervals=0, max_intervals=8),

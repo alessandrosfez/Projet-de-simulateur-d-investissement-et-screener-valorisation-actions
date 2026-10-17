@@ -1,12 +1,17 @@
 """
 Moteur de calcul pur de l'analyse financière : normalisation des états financiers, classement
-sectoriel, conversion des données de marché. Aucune dépendance Dash, réseau ou disque : les
-fonctions reçoivent des DataFrames ou des dicts déjà chargés (voir market_data.py), c'est ce que
-couvre test_engine.py.
+sectoriel, conversion des données de marché, ratios, scores d'alerte, vision Transaction Services
+et loi de Benford. Aucune dépendance Dash, réseau ou disque : les fonctions reçoivent des
+DataFrames, des dicts ou du texte déjà chargés (voir market_data.py et callbacks.py), c'est ce que
+couvrent les tests.
 
 Règle transversale : une donnée manquante n'est jamais remplacée par 0. Un poste introuvable vaut
 None, accompagné de la raison, pour que l'interface affiche « n.d. » plutôt qu'un chiffre faux.
 """
+import csv
+import io
+import math
+import re
 from dataclasses import dataclass
 
 import pandas as pd
@@ -1079,3 +1084,194 @@ def transaction_multiples(market_cap: float | None, minority_interest: float | N
         "flags": flags,
         "reason": None if positive_ebitda else ("missing_inputs" if ebitda is None else "non_positive_denominator"),
     }
+
+
+# ============================================================
+# LOI DE BENFORD (premier chiffre significatif)
+# ============================================================
+# Dans de nombreux jeux de montants « naturels » (écritures comptables, factures), le premier chiffre
+# significatif d vaut 1 dans 30 % des cas et 9 dans moins de 5 % : P(d) = log10(1 + 1/d). Un écart
+# marqué peut signaler des montants inventés ou arrondis, mais aussi une population atypique (prix
+# fixes, plafonds d'approbation) : c'est un outil de ciblage, pas une preuve.
+
+DIGITS = tuple(range(1, 10))
+BENFORD_PROBABILITIES = {d: math.log10(1 + 1 / d) for d in DIGITS}
+# Bornes du MAD pour le premier chiffre (Nigrini 2012, Benford's Law, p. 160) : conformité étroite,
+# acceptable, marginale, puis non-conformité au-delà. Bornes empiriques, pas des valeurs critiques.
+NIGRINI_FIRST_DIGIT_MAD = (("close", 0.006), ("acceptable", 0.012), ("marginal", 0.015))
+# Taille d'échantillon. Sous conformité parfaite, le MAD attendu vaut ≈ 0,235 / √N (bruit
+# d'échantillonnage seul, voir expected_mad_under_conformity) : il dépasse la borne « acceptable »
+# (0,012) tant que N < ~380, et la borne « étroite » (0,006) tant que N < ~1 530. Sous 400
+# observations, même des données parfaitement conformes sortiraient donc en moyenne de la zone
+# acceptable : résultat non interprétable. Sous 1 500, la conformité étroite n'est pas atteignable
+# par hasard : prudence.
+BENFORD_MIN_INTERPRETABLE = 400
+BENFORD_MIN_FULL_RESOLUTION = 1500
+# Les très petits montants (frais, arrondis) relèvent souvent d'une autre logique (pratique de Nigrini).
+DEFAULT_BENFORD_MIN_AMOUNT = 10.0
+
+
+def expected_mad_under_conformity(n: int) -> float:
+    """MAD attendu pour un échantillon de taille n tiré EXACTEMENT selon la loi de Benford : chaque
+    proportion observée s'écarte de sa probabilité d'un |N(0, p(1-p)/n)|, d'espérance σ√(2/π) ; le MAD
+    en est la moyenne sur les 9 chiffres, soit ≈ 0,235 / √n."""
+    if n <= 0:
+        return math.inf
+    return math.sqrt(2 / math.pi) / len(DIGITS) * sum(math.sqrt(p * (1 - p) / n) for p in BENFORD_PROBABILITIES.values())
+
+
+def first_significant_digit(value: float) -> int | None:
+    """Premier chiffre non nul de |value| (0,0042 -> 4, 1 234 -> 1). None pour 0 ou une valeur non
+    finie. Passe par la notation scientifique plutôt que par log10, qui se trompe aux puissances de 10
+    exactes à cause des arrondis flottants (log10(1000) = 2,9999...)."""
+    if value is None or not math.isfinite(value) or value == 0:
+        return None
+    return int(f"{abs(value):e}"[0])
+
+
+_AMOUNT_CLEANUP = re.compile(r"[^\d,.\-+()eE]")
+
+
+def parse_amount(raw) -> float | None:
+    """Montant saisi ou exporté sous un format quelconque -> float, None si illisible. Reconnaît les
+    formats européens (« 1 234,56 », « 1.234,56 »), anglo-saxons (« 1,234.56 »), les symboles
+    monétaires, et les parenthèses comptables pour un négatif (« (123,45) »). Avec un seul séparateur,
+    une virgule suivie de 1 ou 2 chiffres (ou de plus de 3) est décimale, sinon un séparateur de
+    milliers."""
+    if raw is None:
+        return None
+    if isinstance(raw, (int, float)):
+        return float(raw) if math.isfinite(raw) else None
+    text = str(raw).strip().replace(" ", "").replace(" ", "").replace(" ", "")
+    if not text:
+        return None
+    negative = text.startswith("(") and text.endswith(")")
+    text = _AMOUNT_CLEANUP.sub("", text).strip("()")
+    if not text or not re.search(r"\d", text):
+        return None
+    if "," in text and "." in text:
+        decimal = "," if text.rfind(",") > text.rfind(".") else "."
+        thousands = "." if decimal == "," else ","
+        text = text.replace(thousands, "").replace(decimal, ".")
+    elif "," in text:
+        head, _, tail = text.rpartition(",")
+        is_decimal = text.count(",") == 1 and len(tail) != 3
+        text = f"{head.replace(',', '')}.{tail}" if is_decimal else text.replace(",", "")
+    elif text.count(".") > 1:
+        text = text.replace(".", "")
+    try:
+        value = float(text)
+    except ValueError:
+        return None
+    return -abs(value) if negative else value
+
+
+def read_ledger_csv(text: str) -> pd.DataFrame | None:
+    """Grand livre ou liste d'écritures en CSV -> DataFrame de chaînes brutes (aucune conversion
+    automatique : un « 1.234 » européen serait sinon lu comme 1,234). Séparateur détecté parmi
+    « ; », « , », tabulation et « | » (les exports Excel français utilisent « ; »). None si le texte
+    n'a pas de structure de tableau exploitable."""
+    sample = text[:20000]
+    try:
+        delimiter = csv.Sniffer().sniff(sample, delimiters=";,\t|").delimiter
+    except csv.Error:
+        delimiter = ";" if sample.count(";") > sample.count(",") else ","
+    try:
+        frame = pd.read_csv(io.StringIO(text), sep=delimiter, dtype=str, keep_default_na=False)
+    except Exception:
+        return None
+    return frame if not frame.empty and len(frame.columns) >= 1 else None
+
+
+def guess_amount_column(columns: dict[str, list]) -> str | None:
+    """Colonne la plus probablement « montant » : celle où la plus grande part des cellules se lit
+    comme un nombre non nul. Simple proposition par défaut, l'utilisateur choisit la colonne."""
+    best, best_share = None, 0.0
+    for name, values in columns.items():
+        if not values:
+            continue
+        parsed = [parse_amount(v) for v in values]
+        share = sum(1 for v in parsed if v not in (None, 0.0)) / len(values)
+        if share > best_share:
+            best, best_share = name, share
+    return best if best_share > 0 else None
+
+
+def select_benford_amounts(raw_values: list, sign: str = "positive",
+                           min_amount: float = DEFAULT_BENFORD_MIN_AMOUNT) -> tuple[list[float], dict]:
+    """Montants retenus pour le test et décompte de ce qui est écarté, pour que l'utilisateur sache
+    sur quoi porte le résultat. Positifs et négatifs sont analysés séparément (recommandation de
+    Nigrini : factures et avoirs obéissent à des logiques différentes) : sign = "positive" ou
+    "negative". Les montants dont la valeur absolue est sous min_amount sont exclus."""
+    counts = {"total": len(raw_values), "unreadable": 0, "zero": 0, "other_sign": 0, "below_min": 0, "kept": 0}
+    kept = []
+    for raw in raw_values:
+        value = parse_amount(raw)
+        if value is None:
+            counts["unreadable"] += 1
+        elif value == 0:
+            counts["zero"] += 1
+        elif (value > 0) != (sign == "positive"):
+            counts["other_sign"] += 1
+        elif abs(value) < min_amount:
+            counts["below_min"] += 1
+        else:
+            kept.append(abs(value))
+    counts["kept"] = len(kept)
+    return kept, counts
+
+
+def chi2_survival_even_df(statistic: float, df: int) -> float:
+    """P(χ² > statistic) pour un nombre pair de degrés de liberté, en forme exacte :
+    exp(-x/2) Σ_{i<df/2} (x/2)^i / i!. Évite une dépendance à scipy pour le seul test de Benford
+    (8 degrés de liberté)."""
+    if df % 2:
+        raise ValueError("forme fermée valable pour un nombre pair de degrés de liberté")
+    half = statistic / 2
+    return math.exp(-half) * sum(half ** i / math.factorial(i) for i in range(df // 2))
+
+
+def benford_first_digit_test(amounts: list[float]) -> dict:
+    """Test du premier chiffre : fréquences observées contre la loi de Benford, MAD et zone de
+    conformité de Nigrini, test du χ² (8 degrés de liberté) et avertissement de taille.
+
+    Le χ² rejette la conformité pour des écarts minimes dès que N est grand (sa puissance croît avec N)
+    : Nigrini lui préfère le MAD, qui ne dépend pas de la taille. Les deux sont affichés, le MAD fait
+    foi pour la zone de conformité. Renvoie n = 0 et des valeurs None si aucun montant n'est fourni."""
+    digits = [d for d in (first_significant_digit(v) for v in amounts) if d is not None]
+    n = len(digits)
+    counts = {d: digits.count(d) for d in DIGITS}
+    if n == 0:
+        return {"n": 0, "counts": counts, "observed": {d: None for d in DIGITS}, "expected": BENFORD_PROBABILITIES,
+                "mad": None, "conformity": None, "chi2": None, "p_value": None, "sample_warning": "empty",
+                "expected_mad": None}
+    observed = {d: counts[d] / n for d in DIGITS}
+    mad = sum(abs(observed[d] - BENFORD_PROBABILITIES[d]) for d in DIGITS) / len(DIGITS)
+    conformity = next((label for label, bound in NIGRINI_FIRST_DIGIT_MAD if mad <= bound), "nonconformity")
+    chi2 = sum((counts[d] - n * BENFORD_PROBABILITIES[d]) ** 2 / (n * BENFORD_PROBABILITIES[d]) for d in DIGITS)
+    if n < BENFORD_MIN_INTERPRETABLE:
+        warning = "not_interpretable"
+    elif n < BENFORD_MIN_FULL_RESOLUTION:
+        warning = "caution"
+    else:
+        warning = None
+    return {
+        "n": n, "counts": counts, "observed": observed, "expected": BENFORD_PROBABILITIES, "mad": mad,
+        "conformity": conformity, "chi2": chi2, "p_value": chi2_survival_even_df(chi2, len(DIGITS) - 1),
+        "sample_warning": warning, "expected_mad": expected_mad_under_conformity(n),
+    }
+
+
+def financial_statement_amounts(frames: dict[str, pd.DataFrame]) -> list[float]:
+    """Démonstration sur les états financiers : tous les montants bruts publiés (trois états, tous les
+    exercices), en retirant pour chaque exercice les valeurs strictement identiques présentes dans
+    plusieurs états (le résultat net figure au compte de résultat ET au tableau de flux) pour ne pas
+    compter deux fois le même chiffre. Quelques centaines de montants au mieux : trop peu pour un test
+    fiable, d'où le statut de simple démonstration."""
+    by_year: dict[pd.Timestamp, set[float]] = {}
+    for frame in frames.values():
+        clean = _clean_frame(frame)
+        for year in clean.columns:
+            values = pd.to_numeric(clean[year], errors="coerce").dropna()
+            by_year.setdefault(year, set()).update(float(v) for v in values if v != 0)
+    return [value for year in sorted(by_year) for value in sorted(by_year[year])]

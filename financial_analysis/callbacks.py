@@ -4,6 +4,8 @@ sur l'instance `app` partagée (app_instance.py). Ce module ne calcule rien lui-
 données (market_data.py), les fait passer par le moteur pur (engine.py) et met le résultat en forme
 (layout.py).
 """
+import base64
+
 import dash
 import dash_bootstrap_components as dbc
 import pandas as pd
@@ -14,7 +16,8 @@ from app_instance import app
 from charts import empty_figure_with_message, make_bridge_waterfall, make_working_capital_days_chart
 from constants import TYPICAL_YFINANCE_YEARS
 from engine import (
-    NormalizedStatements, adjusted_ebitda, altman_default_model, altman_z_score, beneish_m_score, cash_conversion,
+    DEFAULT_BENFORD_MIN_AMOUNT, NormalizedStatements, adjusted_ebitda, benford_first_digit_test,
+    financial_statement_amounts, guess_amount_column, read_ledger_csv, select_benford_amounts, altman_default_model, altman_z_score, beneish_m_score, cash_conversion,
     consecutive_pairs, detect_sector_regime, market_value_of_equity, market_values_in_reporting_currency, metric_trend,
     minor_unit_consistency, net_debt_bridge, net_income_to_cfo_bridge, normalize_statements, parse_user_items,
     piotroski_f_score, price_on_or_before, sloan_accruals, split_currency_unit, transaction_multiples,
@@ -53,14 +56,17 @@ def update_controls_language(lang):
 @app.callback(
     Output("header-text-container", "children"),
     Output("main-content-container", "children"),
+    Output("benford-container", "children"),
     Output("footer-container", "children"),
     Input("lang-radio", "value"),
+    State("benford-file-store", "data"),
     [State(cid, prop) for cid, prop in layout.TAB_STATE_FIELDS],
     prevent_initial_call=True,
 )
-def rebuild_on_language_change(lang, *state_values):
+def rebuild_on_language_change(lang, benford_file, *state_values):
     v = dict(zip([cid for cid, _ in layout.TAB_STATE_FIELDS], state_values))
-    return layout.build_header_text(lang), layout.build_main(lang, v), layout.build_footer(lang)
+    return (layout.build_header_text(lang), layout.build_main(lang, v), layout.build_benford(lang, v, benford_file),
+            layout.build_footer(lang))
 
 
 # ============================================================
@@ -414,3 +420,79 @@ def update_bridge(year_value, lang, dark_mode, palette_code, store):
         notes.append(html.Div(L(lang, "bridge_missing_items",
                                 items=", ".join(L(lang, f"field_{key}") for key in bridge["missing_items"]))))
     return figure, notes
+
+
+# ============================================================
+# Loi de Benford
+# ============================================================
+
+def _decode_upload(contents: str) -> str | None:
+    """Contenu d'un dcc.Upload (data URL base64) -> texte. UTF-8 d'abord (avec ou sans BOM), puis
+    Windows-1252, l'encodage des exports Excel français."""
+    try:
+        raw = base64.b64decode(contents.split(",", 1)[1])
+    except Exception:
+        return None
+    for encoding in ("utf-8-sig", "cp1252"):
+        try:
+            return raw.decode(encoding)
+        except UnicodeDecodeError:
+            continue
+    return None
+
+
+@app.callback(
+    Output("benford-file-store", "data"),
+    Output("benford-file-info", "children"),
+    Output("benford-column-dropdown", "options"),
+    Output("benford-column-dropdown", "value"),
+    Input("benford-upload", "contents"),
+    State("benford-upload", "filename"),
+    State("lang-radio", "value"),
+    prevent_initial_call=True,
+)
+def store_benford_file(contents, filename, lang):
+    lang = lang or "fr"
+    if not contents:
+        raise dash.exceptions.PreventUpdate
+    text = _decode_upload(contents)
+    frame = read_ledger_csv(text) if text is not None else None
+    if frame is None:
+        return None, dbc.Alert(L(lang, "benford_file_unreadable"), color="danger", className="py-1 px-2"), [], None
+    columns = {str(name): frame[name].tolist() for name in frame.columns}
+    file_store = {"filename": filename or "", "columns": columns, "n_rows": len(frame),
+                  "guessed_column": guess_amount_column(columns)}
+    options = [{"label": name, "value": name} for name in columns]
+    return file_store, layout.benford_file_info(file_store, lang), options, file_store["guessed_column"]
+
+
+@app.callback(
+    Output("benford-result", "children"),
+    Input("benford-source-radio", "value"),
+    Input("benford-column-dropdown", "value"),
+    Input("benford-sign-radio", "value"),
+    Input("benford-min-amount-input", "value"),
+    Input("benford-file-store", "data"),
+    Input("analysis-ticker-store", "data"),
+    Input("lang-radio", "value"),
+    Input("dark-mode-switch", "value"),
+    Input("palette-dropdown", "value"),
+)
+def update_benford(source, column, sign, min_amount, file_store, analysis_store, lang, dark_mode, palette_code):
+    lang = lang or "fr"
+    dark = bool(dark_mode)
+    palette = PALETTES.get(palette_code, PALETTE)
+    min_amount = float(min_amount) if min_amount is not None else DEFAULT_BENFORD_MIN_AMOUNT
+    if source == "statements":
+        ticker = (analysis_store or {}).get("ticker")
+        if not ticker:
+            return html.Div(L(lang, "benford_no_ticker"), className="text-muted")
+        raw_values = financial_statement_amounts(get_annual_statements(ticker))
+        demo = True
+    else:
+        if not file_store or not column or column not in file_store["columns"]:
+            return html.Div(L(lang, "benford_no_file"), className="text-muted")
+        raw_values = file_store["columns"][column]
+        demo = False
+    amounts, counts = select_benford_amounts(raw_values, sign=sign or "positive", min_amount=min_amount)
+    return layout.benford_result_view(benford_first_digit_test(amounts), counts, demo, lang, dark, palette)

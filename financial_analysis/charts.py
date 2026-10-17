@@ -30,6 +30,29 @@ def make_bridge_waterfall(steps: list[dict], cfo: float, labels: dict[str, str],
     return fig
 
 
+def make_benford_chart(observed: dict[int, float], expected: dict[int, float], labels: dict[str, str], title: str,
+                       dark: bool = False, palette=None) -> go.Figure:
+    """Fréquences observées du premier chiffre (barres) contre la loi de Benford (courbe), en %."""
+    palette = palette or ["#636EFA", "#EF553B"]
+    digits = sorted(expected)
+    fig = go.Figure()
+    fig.add_trace(go.Bar(
+        x=digits, y=[observed[d] * 100 if observed[d] is not None else None for d in digits],
+        name=labels["observed"], marker_color=palette[0],
+        hovertemplate=f"{labels['digit']} %{{x}} : %{{y:.1f}} %<extra>{labels['observed']}</extra>",
+    ))
+    fig.add_trace(go.Scatter(
+        x=digits, y=[expected[d] * 100 for d in digits], name=labels["expected"], mode="lines+markers",
+        line=dict(color=palette[1 % len(palette)], width=2),
+        hovertemplate=f"{labels['digit']} %{{x}} : %{{y:.1f}} %<extra>{labels['expected']}</extra>",
+    ))
+    fig.update_layout(
+        template="plotly_dark" if dark else "plotly", title=title, xaxis=dict(title=labels["digit"], dtick=1),
+        yaxis_title=labels["frequency"], margin=dict(t=60), legend=dict(orientation="h", y=-0.2),
+    )
+    return fig
+
+
 def make_working_capital_days_chart(years: list, series: dict[str, list], labels: dict[str, str], title: str,
                                     y_title: str, dark: bool = False, palette=None) -> go.Figure:
     """Évolution des jours de BFR, exercices dans l'ordre chronologique (gauche -> droite). series :
