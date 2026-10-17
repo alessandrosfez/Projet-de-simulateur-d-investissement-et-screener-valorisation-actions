@@ -1,15 +1,18 @@
 """
-Lance portfolio_projection/app.py et stock_valuation/app.py en parallèle (deux
-processus indépendants, même interpréteur Python) pour démarrer les deux
-outils d'une seule commande, sans Docker. Ouvre index.html (page d'accueil
-statique, pas de serveur dédié) en guise de point d'entrée unique : les deux
-outils restent deux apps Dash totalement indépendantes (voir README.md),
-index.html n'est qu'un aiguillage avec deux liens, pas une fusion des deux.
+Lance les trois outils du dépôt en parallèle (portfolio_projection, stock_valuation et
+financial_analysis : trois processus indépendants, même interpréteur Python) pour les démarrer
+d'une seule commande, sans Docker. Ouvre index.html (page d'accueil statique, pas de serveur
+dédié) en guise de point d'entrée unique : les outils restent des apps Dash totalement
+indépendantes (voir README.md), index.html n'est qu'un aiguillage avec un lien par outil, pas une
+fusion.
 
-Usage : python run_both.py
-Arrêt : Ctrl+C (arrête proprement les deux, y compris le sous-processus de
-rechargement automatique que Dash/Werkzeug relance lui-même en mode debug).
+Usage : python run_all.py [--no-browser]
+  --no-browser : n'ouvre pas la page d'accueil (lancement sur un serveur sans écran, ou
+                 vérification automatique du démarrage).
+Arrêt : Ctrl+C (arrête proprement tous les outils, y compris le sous-processus de rechargement
+automatique que Dash/Werkzeug relance lui-même en mode debug).
 """
+import argparse
 import socket
 import subprocess
 import sys
@@ -24,6 +27,7 @@ ROOT = Path(__file__).parent
 APPS = [
     ("portfolio_projection", "http://localhost:8050"),
     ("stock_valuation", "http://localhost:8051"),
+    ("financial_analysis", "http://localhost:8052"),
 ]
 LANDING_PAGE = ROOT / "index.html"
 STARTUP_TIMEOUT = 30.0
@@ -31,7 +35,7 @@ STARTUP_TIMEOUT = 30.0
 
 def _kill_tree(proc: subprocess.Popen):
     """Termine le processus et ses enfants. Le serveur de dev Dash/Werkzeug, en
-    mode debug (utilisé par les deux app.py), se relance lui-même dans un
+    mode debug (utilisé par chaque app.py), se relance lui-même dans un
     sous-processus pour le rechargement à chaud : un simple proc.terminate() sur
     le parent laisserait ce sous-processus orphelin et le port occupé."""
     if proc.poll() is not None:
@@ -52,7 +56,7 @@ def _kill_tree(proc: subprocess.Popen):
 def _port_free(port: int) -> bool:
     """Teste si le port est déjà occupé (ex. une instance précédente encore en vie) avant même de
     démarrer le sous-processus : sans ce contrôle, Dash échoue à l'intérieur du sous-processus et
-    l'erreur se noie dans les logs entremêlés des deux outils plutôt que d'être signalée tout de
+    l'erreur se noie dans les logs entremêlés des outils plutôt que d'être signalée tout de
     suite, clairement."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.settimeout(0.3)
@@ -79,6 +83,11 @@ def _wait_ready(proc: subprocess.Popen, url: str, timeout: float = STARTUP_TIMEO
 
 
 def main():
+    parser = argparse.ArgumentParser(description="Lance les outils du dépôt en parallèle.")
+    parser.add_argument("--no-browser", action="store_true",
+                        help="ne pas ouvrir la page d'accueil (serveur sans écran, vérification automatique)")
+    args = parser.parse_args()
+
     ports = [urlparse(url).port for _, url in APPS]
     busy_ports = [port for port in ports if not _port_free(port)]
     if busy_ports:
@@ -92,12 +101,14 @@ def main():
         procs.append(subprocess.Popen([sys.executable, "app.py"], cwd=ROOT / folder))
 
     # Page d'accueil ouverte tout de suite (statique, pas besoin d'attendre quoi que ce soit) :
-    # son propre JS sonde les deux apps toutes les 2s et affiche "Prêt"/"Indisponible" par outil,
+    # son propre JS sonde chaque app toutes les 2s et affiche "Prêt"/"Indisponible" par outil,
     # donc l'utilisateur voit l'état réel sans avoir à lire les logs du terminal.
-    webbrowser.open(LANDING_PAGE.resolve().as_uri())
+    if not args.no_browser:
+        webbrowser.open(LANDING_PAGE.resolve().as_uri())
 
     # Attente en parallèle (pas l'un après l'autre) : sinon, dans le pire cas où le premier met
-    # tout son budget à répondre, le diagnostic du second n'arriverait qu'après ~2x STARTUP_TIMEOUT.
+    # tout son budget à répondre, le diagnostic des suivants n'arriverait qu'après plusieurs
+    # STARTUP_TIMEOUT cumulés.
     crashed = False
     with ThreadPoolExecutor(max_workers=len(APPS)) as executor:
         futures = {
@@ -117,26 +128,25 @@ def main():
                       f"ouvre {url} manuellement une fois prêt.")
 
     if crashed:
-        print("\nArrêt de l'autre outil suite à cet échec...")
+        print("\nArrêt des autres outils suite à cet échec...")
         for proc in procs:
             _kill_tree(proc)
         sys.exit(1)
 
-    print("\nLes deux outils tournent (logs entremêlés ci-dessous). Clique sur une carte dans la "
-          "page d'accueil ouverte dans ton navigateur pour accéder à l'un ou l'autre. "
-          "Ctrl+C pour tout arrêter.\n")
+    print(f"\nLes {len(APPS)} outils tournent (logs entremêlés ci-dessous). Clique sur une carte dans la "
+          "page d'accueil (index.html) pour accéder à l'un d'eux. Ctrl+C pour tout arrêter.\n")
     exit_code = 0
     try:
         while True:
             for proc, (folder, _) in zip(procs, APPS):
                 code = proc.poll()
                 if code is not None:
-                    print(f"\n{folder} s'est arrêté (code {code}) : arrêt de l'autre outil.")
+                    print(f"\n{folder} s'est arrêté (code {code}) : arrêt des autres outils.")
                     exit_code = 1
                     raise KeyboardInterrupt
             time.sleep(1)
     except KeyboardInterrupt:
-        print("\nArrêt des deux outils...")
+        print("\nArrêt de tous les outils...")
     finally:
         for proc in procs:
             _kill_tree(proc)

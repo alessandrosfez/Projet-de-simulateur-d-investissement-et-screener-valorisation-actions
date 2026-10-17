@@ -36,7 +36,7 @@
         grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
         gap: 1.5rem;
         width: 100%;
-        max-width: 860px;
+        max-width: 1080px;
     }
     .card {
         display: block;
@@ -63,9 +63,9 @@
 <body>
     <h1>Outils PEA & Compte-Titres</h1>
     <p class="subtitle">
-        Deux outils indépendants, même discipline quantitative : l'un répond à
-        <em>combien épargner</em>, l'autre à <em>quoi acheter</em>. Chacun tourne dans son
-        propre onglet.
+        Trois outils indépendants, même discipline quantitative : le premier répond à
+        <em>combien épargner</em>, le deuxième à <em>quoi acheter</em>, le troisième à
+        <em>les comptes sont-ils fiables et solides ?</em> Chacun tourne dans son propre onglet.
     </p>
 
     <div class="cards">
@@ -90,22 +90,35 @@
                 <span class="dot"></span><span class="label">Vérification...</span>
             </div>
         </a>
+
+        <a class="card" id="card-analysis" href="http://localhost:8052" target="_blank" rel="noopener">
+            <h2>🧾 Analyse financière</h2>
+            <p>
+                Qualité et solidité des comptes, dans l'esprit d'une due diligence : conversion du
+                résultat en cash, BFR, scores d'alerte (Beneish, Altman, Piotroski), dette nette et
+                EBITDA ajusté, loi de Benford.
+            </p>
+            <div class="status" id="status-analysis">
+                <span class="dot"></span><span class="label">Vérification...</span>
+            </div>
+        </a>
     </div>
 
     <footer>
         Si un statut reste bloqué sur « indisponible » plus de 30 secondes après avoir lancé
-        <code>python run_both.py</code>, regarde les logs dans le terminal : l'outil correspondant
+        <code>python run_all.py</code>, regarde les logs dans le terminal : l'outil correspondant
         a probablement rencontré une erreur au démarrage.
     </footer>
 
 <script>
 // Vérifie périodiquement si chaque app répond, pour que l'état affiché ici reflète ce que
-// run_both.py sait déjà côté terminal (prêt / toujours en train de démarrer / plantée) sans avoir
+// run_all.py sait déjà côté terminal (prêt / toujours en train de démarrer / plantée) sans avoir
 // à aller consulter les logs. fetch en mode "no-cors" : on ne lit jamais la réponse (origine
 // différente, cross-port), seul le fait que la promesse se résolve ou échoue nous intéresse.
 const targets = [
     { id: "projection", url: "http://localhost:8050" },
     { id: "valuation", url: "http://localhost:8051" },
+    { id: "analysis", url: "http://localhost:8052" },
 ];
 
 async function checkOne(target) {

@@ -6,7 +6,7 @@ jobs:
   test:
     strategy:
       matrix:
-        app: [portfolio_projection, stock_valuation]
+        app: [portfolio_projection, stock_valuation, financial_analysis]
     runs-on: ubuntu-latest
     defaults:
       run:
