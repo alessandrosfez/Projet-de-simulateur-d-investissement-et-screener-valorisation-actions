@@ -22,11 +22,31 @@ def _get_connection() -> sqlite3.Connection:
     return sqlite3.connect(DB_FILE)
 
 
+# Migrations du schéma, appliquées dans l'ordre à partir de la version courante de la base
+# (PRAGMA user_version, 0 pour une base créée avant ce mécanisme) : une base existante reçoit
+# seulement les étapes qui lui manquent, sans toucher aux données déjà présentes. Ne jamais
+# modifier une étape déjà publiée -- en ajouter une nouvelle à la fin.
+_MIGRATIONS = [
+    # v1 : réglages clé/valeur du portefeuille (date d'ouverture du PEA, ...) plutôt qu'une table
+    # par réglage, pour ne pas devoir migrer à nouveau à chaque nouveau paramètre.
+    "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);",
+]
+
+
+def _apply_migrations(conn: sqlite3.Connection):
+    version = conn.execute("PRAGMA user_version").fetchone()[0]
+    for target_version, statement in enumerate(_MIGRATIONS[version:], start=version + 1):
+        conn.executescript(statement)
+        # PRAGMA n'accepte pas de paramètre lié ; target_version est un entier calculé ici.
+        conn.execute(f"PRAGMA user_version = {int(target_version)}")
+    conn.commit()
+
+
 def init_db(conn: sqlite3.Connection | None = None):
-    """Crée les tables si absentes. Appelée une fois à l'import (effet de bord
-    volontaire, même convention que market_data._cache chargé à l'import) ; aussi
-    appelable directement avec une connexion dédiée (tests en mémoire, voir
-    test_portfolio_db.py)."""
+    """Crée les tables si absentes puis applique les migrations manquantes (voir _MIGRATIONS).
+    Appelée une fois à l'import (effet de bord volontaire, même convention que
+    market_data._cache chargé à l'import) ; aussi appelable directement avec une connexion
+    dédiée (tests en mémoire, voir test_portfolio_db.py)."""
     own_conn = conn is None
     conn = conn or _get_connection()
     try:
@@ -54,9 +74,49 @@ def init_db(conn: sqlite3.Connection | None = None):
             CREATE INDEX IF NOT EXISTS idx_transactions_ticker_date ON transactions(ticker, date);
         """)
         conn.commit()
+        _apply_migrations(conn)
     finally:
         if own_conn:
             conn.close()
+
+
+PEA_OPENING_DATE_KEY = "pea_opening_date"
+
+
+def get_setting(key: str) -> str | None:
+    conn = _get_connection()
+    try:
+        row = conn.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+    finally:
+        conn.close()
+    return row[0] if row else None
+
+
+def set_setting(key: str, value: str | None):
+    """value=None supprime le réglage (retour au comportement par défaut) plutôt que de stocker
+    une chaîne vide, qu'il faudrait ensuite distinguer d'une vraie valeur à chaque lecture."""
+    conn = _get_connection()
+    try:
+        if value is None:
+            conn.execute("DELETE FROM settings WHERE key = ?", (key,))
+        else:
+            conn.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_pea_opening_date() -> str | None:
+    """Date d'ouverture du PEA (ISO "YYYY-MM-DD"), ou None si jamais renseignée."""
+    return get_setting(PEA_OPENING_DATE_KEY)
+
+
+def set_pea_opening_date(date: str | None):
+    set_setting(PEA_OPENING_DATE_KEY, date)
 
 
 def _now_iso() -> str:

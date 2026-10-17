@@ -85,6 +85,42 @@ TRANSLATIONS = {
         "metric_pnl": "Plus/moins-value",
         "metric_total_fees": "Frais cumulés",
         "metric_total_dividends": "Dividendes perçus",
+        "section_pea_milestones": "Jalons PEA",
+        "pea_opening_date_label": "Date d'ouverture du PEA",
+        "pea_opening_date_help": "Le délai fiscal de 5 ans court à partir de l'OUVERTURE du PEA (premier "
+                                  "versement), pas du premier achat. Sans date renseignée, la date du "
+                                  "premier achat sert d'estimation.",
+        "pea_milestones_no_data": "Renseigne la date d'ouverture du PEA ou ajoute une transaction pour "
+                                   "voir ses jalons.",
+        "date_format": "%d/%m/%Y",
+        "month_year_format": "%m/%Y",
+        "pea_five_years_label": "5 ans du PEA",
+        "pea_five_years_help": "Après 5 ans, un retrait n'entraîne plus la clôture du PEA et les gains "
+                                "ne supportent plus que les prélèvements sociaux. Avant, un retrait clôt "
+                                "le plan (sauf exceptions légales) et les gains sont imposés au PFU.",
+        "pea_mature_sub": "atteints -- PEA ouvert depuis {years} ans",
+        "pea_countdown_sub": "dans {days} jours (≈ {years} an(s) {months} mois)",
+        "pea_opening_estimated_suffix": "(ouverture estimée : date du 1er achat)",
+        "real_pea_cap_label": "Plafond des versements",
+        "real_pea_cap_help": "Plafond légal de 150 000 € de versements sur un PEA (hors gains). Les "
+                         "versements n'étant pas saisis dans l'appli, les ACHATS (montant + frais) en "
+                         "servent d'approximation : surestimée si des achats ont été financés par des "
+                         "dividendes, qui ne sont pas des versements. Même logique de plafond que la "
+                         "simulation.",
+        "pea_cap_remaining_sub": "reste {remaining}",
+        "pea_cap_projection_sub": "reste {remaining} -- atteint vers {date} au rythme actuel",
+        "pea_cap_excess_sub": "dépassement apparent de {excess} : les achats surestiment sans doute "
+                               "les versements (achats financés par des dividendes ?)",
+        "latent_tax_label": "Impôt si retrait aujourd'hui",
+        "latent_tax_help": "Impôt dû si tout le PEA était retiré aujourd'hui, sur le gain = valeur des "
+                            "positions + dividendes perçus en cash - coût des achats (frais compris). "
+                            "Après 5 ans : prélèvements sociaux seuls (17,2 %). Avant 5 ans : PFU (12,8 % "
+                            "d'impôt + 17,2 % de prélèvements sociaux, soit 30 %) et clôture du plan. "
+                            "Aucun impôt en cas de moins-value. Taux actuels, hors cas particuliers.",
+        "latent_tax_rule_mature": "après 5 ans : prélèvements sociaux seuls",
+        "latent_tax_rule_early": "avant 5 ans : PFU et clôture du PEA",
+        "latent_tax_sub": "{rate} % sur un gain de {gain} -- net {net}",
+        "latent_tax_loss_sub": "moins-value ({gain}) : aucun impôt",
         "section_performance": "Performance réelle",
         "pct_per_year_unit": "%/an",
         "benchmark_label": "Indice de référence",
@@ -512,6 +548,40 @@ TRANSLATIONS = {
         "metric_pnl": "P&L",
         "metric_total_fees": "Total fees",
         "metric_total_dividends": "Dividends received",
+        "section_pea_milestones": "PEA milestones",
+        "pea_opening_date_label": "PEA opening date",
+        "pea_opening_date_help": "The 5-year tax clock starts when the PEA is OPENED (first deposit), "
+                                  "not at the first purchase. Without a date, the first purchase date is "
+                                  "used as an estimate.",
+        "pea_milestones_no_data": "Enter the PEA opening date or add a transaction to see its milestones.",
+        "date_format": "%Y-%m-%d",
+        "month_year_format": "%Y-%m",
+        "pea_five_years_label": "PEA 5-year mark",
+        "pea_five_years_help": "After 5 years, a withdrawal no longer closes the PEA and gains only bear "
+                                "social charges. Before that, a withdrawal closes the plan (barring legal "
+                                "exceptions) and gains are taxed at the flat tax (PFU).",
+        "pea_mature_sub": "reached -- open for {years} years",
+        "pea_countdown_sub": "in {days} days (≈ {years} yr {months} mo)",
+        "pea_opening_estimated_suffix": "(opening estimated: first purchase date)",
+        "real_pea_cap_label": "Contribution cap",
+        "real_pea_cap_help": "Legal cap of €150,000 of contributions to a PEA (gains excluded). Since "
+                         "deposits aren't entered in the app, PURCHASES (amount + fees) are used as an "
+                         "approximation: an overestimate if some purchases were funded by dividends, "
+                         "which aren't contributions. Same cap logic as the simulation.",
+        "pea_cap_remaining_sub": "{remaining} left",
+        "pea_cap_projection_sub": "{remaining} left -- reached around {date} at the current pace",
+        "pea_cap_excess_sub": "apparent excess of {excess}: purchases probably overstate contributions "
+                               "(purchases funded by dividends?)",
+        "latent_tax_label": "Tax if withdrawn today",
+        "latent_tax_help": "Tax due if the whole PEA were withdrawn today, on the gain = holdings value + "
+                            "dividends received in cash - purchase cost (fees included). After 5 years: "
+                            "social charges only (17.2%). Before 5 years: flat tax (12.8% income tax + "
+                            "17.2% social charges, i.e. 30%) and the plan is closed. No tax on a loss. "
+                            "Current rates, special cases excluded.",
+        "latent_tax_rule_mature": "after 5 years: social charges only",
+        "latent_tax_rule_early": "before 5 years: flat tax and PEA closure",
+        "latent_tax_sub": "{rate}% on a gain of {gain} -- net {net}",
+        "latent_tax_loss_sub": "loss ({gain}): no tax",
         "section_performance": "Actual performance",
         "pct_per_year_unit": "%/yr",
         "benchmark_label": "Benchmark",

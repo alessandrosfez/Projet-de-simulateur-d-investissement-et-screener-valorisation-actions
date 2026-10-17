@@ -468,3 +468,92 @@ def test_benchmark_no_transaction_is_empty():
     empty_tx = pd.DataFrame(columns=["ticker", "date", "amount_eur", "price", "fee_eur"])
     assert m.benchmark_equity_curve(empty_tx, pd.Series([1.0], index=pd.to_datetime(["2024-01-01"]))).empty
     assert m.benchmark_cash_flows(empty_tx, 0.0, "2024-01-01") == []
+
+
+# ---------- jalons PEA ----------
+
+def test_pea_milestones_before_five_years():
+    result = m.pea_milestones("2022-03-10", "2026-03-09")
+    assert result["maturity_date"] == pd.Timestamp("2027-03-10")
+    assert result["is_mature"] is False
+    assert result["days_remaining"] == 366  # 2026-03-09 -> 2027-03-10
+
+
+def test_pea_milestones_exactly_five_years_is_mature():
+    result = m.pea_milestones("2021-06-01", "2026-06-01")
+    assert result["is_mature"] is True
+    assert result["days_remaining"] == 0
+
+
+def test_pea_milestones_leap_day_opening_never_matures_early():
+    result = m.pea_milestones("2020-02-29", "2025-02-27")
+    assert result["maturity_date"] == pd.Timestamp("2025-02-28")
+    assert result["is_mature"] is False
+
+
+def test_pea_cap_usage_counts_purchases_with_fees():
+    transactions = pd.DataFrame([
+        _tx("AAA", "2024-01-01", 10_000.0, 10.0, fee_eur=50.0),
+        _tx("BBB", "2024-06-01", 4_950.0, 10.0),
+    ])
+    result = m.pea_cap_usage(transactions)
+    assert result["consumed"] == pytest.approx(15_000.0)
+    assert result["remaining"] == pytest.approx(135_000.0)
+    assert result["pct"] == pytest.approx(10.0)
+    assert result["excess"] == 0.0
+
+
+def test_pea_cap_usage_reports_excess_beyond_cap():
+    transactions = pd.DataFrame([_tx("AAA", "2024-01-01", 160_000.0, 10.0)])
+    result = m.pea_cap_usage(transactions)
+    assert result["consumed"] == pytest.approx(150_000.0)
+    assert result["remaining"] == pytest.approx(0.0)
+    assert result["excess"] == pytest.approx(10_000.0)
+    assert result["months_to_cap"] is None
+
+
+def test_pea_cap_usage_projects_cap_date_at_current_pace():
+    transactions = pd.DataFrame([_tx("AAA", "2024-01-01", 149_000.0, 10.0)])
+    result = m.pea_cap_usage(transactions, monthly_pace=300.0, today="2026-01-15")
+    assert result["months_to_cap"] == 4  # 1000 € restants / 300 € par mois, arrondi au mois supérieur
+    assert result["projected_cap_date"] == pd.Timestamp("2026-05-15")
+
+
+def test_pea_cap_usage_no_transaction():
+    empty_tx = pd.DataFrame(columns=["ticker", "date", "amount_eur", "price", "fee_eur"])
+    result = m.pea_cap_usage(empty_tx, monthly_pace=0.0)
+    assert result["consumed"] == 0.0
+    assert result["remaining"] == 150_000.0
+    assert result["months_to_cap"] is None
+
+
+def test_latent_tax_after_five_years_social_charges_only():
+    result = m.latent_withdrawal_tax(current_value=13_000.0, total_dividends=0.0, cost_basis=10_000.0,
+                                     is_mature=True)
+    assert result["gain"] == pytest.approx(3_000.0)
+    assert result["rate"] == pytest.approx(0.172)
+    assert result["tax"] == pytest.approx(516.0)
+    assert result["net_value"] == pytest.approx(12_484.0)
+
+
+def test_latent_tax_before_five_years_flat_tax():
+    result = m.latent_withdrawal_tax(current_value=13_000.0, total_dividends=0.0, cost_basis=10_000.0,
+                                     is_mature=False)
+    assert result["rate"] == pytest.approx(0.30)
+    assert result["tax"] == pytest.approx(900.0)
+
+
+def test_latent_tax_dividend_cash_counts_in_gain():
+    result = m.latent_withdrawal_tax(current_value=10_000.0, total_dividends=500.0, cost_basis=10_000.0,
+                                     is_mature=True)
+    assert result["gross_value"] == pytest.approx(10_500.0)
+    assert result["tax"] == pytest.approx(0.172 * 500.0)
+
+
+@pytest.mark.parametrize("is_mature", [True, False])
+def test_latent_tax_loss_means_no_tax(is_mature):
+    result = m.latent_withdrawal_tax(current_value=8_000.0, total_dividends=0.0, cost_basis=10_000.0,
+                                     is_mature=is_mature)
+    assert result["is_loss"] is True
+    assert result["tax"] == 0.0
+    assert result["net_value"] == pytest.approx(8_000.0)

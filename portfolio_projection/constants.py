@@ -39,6 +39,12 @@ N_PORTFOLIOS_MAX = 4
 # l'utilisateur aux 17,2 % de prélèvements sociaux (voir layout.compute_cto_tax_rate).
 PEA_TAX_RATE = 0.172
 CTO_FLAT_TAX_RATE = 0.30
+# Retrait d'un PEA avant 5 ans (cas général, hors exceptions légales) : clôture du plan et gains
+# imposés au PFU, 12,8 % d'impôt + 17,2 % de prélèvements sociaux -- le même taux global que le
+# CTO "flat", d'où l'alias plutôt qu'un second chiffre à tenir à jour. Après 5 ans : seulement
+# PEA_TAX_RATE.
+PEA_EARLY_WITHDRAWAL_TAX_RATE = CTO_FLAT_TAX_RATE
+PEA_MATURITY_YEARS = 5
 
 # Plafond légal des versements sur un PEA (hors gains, hors PEA-PME) : au-delà, plus aucun
 # versement n'est possible, mais le capital déjà investi continue de fructifier normalement.

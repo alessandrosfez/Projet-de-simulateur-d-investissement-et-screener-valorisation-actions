@@ -5,9 +5,15 @@ couvre test_portfolio_engine.py. Les fonctions ici prennent des DataFrames déj�
 chargés (portfolio_db.get_transactions()/get_dividends()) et des séries de prix déjà
 récupérées (market_data.get_daily_price_history()) -- aucun accès disque ou réseau.
 """
+import math
+
+import numpy as np
 import pandas as pd
 
-from constants import TICKERS
+from constants import (
+    PEA_CONTRIBUTION_CAP, PEA_EARLY_WITHDRAWAL_TAX_RATE, PEA_MATURITY_YEARS, PEA_TAX_RATE, TICKERS,
+)
+from engine import cap_schedule, overflow_schedule
 
 # Ticker (indice brut ou ETF) -> nom de l'indice, pour ticker_display_label ci-dessous.
 _TICKER_TO_INDEX_NAME = {}
@@ -507,3 +513,85 @@ def ticker_display_label(ticker: str) -> str:
     cet univers (le portefeuille réel accepte n'importe quel ticker)."""
     index_name = _TICKER_TO_INDEX_NAME.get(ticker)
     return f"{ticker} ({index_name})" if index_name else ticker
+
+
+# ============================================================
+# Jalons PEA : 5 ans, plafond des versements, fiscalité latente
+# ============================================================
+
+def pea_milestones(opening_date, today, maturity_years: int = PEA_MATURITY_YEARS) -> dict:
+    """Date des 5 ans (date d'ouverture + 5 ans, au jour près) et compte à rebours. Une ouverture
+    un 29 février tombe au 28 février (pd.DateOffset borne au dernier jour du mois), ce qui reste
+    du côté prudent : on n'annonce jamais la maturité un jour trop tôt."""
+    opening = pd.Timestamp(opening_date).normalize()
+    today = pd.Timestamp(today).normalize()
+    maturity_date = opening + pd.DateOffset(years=maturity_years)
+    return {
+        "opening_date": opening,
+        "maturity_date": maturity_date,
+        "is_mature": today >= maturity_date,
+        "days_remaining": max((maturity_date - today).days, 0),
+        "years_held": max(_year_fraction(opening, today), 0.0),
+    }
+
+
+def pea_cap_usage(transactions: pd.DataFrame, monthly_pace: float = 0.0, today=None,
+                  cap: float = PEA_CONTRIBUTION_CAP) -> dict:
+    """Part du plafond légal des versements consommée par les versements réels. Les versements
+    (dépôts de cash sur le PEA) ne sont pas saisis dans l'appli : les ACHATS (montant + frais, le
+    cash réellement sorti) en servent d'approximation -- surestimée si des achats ont été
+    financés par des dividendes, qui ne comptent pas comme des versements.
+
+    Réutilise engine.cap_schedule / overflow_schedule (même logique que la simulation) sur les
+    achats dans l'ordre chronologique : consumed est ce qui tient sous le plafond, excess ce qui
+    l'aurait dépassé (impossible en réalité, donc signe d'une approximation trop grossière ou
+    d'une saisie erronée). Si monthly_pace > 0, estime aussi quand le plafond serait atteint en
+    continuant au même rythme."""
+    if transactions.empty:
+        amounts = np.array([])
+    else:
+        tx = transactions.copy()
+        tx["date"] = pd.to_datetime(tx["date"])
+        amounts = np.array([_purchase_cost(row) for _, row in tx.sort_values("date").iterrows()])
+    consumed = float(cap_schedule(amounts, cap).sum())
+    excess = float(overflow_schedule(amounts, cap).sum())
+    remaining = cap - consumed
+    months_to_cap = math.ceil(remaining / monthly_pace) if monthly_pace > 0 and remaining > 0 else None
+    projected_cap_date = (
+        pd.Timestamp(today).normalize() + pd.DateOffset(months=months_to_cap)
+        if months_to_cap is not None and today is not None else None
+    )
+    return {
+        "cap": cap,
+        "consumed": consumed,
+        "remaining": remaining,
+        "pct": consumed / cap * 100 if cap else 0.0,
+        "excess": excess,
+        "months_to_cap": months_to_cap,
+        "projected_cap_date": projected_cap_date,
+    }
+
+
+def latent_withdrawal_tax(current_value: float, total_dividends: float, cost_basis: float, is_mature: bool,
+                          mature_rate: float = PEA_TAX_RATE,
+                          early_rate: float = PEA_EARLY_WITHDRAWAL_TAX_RATE) -> dict:
+    """Impôt dû si tout était retiré aujourd'hui. Valeur retirée = positions + dividendes perçus en
+    cash (restés sur le compte PEA, même convention que la performance réelle). Gain = cette
+    valeur - coût des achats (montant + frais) : la formule reste juste même si des dividendes ont
+    été réinvestis par un achat (l'achat gonfle le coût d'autant que le cash des dividendes
+    gonfle la valeur, les deux s'annulent).
+
+    Après 5 ans : prélèvements sociaux seuls sur le gain (mature_rate). Avant : PFU (early_rate)
+    et clôture du plan. En moins-value, aucun impôt -- jamais d'impôt négatif."""
+    gross_value = current_value + total_dividends
+    gain = gross_value - cost_basis
+    rate = mature_rate if is_mature else early_rate
+    tax = rate * max(gain, 0.0)
+    return {
+        "gross_value": gross_value,
+        "gain": gain,
+        "rate": rate,
+        "tax": tax,
+        "net_value": gross_value - tax,
+        "is_loss": gain < 0,
+    }

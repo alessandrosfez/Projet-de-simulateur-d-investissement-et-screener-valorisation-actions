@@ -437,6 +437,26 @@ def _money(value, signed=False):
     return (f"{value:+,.0f} €" if signed else f"{value:,.0f} €").replace(",", " ")
 
 
+def _info_card(lang, label_key, info_key, main_text, sub_text=None, color=None, extra=None, width=3):
+    """Carte "libellé ⓘ / valeur / sous-texte" partagée par les sections Performance et Jalons PEA :
+    même style que build_portfolio_totals_cards, plus une infobulle par concept. extra : composant
+    optionnel inséré entre la valeur et le sous-texte (ex: barre de progression)."""
+    info_id = f"card-{label_key}-info"
+    body = [
+        html.H6([
+            L(lang, label_key),
+            html.Span(" ⓘ", id=info_id, style={"cursor": "help"}),
+        ], className="card-subtitle text-muted mb-1"),
+        dbc.Tooltip(L(lang, info_key), target=info_id, placement="top"),
+        html.H5(main_text, className=f"mb-1 text-{color}" if color else "mb-1"),
+    ]
+    if extra is not None:
+        body.append(extra)
+    if sub_text:
+        body.append(html.Small(sub_text, className="text-muted"))
+    return dbc.Col(dbc.Card(dbc.CardBody(body), className="h-100"), width=width, className="mb-2")
+
+
 def build_performance_cards(perf: dict, lang: str):
     """perf : {"xirr", "twr" (voir portfolio_engine.time_weighted_return), "real_value",
     "benchmark_label", "benchmark_value", "benchmark_xirr"} -- toutes les valeurs déjà calculées
@@ -444,18 +464,7 @@ def build_performance_cards(perf: dict, lang: str):
     (XIRR, TWR, référence) porte son infobulle ⓘ, comme le reste de l'appli : ce sont trois
     lectures différentes de "combien ça a rapporté", faciles à confondre."""
     def card(label_key, info_key, main_text, sub_text=None, color=None):
-        info_id = f"perf-{label_key}-info"
-        body = [
-            html.H6([
-                L(lang, label_key),
-                html.Span(" ⓘ", id=info_id, style={"cursor": "help"}),
-            ], className="card-subtitle text-muted mb-1"),
-            dbc.Tooltip(L(lang, info_key), target=info_id, placement="top"),
-            html.H5(main_text, className=f"mb-1 text-{color}" if color else "mb-1"),
-        ]
-        if sub_text:
-            body.append(html.Small(sub_text, className="text-muted"))
-        return dbc.Col(dbc.Card(dbc.CardBody(body), className="h-100"), width=3, className="mb-2")
+        return _info_card(lang, label_key, info_key, main_text, sub_text, color)
 
     def sign_color(rate):
         if rate is None:
@@ -493,6 +502,50 @@ def build_performance_cards(perf: dict, lang: str):
             color=sign_color(bench_xirr),
         ))
     return dbc.Row(cards)
+
+
+def build_pea_milestone_cards(milestones: dict, cap: dict, tax: dict, opening_is_estimated: bool, lang: str):
+    """milestones / cap / tax : voir portfolio_engine.pea_milestones, pea_cap_usage et
+    latent_withdrawal_tax. Mise en forme seulement, aucun calcul fiscal ici."""
+    date_fmt = L(lang, "date_format")
+
+    if milestones["is_mature"]:
+        maturity_sub = L(lang, "pea_mature_sub", years=f"{milestones['years_held']:.1f}")
+    else:
+        days = milestones["days_remaining"]
+        maturity_sub = L(lang, "pea_countdown_sub", days=days, years=days // 365, months=(days % 365) // 30)
+    if opening_is_estimated:
+        maturity_sub += " " + L(lang, "pea_opening_estimated_suffix")
+    maturity_card = _info_card(
+        lang, "pea_five_years_label", "pea_five_years_help", milestones["maturity_date"].strftime(date_fmt),
+        maturity_sub, color="success" if milestones["is_mature"] else None, width=4,
+    )
+
+    if cap["excess"] > 0:
+        cap_sub = L(lang, "pea_cap_excess_sub", excess=_money(cap["excess"]))
+    elif cap["projected_cap_date"] is not None:
+        cap_sub = L(lang, "pea_cap_projection_sub", remaining=_money(cap["remaining"]),
+                    date=cap["projected_cap_date"].strftime(L(lang, "month_year_format")))
+    else:
+        cap_sub = L(lang, "pea_cap_remaining_sub", remaining=_money(cap["remaining"]))
+    cap_card = _info_card(
+        lang, "real_pea_cap_label", "real_pea_cap_help", f"{_money(cap['consumed'])} / {_money(cap['cap'])}", cap_sub,
+        extra=dbc.Progress(value=min(cap["pct"], 100), label=f"{cap['pct']:.1f} %", className="mb-1",
+                           style={"height": "14px"}),
+        width=4,
+    )
+
+    if tax["is_loss"]:
+        tax_sub = L(lang, "latent_tax_loss_sub", gain=_money(tax["gain"], signed=True))
+    else:
+        tax_sub = L(lang, "latent_tax_sub", rate=f"{tax['rate'] * 100:.1f}", gain=_money(tax["gain"], signed=True),
+                    net=_money(tax["net_value"]))
+    rule_key = "latent_tax_rule_mature" if milestones["is_mature"] else "latent_tax_rule_early"
+    tax_card = _info_card(
+        lang, "latent_tax_label", "latent_tax_help", _money(tax["tax"]), f"{L(lang, rule_key)} -- {tax_sub}",
+        color=None if milestones["is_mature"] or tax["is_loss"] else "warning", width=4,
+    )
+    return dbc.Row([maturity_card, cap_card, tax_card])
 
 
 def build_rebalancing_table_data(rebalancing_df: pd.DataFrame, lang: str):

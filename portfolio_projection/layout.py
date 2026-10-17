@@ -801,6 +801,23 @@ def build_tab3(lang):
                        className="p-0"),
         ], className="mb-3"),
 
+        html.H5(L(lang, "section_pea_milestones"), className="section-title", id="anchor-tab3-milestones"),
+        dbc.Card(dbc.CardBody([
+            html.Div([
+                html.Div([dbc.Label(L(lang, "pea_opening_date_label"), className="mb-0")] + info_tooltip(
+                    "pea-opening-date-info", L(lang, "pea_opening_date_help"),
+                )),
+                # Pré-rempli depuis la base, comme les tableaux ci-dessous : ce composant est
+                # reconstruit à chaque changement de langue, et le callback qui l'écoute enregistre
+                # sa valeur -- un défaut vide effacerait la date enregistrée.
+                dcc.DatePickerSingle(
+                    id="tab3-pea-opening-date", date=portfolio_db.get_pea_opening_date(),
+                    display_format="DD/MM/YYYY" if lang == "fr" else "YYYY-MM-DD", clearable=True,
+                ),
+            ], className="mb-3"),
+            html.Div(id="tab3-pea-milestones"),
+        ]), className="mb-4"),
+
         html.H5(L(lang, "section_performance"), className="section-title", id="anchor-tab3-performance"),
         dbc.Card(dbc.CardBody([
             html.Div([

@@ -30,6 +30,10 @@ des projections.
   (rendement pondéré par le temps) et comparaison à un indice de référence
   choisi (mêmes versements investis dans ce ticker : valeur et XIRR côte à
   côte avec le réel).
+- **Jalons PEA** : date d'ouverture enregistrée, date des 5 ans et compte à
+  rebours, part du plafond de 150 000 € consommée (avec la date estimée où
+  il serait atteint au rythme actuel), impôt dû en cas de retrait
+  aujourd'hui (avant ou après 5 ans).
 - **Validation du modèle** : backtest walk-forward qui vérifie si les bandes
   de percentiles sont fiables (taux de couverture observé vs nominal,
   histogramme des PIT), loi de Student et bootstrap par blocs comparés côte
@@ -135,6 +139,22 @@ des projections.
   (c'est la performance des placements eux-mêmes). Un achat effectué un
   jour sans cotation prend effet au jour coté suivant, comme dans la
   courbe de valeur.
+- **Migrations versionnées de la base** (`portfolio_db._MIGRATIONS`) : la
+  version du schéma est stockée dans `PRAGMA user_version`, et une base
+  existante ne reçoit que les étapes qui lui manquent, sans toucher à ses
+  données. La v1 ajoute une table de réglages clé/valeur (date d'ouverture
+  du PEA), pour éviter une nouvelle migration à chaque nouveau réglage.
+- **Jalons PEA** : le délai de 5 ans court à partir de l'ouverture du PEA,
+  pas du premier achat ; sans date renseignée, le premier achat sert
+  d'estimation (signalée comme telle). Les versements ne sont pas saisis,
+  donc le plafond est calculé sur les achats (montant + frais), avec la même
+  logique de plafond que la simulation (`engine.cap_schedule`) :
+  approximation surestimée si des achats ont été financés par des
+  dividendes. L'impôt latent porte sur le gain = valeur des positions +
+  dividendes perçus en cash − coût des achats. Cette formule reste juste
+  même si des dividendes ont été réinvestis par un achat. Le taux est de
+  17,2 % après 5 ans et de 30 % (PFU, avec clôture du plan) avant ; aucun
+  impôt en moins-value.
 
 ## Installation
 
@@ -153,7 +173,8 @@ L'application est servie sur [http://localhost:8050](http://localhost:8050)
 
 ## Structure du code
 
-- `constants.py` : indices/ETF PEA, taux de fiscalité, plafond PEA.
+- `constants.py` : indices/ETF PEA, taux de fiscalité (dont retrait avant
+  5 ans), plafond PEA.
 - `i18n.py` : traductions FR/EN et palettes de couleurs.
 - `market_data.py` : appels yfinance (historique d'indices/ETF, prix courants,
   cours quotidiens bruts et ajustés, résolution d'ISIN, noms d'instruments)
@@ -162,9 +183,10 @@ L'application est servie sur [http://localhost:8050](http://localhost:8050)
   fiscalité, poids optimaux, mode objectif, validation walk-forward). Aucune
   dépendance Dash/réseau.
 - `portfolio_engine.py` : moteur pur du portefeuille réel (positions, courbe
-  de valeur, rééquilibrage, totaux, XIRR, TWR, indice de référence,
-  validation des imports CSV).
-- `portfolio_db.py` : stockage SQLite du portefeuille réel.
+  de valeur, rééquilibrage, totaux, XIRR, TWR, indice de référence, jalons
+  PEA et fiscalité latente, validation des imports CSV).
+- `portfolio_db.py` : stockage SQLite du portefeuille réel et réglages,
+  avec migrations versionnées du schéma.
 - `charts.py` : constructeurs de graphiques Plotly.
 - `results.py` : agrège les résultats du moteur en métriques/figures affichables.
 - `layout.py` : construction de la sidebar et des quatre onglets.

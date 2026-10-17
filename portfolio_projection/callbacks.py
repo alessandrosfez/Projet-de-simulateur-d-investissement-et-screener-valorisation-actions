@@ -33,7 +33,8 @@ from market_data import (
 )
 from results import (
     build_envelope_comparison_figure, build_historique_metrics_outputs, build_metric_cards,
-    build_metrics_outputs, build_performance_cards, build_portfolio_totals_cards, build_real_portfolio_future_figure,
+    build_metrics_outputs, build_pea_milestone_cards, build_performance_cards, build_portfolio_totals_cards,
+    build_real_portfolio_future_figure,
     build_rebalancing_table_data, build_real_vs_simulated_figure, build_schedules, build_sequence_risk_series,
     compute_results, render_objective_result, render_rolling_backtest_result,
 )
@@ -1269,6 +1270,53 @@ def apply_real_pace_to_simulator(n_clicks):
     if schedule.empty:
         raise dash.exceptions.PreventUpdate
     return portfolio_engine.clamp_to_slider(float(schedule.mean()), 100, 1000, 10)
+
+
+@app.callback(
+    Output("tab3-pea-milestones", "children"),
+    Input("tab3-pea-opening-date", "date"),
+    Input("tab3-refresh-trigger", "data"),
+    Input("lang-radio", "value"),
+)
+def refresh_pea_milestones(opening_date, _trigger, lang):
+    lang = lang or "fr"
+    # Enregistre seulement si c'est le sélecteur de date qui a déclenché ET que la valeur diffère
+    # de la base : le composant est reconstruit (donc ré-émis) à chaque changement de langue, mais
+    # il est pré-rempli depuis la base (voir layout.build_tab3), donc cette ré-émission ne change
+    # rien -- jamais d'écriture pour un simple re-rendu.
+    if dash.ctx.triggered_id == "tab3-pea-opening-date":
+        new_date = opening_date[:10] if opening_date else None
+        if new_date != portfolio_db.get_pea_opening_date():
+            portfolio_db.set_pea_opening_date(new_date)
+
+    transactions = portfolio_db.get_transactions()
+    dividends = portfolio_db.get_dividends()
+    stored_date = portfolio_db.get_pea_opening_date()
+    opening_is_estimated = stored_date is None
+    if opening_is_estimated:
+        if transactions.empty:
+            return html.Div(L(lang, "pea_milestones_no_data"), className="text-muted")
+        opening = pd.to_datetime(transactions["date"]).min()
+    else:
+        opening = pd.Timestamp(stored_date)
+
+    today = pd.Timestamp.today().normalize()
+    milestones = portfolio_engine.pea_milestones(opening, today)
+    current_value = 0.0
+    for _, row in portfolio_engine.reconstruct_holdings(transactions).iterrows():
+        price = get_current_price(row["ticker"])
+        if price is not None:
+            current_value += row["quantity"] * price
+    totals = portfolio_engine.compute_totals(transactions, dividends, current_value)
+    schedule = portfolio_engine.monthly_contribution_schedule(transactions)
+    cap = portfolio_engine.pea_cap_usage(
+        transactions, monthly_pace=float(schedule.mean()) if not schedule.empty else 0.0, today=today,
+    )
+    tax = portfolio_engine.latent_withdrawal_tax(
+        totals["current_value"], totals["total_dividends"], totals["total_invested"] + totals["total_fees"],
+        milestones["is_mature"],
+    )
+    return build_pea_milestone_cards(milestones, cap, tax, opening_is_estimated, lang)
 
 
 @app.callback(

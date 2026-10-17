@@ -81,3 +81,52 @@ def test_insert_dividends_bulk_inserts_all_rows():
     dividends = db.get_dividends()
     assert len(dividends) == 2
     assert set(dividends["ticker"]) == {"AAA", "BBB"}
+
+
+# ---------- réglages et migration du schéma ----------
+
+def test_pea_opening_date_roundtrip_and_clear():
+    assert db.get_pea_opening_date() is None
+    db.set_pea_opening_date("2021-03-15")
+    assert db.get_pea_opening_date() == "2021-03-15"
+    db.set_pea_opening_date("2020-01-02")  # mise à jour, pas de doublon
+    assert db.get_pea_opening_date() == "2020-01-02"
+    db.set_pea_opening_date(None)
+    assert db.get_pea_opening_date() is None
+
+
+def test_migration_upgrades_existing_database_without_losing_data(tmp_path):
+    """Base créée avec l'ancien schéma (avant la table settings, user_version 0) et contenant déjà
+    des données : init_db doit ajouter ce qui manque sans rien perdre, et rester idempotente."""
+    import sqlite3
+
+    path = tmp_path / "old.db"
+    old = sqlite3.connect(path)
+    old.executescript("""
+        CREATE TABLE transactions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT NOT NULL, date TEXT NOT NULL,
+            amount_eur REAL NOT NULL, price REAL NOT NULL, fee_eur REAL NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL
+        );
+        CREATE TABLE dividends (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, ticker TEXT NOT NULL, date TEXT NOT NULL,
+            amount_eur REAL NOT NULL, created_at TEXT NOT NULL
+        );
+        CREATE TABLE target_weights (ticker TEXT PRIMARY KEY, weight_pct REAL NOT NULL);
+        INSERT INTO transactions (ticker, date, amount_eur, price, fee_eur, created_at)
+            VALUES ('AAA', '2022-05-01', 1000.0, 50.0, 1.0, '2022-05-01T00:00:00');
+    """)
+    old.commit()
+    assert old.execute("PRAGMA user_version").fetchone()[0] == 0
+    old.close()
+
+    for _ in range(2):  # deux démarrages successifs : la migration ne doit s'appliquer qu'une fois
+        conn = sqlite3.connect(path)
+        db.init_db(conn)
+        conn.close()
+
+    conn = sqlite3.connect(path)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == len(db._MIGRATIONS)
+    assert conn.execute("SELECT ticker, amount_eur FROM transactions").fetchall() == [("AAA", 1000.0)]
+    conn.execute("INSERT INTO settings (key, value) VALUES ('pea_opening_date', '2022-01-10')")
+    conn.close()
