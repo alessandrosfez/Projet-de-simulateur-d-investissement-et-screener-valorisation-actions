@@ -136,11 +136,48 @@ def test_consecutive_pairs_most_recent_first():
 # Altman Z-score
 # ============================================================
 
-# Source : Wall Street Prep, « Altman Z-Score » (wallstreetprep.com/knowledge/altman-z-score),
-# exemple chiffré : fonds de roulement 20 M$, réserves 8 M$, EBIT 20 M$, capitalisation 80 M$,
-# passif total 120 M$, chiffre d'affaires 60 M$, actif total 160 M$ ; Z = 1,40, zone de détresse.
-# L'article utilise 0,99 pour X5 ; avec le 0,999 d'Altman (1968), Z = 1,407 : même valeur à l'arrondi
-# près (écart de 0,007) et même zone.
+# Source primaire : Altman (2000), « Predicting Financial Distress of Companies: Revisiting the
+# Z-Score and ZETA Models », NYU Stern (pages du PDF de travail), voir engine.ALTMAN_MODELS.
+
+def test_altman_original_matches_the_1968_percentage_form():
+    """Altman (2000), p. 9 et 13 : Z = 0,012 X1 + 0,014 X2 + 0,033 X3 + 0,006 X4 + 0,999 X5, X1 à X4 en
+    pourcentages (10 % saisi 10,0), X5 en nombre de fois ; la forme sur ratios décimaux donne des
+    scores identiques."""
+    ratios = {"x1": 0.137, "x2": -0.052, "x3": 0.081, "x4": 1.734, "x5": 1.21}
+    percentage_form = (0.012 * 100 * ratios["x1"] + 0.014 * 100 * ratios["x2"] + 0.033 * 100 * ratios["x3"]
+                       + 0.006 * 100 * ratios["x4"] + 0.999 * ratios["x5"])
+    assert m.altman_z_from_ratios(ratios, "original") == pytest.approx(percentage_form)
+
+
+# Altman (2000), tableau 1, p. 13 : moyennes des ratios des 33 sociétés en faillite et des 33 sociétés
+# saines de l'échantillon de 1968. Z étant linéaire, Z des moyennes = moyenne des Z. À la main :
+# faillite 1,2 x (-0,061) + 1,4 x (-0,626) + 3,3 x (-0,318) + 0,6 x 0,401 + 0,999 x 1,5 = -0,26 ;
+# saines 1,2 x 0,414 + 1,4 x 0,355 + 3,3 x 0,154 + 0,6 x 2,477 + 0,999 x 1,9 = 4,89. L'article donne
+# 5,02 pour la moyenne des Z des sociétés saines (p. 25) : l'arrondi de X5 à « 1,9X » au tableau 1
+# n'explique que 0,05 de l'écart, d'où un test limité aux zones et au calcul à la main.
+
+def test_altman_classifies_the_1968_sample_group_means():
+    bankrupt = {"x1": -0.061, "x2": -0.626, "x3": -0.318, "x4": 0.401, "x5": 1.5}
+    non_bankrupt = {"x1": 0.414, "x2": 0.355, "x3": 0.154, "x4": 2.477, "x5": 1.9}
+    z_bankrupt, z_non_bankrupt = (m.altman_z_from_ratios(r, "original") for r in (bankrupt, non_bankrupt))
+    assert z_bankrupt == pytest.approx(-0.26, abs=0.005)
+    assert z_non_bankrupt == pytest.approx(4.89, abs=0.005)
+    assert m.altman_zone(z_bankrupt, "original") == "distress"
+    assert m.altman_zone(z_non_bankrupt, "original") == "safe"
+
+
+def test_altman_z_double_prime_coefficients_match_the_source():
+    """Altman (2000), p. 27 : Z'' = 6,56 X1 + 3,26 X2 + 6,72 X3 + 1,05 X4, sans la constante de +3,25 du
+    score des marchés émergents."""
+    assert m.ALTMAN_MODELS["z_double_prime"]["coefficients"] == {"x1": 6.56, "x2": 3.26, "x3": 6.72, "x4": 1.05}
+    assert m.altman_z_from_ratios({"x1": 0.0, "x2": 0.0, "x3": 0.0, "x4": 0.0}, "z_double_prime") == 0.0
+
+
+# Vérification arithmétique sur une source secondaire : Wall Street Prep, « Altman Z-Score »
+# (wallstreetprep.com/knowledge/altman-z-score), exemple chiffré : fonds de roulement 20 M$,
+# réserves 8 M$, EBIT 20 M$, capitalisation 80 M$, passif total 120 M$, chiffre d'affaires 60 M$,
+# actif total 160 M$ ; Z = 1,40, zone de détresse. L'article utilise 0,99 pour X5 ; avec le 0,999
+# d'Altman (1968), Z = 1,407 : même valeur à l'arrondi près (écart de 0,007) et même zone.
 
 def test_altman_reproduces_published_example():
     ratios = {"x1": 20 / 160, "x2": 8 / 160, "x3": 20 / 160, "x4": 80 / 120, "x5": 60 / 160}
@@ -164,12 +201,13 @@ def test_altman_from_statements_matches_the_published_example():
     assert result["contributions"]["x1"] == pytest.approx(1.2 * 0.125)
 
 
-# Source : CliffsNotes, « Understanding the Altman Z-Score: Key Ratios and Calculations »
-# (cliffsnotes.com/study-notes/33602293), exemple d'une société de services : fonds de roulement
-# 80 000, réserves 150 000, EBIT 100 000, fonds propres 250 000, passif 200 000, actif 400 000 ;
-# Z'' = 5,527. Réserve : l'exemple prend la capitalisation au lieu des fonds propres comptables du
-# Z'' standard ; seule l'arithmétique des coefficients d'Altman et al. (2017) est vérifiée ici, en
-# traitant ces 250 000 comme des fonds propres comptables.
+# Vérification arithmétique sur une source secondaire : CliffsNotes, « Understanding the Altman
+# Z-Score: Key Ratios and Calculations » (cliffsnotes.com/study-notes/33602293), société de services :
+# fonds de roulement 80 000, réserves 150 000, EBIT 100 000, fonds propres 250 000, passif 200 000,
+# actif 400 000 ; Z'' = 5,527. L'exemple prend la capitalisation au lieu des fonds propres comptables
+# du Z'' d'Altman (2000, p. 26) : seule l'arithmétique des coefficients est vérifiée, en traitant ces
+# 250 000 comme des fonds propres comptables. Les zones 1,10 / 2,60 ne sont pas vérifiées à la source
+# (voir engine.ALTMAN_MODELS).
 
 def test_altman_z_double_prime_reproduces_published_example():
     z = m.altman_z_from_ratios({"x1": 0.20, "x2": 0.375, "x3": 0.25, "x4": 1.25}, "z_double_prime")
@@ -236,7 +274,51 @@ def test_market_value_of_equity_in_reporting_currency():
 # Piotroski F-score
 # ============================================================
 
-# Source : Stablebread, « How to Identify Financially Strong Companies With the Piotroski F-Score »
+# Définitions : Piotroski (2000), Journal of Accounting Research 38 (supplément), 1-41. Le texte
+# de l'article n'a pas pu être consulté directement (PDF inaccessible) ; ses définitions sont citées
+# mot pour mot par greenbackd.com/tag/piotroski : ROA, CFO, ACCRUAL et rotation de l'actif « scaled
+# by beginning of the year total assets », levier = « total long-term debt to average total assets »,
+# EQ_OFFER = 1 si la société « did not issue common equity ». Le test ci-dessous applique ces
+# définitions à des états construits pour que chaque convention change le résultat d'un critère.
+
+def _three_years():
+    return _ns(
+        {"Net Income": [12, 8, 5], "Total Revenue": [122, 100, np.nan], "Gross Profit": [48.8, 38, np.nan]},
+        {"Total Assets": [120, 100, 80], "Long Term Debt": [24.2, 20, 18], "Current Assets": [50, 40, np.nan],
+         "Current Liabilities": [25, 25, np.nan]},
+        {"Operating Cash Flow": [15, 7, np.nan], "Common Stock Issuance": [0.0, 0.0, np.nan]},
+        years=(T, P, PP),
+    )
+
+
+def test_piotroski_paper_definitions_computed_by_hand():
+    """Calcul à la main, actif d'ouverture : ROA 12/100 = 12 % contre 8/80 = 10 % ; levier sur l'actif
+    moyen 24,2/110 = 22,0 % contre 20/90 = 22,2 % (en baisse) ; liquidité 2,0 contre 1,6 ; marge brute
+    40 % contre 38 % ; rotation 122/100 = 1,22 contre 100/80 = 1,25 (en baisse). F-score 8 / 9."""
+    result = m.piotroski_f_score(_three_years(), T, asset_base="beginning")
+    criteria = {k: v["value"] for k, v in result["criteria"].items()}
+    assert criteria == {
+        "roa_positive": 1, "cfo_positive": 1, "roa_improved": 1, "cfo_exceeds_net_income": 1,
+        "leverage_decreased": 1, "current_ratio_improved": 1, "no_equity_issuance": 1,
+        "gross_margin_improved": 1, "asset_turnover_improved": 0,
+    }
+    assert result["score"] == 8 and result["n_available"] == 9
+    details = result["criteria"]
+    assert details["leverage_decreased"]["details"]["leverage_t"] == pytest.approx(24.2 / 110)
+    assert details["leverage_decreased"]["details"]["leverage_p"] == pytest.approx(20 / 90)
+    assert details["asset_turnover_improved"]["details"]["turnover_p"] == pytest.approx(100 / 80)
+
+
+def test_piotroski_end_of_year_variant_flips_leverage_and_turnover():
+    """Mêmes états, tout rapporté à l'actif de clôture : levier 24,2/120 = 20,2 % contre 20/100 = 20 %
+    (en hausse), rotation 122/120 = 1,02 contre 1,00 (en hausse). La convention choisie compte."""
+    criteria = m.piotroski_f_score(_three_years(), T, asset_base="end")["criteria"]
+    assert criteria["leverage_decreased"]["value"] == 0
+    assert criteria["asset_turnover_improved"]["value"] == 1
+
+
+# Vérification arithmétique sur une source secondaire : Stablebread, « How to Identify Financially
+# Strong Companies With the Piotroski F-Score »
 # (stablebread.com/piotroski-f-score), exemple de Lowe's (M$) : résultat net 7 726 / 6 437, actif
 # total 41 795 / 43 708, CFO 8 140, dette à long terme 35 384 / 32 876, actif courant 19 071 / 21 442,
 # passif courant 15 568 / 19 511, CA 86 377 / 97 059, marge brute 28 844 / 32 257 ; F-score de 7

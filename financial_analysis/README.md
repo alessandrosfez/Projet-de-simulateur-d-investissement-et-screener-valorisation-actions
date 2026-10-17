@@ -130,12 +130,24 @@ Yahoo Finance sans retraitement par un analyste.
 - **Banques et assureurs** : la conversion en cash et les accruals y sont
   aussi non applicables, leur CFO étant dominé par les flux de dépôts et de
   crédits (des dizaines de milliards d'une année sur l'autre).
-- **Sources des scores, vérifiées sur pièce** : coefficients et moyennes de
-  Beneish lus dans l'article d'origine (version de travail de juin 1999,
-  tableaux 2 et 3), coefficients d'Altman (1968, X5 à 0,999, souvent
-  arrondi à 1,0) et Z'' (Altman 1995, repris par Altman et al. 2017),
-  critères de Piotroski (2000). Les tests reproduisent un exemple chiffré
-  publié pour chaque score (sources citées dans `test_scores.py`).
+- **Sources des scores, et ce qui n'a pas pu être vérifié** :
+  - **Beneish** : coefficients et moyennes lus dans l'article d'origine
+    (version de travail de juin 1999, tableaux 2 et 3).
+  - **Altman** : coefficients du Z de 1968 (X5 à 0,999, souvent arrondi à
+    1,0), borne 1,81 et coefficients de Z'' lus dans Altman (2000). Les
+    tests classent aussi les moyennes des deux groupes de l'échantillon de
+    1968 (tableau 1).
+  - **Non vérifié** : la borne 2,99 du Z d'origine et les zones 1,10 / 2,60
+    de Z''. Elles ne figurent ni dans Altman (2000) ni dans Altman (2018).
+    Les sources secondaires les attribuent à Altman et Hotchkiss (2006),
+    ouvrage non consulté.
+  - **Piotroski (2000)** : définitions connues seulement par des citations
+    mot pour mot, l'article lui-même étant inaccessible. Un test les
+    applique à la main sur trois exercices construits pour que chaque
+    convention change le résultat.
+  - **Exemples secondaires** : les exemples chiffrés de sites pédagogiques
+    sont gardés comme simples vérifications arithmétiques, étiquetées
+    comme telles dans `test_scores.py`.
 - **Beneish : couples d'exercices et données manquantes** : les 8 indices
   comparent t à t-1, pour chaque couple consécutif disponible (3 couples
   avec 4 exercices), le plus récent étant résumé. Les coefficients ont été
@@ -295,9 +307,12 @@ Les tests couvrent le moteur pur (normalisation sur des DataFrames
 synthétiques, postes manquants, identités comptables, classement
 sectoriel, devises, ratios de qualité des résultats et de BFR sur des cas
 calculés à la main) et `market_data.py` avec yfinance remplacé par des
-doublures : aucun appel réseau. `test_scores.py` reproduit un exemple
-chiffré publié pour chaque score (source citée au-dessus de chaque test)
-et couvre les cas limites (donnée manquante, base nulle, seuils).
+doublures : aucun appel réseau. `test_scores.py` rattache chaque score à
+sa source primaire quand elle a pu être lue (moyennes et coefficients de
+Beneish, formes et moyennes de groupes d'Altman), applique à la main les
+définitions de Piotroski, garde des exemples secondaires étiquetés comme
+vérifications arithmétiques, et couvre les cas limites (donnée manquante,
+base nulle, seuils).
 `test_transaction.py` vérifie le pont de dette nette, l'EBITDA ajusté, les
 multiples et la lecture des saisies sur des cas calculés à la main.
 `test_benford.py` vérifie qu'un échantillon conforme généré

@@ -737,10 +737,18 @@ def beneish_verdict(m_score: float) -> str:
 
 # ---------- Altman Z-score ----------
 
-# Z d'origine : Altman (1968), Journal of Finance 23(4), 589-609, fonction discriminante réexprimée
-# sur des ratios décimaux (X5 à 0,999 dans l'article, souvent arrondi à 1,0). Z'' (sociétés non
-# manufacturières, fonds propres comptables, sans X5) : Altman (1995), repris dans Altman et al.
-# (2017). Seuils : 1,81 / 2,99 pour Z, 1,10 / 2,60 pour Z''.
+# Sources vérifiées dans le texte d'Altman (2000), « Predicting Financial Distress of Companies:
+# Revisiting the Z-Score and ZETA Models », NYU Stern (pages du PDF de travail) :
+# - Z d'origine (Altman 1968, Journal of Finance 23(4), 589-609) : Z = 0,012 X1 + 0,014 X2 + 0,033 X3
+#   + 0,006 X4 + 0,999 X5, X1 à X4 en pourcentages (p. 9-13) ; la forme 1,2 / 1,4 / 3,3 / 0,6 sur des
+#   ratios décimaux donne des scores « identiques » (p. 13). On garde 0,999 pour X5, que la forme
+#   usuelle arrondit à 1,0. Borne basse de la zone grise à 1,81 (p. 18).
+# - Z'' (fonds propres comptables en X4, sans X5) : Z'' = 6,56 X1 + 3,26 X2 + 6,72 X3 + 1,05 X4 (p. 26-27),
+#   sans la constante de +3,25 réservée au score des marchés émergents.
+# Non vérifiés à la source : la borne haute 2,99 du Z d'origine (Altman 1968, non consulté ; Altman
+# 2000 n'emploie que 1,81 et le seuil optimal 2,675) et les zones 1,10 / 2,60 de Z'', absentes
+# d'Altman (2000) et d'Altman (2018, International Journal of Financial Studies 6(3), 70) et
+# reprises par les sources secondaires d'après Altman et Hotchkiss (2006), ouvrage non consulté.
 ALTMAN_MODELS = {
     "original": {"coefficients": {"x1": 1.2, "x2": 1.4, "x3": 3.3, "x4": 0.6, "x5": 0.999}, "zones": (1.81, 2.99)},
     "z_double_prime": {"coefficients": {"x1": 6.56, "x2": 3.26, "x3": 6.72, "x4": 1.05}, "zones": (1.10, 2.60)},
