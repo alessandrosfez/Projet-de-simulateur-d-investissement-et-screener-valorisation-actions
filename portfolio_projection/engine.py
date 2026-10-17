@@ -3,6 +3,8 @@ Moteur de calcul pur : simulation Monte Carlo (paramétrique ou bootstrap), DCA,
 frais, fiscalité, et optimisation de poids de portefeuille. Aucune dépendance
 sur Dash/Plotly/yfinance : c'est ce que couvre test_engine.py.
 """
+from collections.abc import Iterator, Sequence
+
 import numpy as np
 import pandas as pd
 
@@ -10,7 +12,8 @@ import pandas as pd
 # SIMULATION MONTE CARLO (paramétrique ou bootstrap)
 # ============================================================
 
-def block_bootstrap_indices(n_obs, n_months, n_sims, block_size, rng):
+def block_bootstrap_indices(n_obs: int, n_months: int, n_sims: int, block_size: int,
+                            rng: np.random.Generator) -> np.ndarray:
     """Indices (n_sims, n_months) pour un bootstrap par blocs circulaire dans l'historique."""
     n_blocks = int(np.ceil(n_months / block_size))
     starts = rng.integers(0, n_obs, size=(n_sims, n_blocks))
@@ -26,7 +29,7 @@ def block_bootstrap_indices(n_obs, n_months, n_sims, block_size, rng):
 STUDENT_T_DOF = 5
 
 
-def _student_t_scale(rng, dof, size):
+def _student_t_scale(rng: np.random.Generator, dof: float, size: int | tuple[int, ...]) -> np.ndarray:
     """Facteur multiplicatif à appliquer à un tirage N(0,1) (ou N(0,Sigma)) pour obtenir une loi t
     de Student de même variance cible. `size` est la forme du tirage chi2 (un scalaire partagé par
     actif quand il y en a plusieurs, pour créer une dépendance de queue et pas juste des marges
@@ -35,15 +38,15 @@ def _student_t_scale(rng, dof, size):
     return np.sqrt((dof - 2) / w)
 
 
-def simulate_index_returns(returns_hist: pd.Series, n_months, n_sims, seed, method, block_size=12,
-                            mu_override_pct=None):
+def simulate_index_returns(returns_hist: pd.Series, n_months: int, n_sims: int, seed: int | None, method: str,
+                           block_size: int = 12, mu_override_pct: float | None = None) -> np.ndarray:
     """mu_override_pct : rendement annuel (%) à substituer à la moyenne historique, ou None pour la
     garder. La volatilité (et, en bootstrap, la forme empirique de la distribution) reste historique."""
     rng = np.random.default_rng(seed)
     target_monthly = (1 + mu_override_pct / 100) ** (1 / 12) - 1 if mu_override_pct is not None else None
     if method == "bootstrap":
         idx = block_bootstrap_indices(len(returns_hist), n_months, n_sims, block_size, rng)
-        sampled = returns_hist.values[idx]
+        sampled = returns_hist.to_numpy(dtype=float)[idx]
         if target_monthly is not None:
             sampled = sampled + (target_monthly - returns_hist.mean())
         return sampled
@@ -55,8 +58,9 @@ def simulate_index_returns(returns_hist: pd.Series, n_months, n_sims, seed, meth
     return mu + sigma * z * scale
 
 
-def simulate_portfolio_asset_returns(aligned_hist: pd.DataFrame, n_months, n_sims, seed, method, block_size=12,
-                                      mu_override_pct=None):
+def simulate_portfolio_asset_returns(aligned_hist: pd.DataFrame, n_months: int, n_sims: int, seed: int | None,
+                                     method: str, block_size: int = 12,
+                                     mu_override_pct: Sequence[float | None] | None = None) -> np.ndarray:
     """Rendements corrélés multi-actifs. Renvoie un tableau (n_sims, n_months, k_actifs).
     mu_override_pct : liste de rendements annuels (%) par actif (même ordre que les colonnes), avec
     None pour garder la moyenne historique de l'actif concerné. Covariance toujours historique."""
@@ -101,7 +105,7 @@ def apply_social_tax(portfolio_value: np.ndarray, invested_capital: np.ndarray, 
     return portfolio_value - tax_rate * np.maximum(gain, 0)
 
 
-def returns_to_dca(monthly_returns: np.ndarray, monthly_amounts: np.ndarray):
+def returns_to_dca(monthly_returns: np.ndarray, monthly_amounts: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     """monthly_returns: (n_sims, n_months), déjà nets de frais. monthly_amounts: (n_months,), positif = apport,
     négatif = retrait. Renvoie (portfolio_value, invested_capital) ; le portefeuille est plafonné à 0 (pas de
     retrait au-delà du solde)."""
@@ -123,7 +127,8 @@ def withdrawal_schedule(n_months_decum: int, monthly_amount: float, inflation_pc
     return monthly_amount * (1 + inflation_pct / 100) ** years
 
 
-def inject_shock(returns: np.ndarray, shock_pct: float, shock_duration: int, start_month, rng):
+def inject_shock(returns: np.ndarray, shock_pct: float, shock_duration: int, start_month: int | None,
+                 rng: np.random.Generator) -> tuple[np.ndarray, np.ndarray | None]:
     """Remplace une fenêtre de rendements par un choc. `returns` peut être (n_sims, n_months) ou
     (n_sims, n_months, k) ; `start_month=None` tire un moment de choc indépendant par simulation.
     Renvoie (rendements_choqués, mois_de_départ) : mois_de_départ est un tableau (n_sims,) si
@@ -143,7 +148,8 @@ def inject_shock(returns: np.ndarray, shock_pct: float, shock_duration: int, sta
     return shocked, None
 
 
-def to_display_values(portfolio_value, invested_capital, years_axis, inflation_pct, real: bool):
+def to_display_values(portfolio_value: np.ndarray, invested_capital: np.ndarray, years_axis: np.ndarray,
+                      inflation_pct: float, real: bool) -> tuple[np.ndarray, np.ndarray]:
     """Déflate en euros constants (année 0) si real=True, sinon renvoie les valeurs nominales."""
     if not real:
         return portfolio_value, invested_capital
@@ -237,7 +243,7 @@ def summarize_historique(monthly_returns: np.ndarray) -> dict:
 
 def rolling_backtest_final_values(historical_returns: np.ndarray, schedule: np.ndarray, years_axis: np.ndarray,
                                    annual_fee_pct: float, apply_tax: bool, tax_rate: float,
-                                   inflation_pct: float, display_real: bool):
+                                   inflation_pct: float, display_real: bool) -> np.ndarray | None:
     """Pour chaque mois de départ t tel qu'une fenêtre complète de len(schedule) mois tienne dans
     historical_returns (n_starts = n_obs - n_months + 1, sans repli circulaire contrairement au
     bootstrap : seuls des départs réellement observés dans l'historique sont utilisés), calcule la
@@ -260,7 +266,7 @@ def rolling_backtest_final_values(historical_returns: np.ndarray, schedule: np.n
 
 
 def compute_objective_contribution(all_metrics: dict, schedules: dict, items: list,
-                                    target_amount: float, percentile_key: str):
+                                    target_amount: float, percentile_key: str) -> list[tuple[str, float]]:
     """Apport mensuel constant nécessaire pour atteindre `target_amount` au percentile choisi
     ("p_low"/"median"/"p_high"), pour chaque item déjà simulé (label, ...).
 
@@ -350,7 +356,8 @@ def walk_forward_calibration(returns_hist: pd.Series, horizon_months: int, n_sim
     }
 
 
-def summarize_calibration(pit_values: np.ndarray, bands=((5, 95), (25, 75))) -> list[dict]:
+def summarize_calibration(pit_values: np.ndarray,
+                          bands: Sequence[tuple[int, int]] = ((5, 95), (25, 75))) -> list[dict]:
     """Taux de couverture observé de chaque bande nominale (lower_pct, upper_pct) : la fraction des
     origines dont la PIT tombe dans cette bande. Équivalent à vérifier que la croissance réalisée
     tombe entre les percentiles simulés correspondants (voir walk_forward_calibration), sans avoir
@@ -369,7 +376,7 @@ def summarize_calibration(pit_values: np.ndarray, bands=((5, 95), (25, 75))) -> 
     return rows
 
 
-def simplex_grid(k: int, total: int, step: int):
+def simplex_grid(k: int, total: int, step: int) -> Iterator[tuple[int, ...]]:
     """Génère tous les vecteurs entiers non-négatifs de longueur k sommant à `total`, multiples de `step`."""
     if k == 1:
         yield (total,)
@@ -380,8 +387,10 @@ def simplex_grid(k: int, total: int, step: int):
 
 
 def suggest_optimal_weights(aligned_hist: pd.DataFrame, step_pct: int = 5, shrinkage: float = 0.5,
-                             mu_override_pct=None, risk_free_rate_pct: float = 0.0,
-                             min_weight_pct: float = 0.0, max_weight_pct: float = 100.0):
+                            mu_override_pct: Sequence[float | None] | None = None,
+                            risk_free_rate_pct: float = 0.0, min_weight_pct: float = 0.0,
+                            max_weight_pct: float = 100.0,
+                            ) -> tuple[dict[str, float] | None, dict[str, float] | None, dict[str, float] | None]:
     """Grille exhaustive sur les poids (pas besoin de scipy vu le petit nombre d'actifs).
     Renvoie (poids_sharpe_max, poids_vol_min, poids_parite_risque), chacun un dict {nom: poids_pct},
     ou None si aucune combinaison de la grille ne respecte min_weight_pct/max_weight_pct (contrainte
@@ -412,13 +421,13 @@ def suggest_optimal_weights(aligned_hist: pd.DataFrame, step_pct: int = 5, shrin
     d'éviter les allocations "poussière" (quelques % ici et là) ou au contraire les positions trop
     concentrées, selon ce que l'utilisateur choisit."""
     names = list(aligned_hist.columns)
-    mu_sample = aligned_hist.mean().values * 12
+    mu_sample = aligned_hist.mean().to_numpy(dtype=float) * 12
     mu = (1 - shrinkage) * mu_sample + shrinkage * mu_sample.mean()
     if mu_override_pct is not None:
         for i, o in enumerate(mu_override_pct):
             if o is not None:
                 mu[i] = o / 100
-    cov = aligned_hist.cov().values * 12
+    cov = aligned_hist.cov().to_numpy(dtype=float) * 12
     risk_free_rate = risk_free_rate_pct / 100
 
     best_sharpe_val, best_sharpe_w = -np.inf, None

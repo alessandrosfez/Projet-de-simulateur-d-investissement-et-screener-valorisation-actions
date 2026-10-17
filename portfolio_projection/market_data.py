@@ -179,7 +179,7 @@ def _price_scale_factor(trailing_pe, trailing_eps, current_price) -> float:
 def get_current_price(ticker: str) -> float | None:
     """Prix courant d'un ticker quelconque, corrigé de l'éventuel décalage d'échelle
     pence/livre -- sert à valoriser les positions du portefeuille réel et à valider
-    un ticker à la saisie (voir callbacks.py, formulaires d'ajout). None si
+    un ticker à la saisie (voir callbacks/portefeuille_reel.py, formulaires d'ajout). None si
     indisponible (ticker invalide/délisté).
 
     currentPrice/regularMarketPrice sont souvent absents pour les ETF (champs surtout
@@ -251,7 +251,7 @@ def get_ticker_name(ticker: str) -> str | None:
     """Nom lisible d'un ticker quelconque (shortName, repli longName) -- sert à annoter dans
     l'UI les tickers du portefeuille réel qui ne font pas partie de l'univers simulé
     (constants.TICKERS), pour qu'un ticker peu parlant (ex: "PAASI.PA") reste identifiable sans
-    recherche externe (voir callbacks._ticker_display_label). Cache TTL plus long que
+    recherche externe (voir callbacks/portefeuille_reel.py, _ticker_display_label). Cache TTL plus long que
     get_current_price : le nom d'un instrument change rarement, contrairement à son prix. None
     si indisponible (ticker invalide/délisté)."""
     info = _get_ticker_info(ticker)

@@ -5,7 +5,7 @@ Projet autonome (aucune dépendance vers ../stock_valuation) : combien épargner
 et selon quel scénario, pas quoi acheter (voir le projet frère pour ça).
 
 Point d'entrée : assemble l'instance Dash (app_instance.py), le layout
-(layout.py) et les callbacks (callbacks.py, importé pour son effet de bord :
+(layout.py) et les callbacks (paquet callbacks/, importé pour son effet de bord :
 l'enregistrement des callbacks sur `app`).
 
 Auteur : Alessandro
@@ -117,7 +117,7 @@ app.layout = dbc.Container([
                 id="dark-mode-switch", label=L("fr", "dark_mode_label"),
                 value=True, persistence=True, persistence_type="local",
             ),
-            # Badge de fraîcheur des données (voir callbacks.refresh_data_freshness) : rafraîchi
+            # Badge de fraîcheur des données (voir callbacks/shared.py, refresh_data_freshness) : rafraîchi
             # périodiquement plutôt qu'à chaque callback, puisque n'importe quel écran peut servir
             # une nouvelle série à tout moment.
             html.Div(id="data-freshness-badge", className="mt-1"),

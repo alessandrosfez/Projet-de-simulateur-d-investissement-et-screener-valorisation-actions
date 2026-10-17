@@ -140,7 +140,7 @@ def compute_results(items, years_axis, schedules, annual_fee_pct, apply_tax, tax
     figs = {}
     for strat_name, series in series_by_strategy.items():
         if view_mode == "historique":
-            # Un seul graphique affiché en mode historique (voir callbacks.py) : pas besoin d'un
+            # Un seul graphique affiché en mode historique (voir callbacks/par_indice.py) : pas besoin d'un
             # titre "Apport constant/progressif" qui n'a de sens que pour comparer deux stratégies
             # d'apport côte à côte, le H5 au-dessus du graphique porte déjà "Trajectoire historique".
             title = ""
@@ -398,7 +398,7 @@ def render_rolling_backtest_result(backtest_items, schedule, years_axis, annual_
 
 # ============================================================
 # PORTEFEUILLE RÉEL (onglet 3) : glue entre portfolio_engine (calcul pur) et l'affichage. Aucun
-# accès DB/yfinance ici (voir callbacks.py, qui lit portfolio_db/market_data puis appelle ces
+# accès DB/yfinance ici (voir callbacks/portefeuille_reel.py, qui lit portfolio_db/market_data puis appelle ces
 # fonctions) -- même convention que le reste de ce module.
 # ============================================================
 
@@ -577,7 +577,7 @@ def build_rebalancing_table_data(rebalancing_df: pd.DataFrame, lang: str):
 def build_real_vs_simulated_figure(portfolio_returns, monthly_amounts, monthly_dates, real_series,
                                     annual_fee_pct, lower_pct, upper_pct, lang="fr", palette=None, dark=False):
     """portfolio_returns : (n_sims, n_months), rendements simulés du portefeuille réel à sa
-    composition/pondération ACTUELLE (voir callbacks.py : simulate_portfolio_asset_returns @
+    composition/pondération ACTUELLE (voir callbacks/portefeuille_reel.py : simulate_portfolio_asset_returns @
     weights_vec, même combinaison que l'onglet 2). Mêmes étapes que chaque item de compute_results
     (frais -> DCA -> percentiles), mais pour un seul "item" et l'échéancier RÉEL de versements
     (monthly_amounts, voir portfolio_engine.monthly_contribution_schedule) plutôt qu'un échéancier

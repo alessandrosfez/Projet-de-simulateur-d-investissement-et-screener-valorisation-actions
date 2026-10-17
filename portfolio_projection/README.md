@@ -206,14 +206,26 @@ L'application est servie sur [http://localhost:8050](http://localhost:8050)
 - `charts.py` : constructeurs de graphiques Plotly.
 - `results.py` : agrège les résultats du moteur en métriques/figures affichables.
 - `layout.py` : construction de la sidebar et des quatre onglets.
-- `app_instance.py` / `callbacks.py` / `app.py` : instance Dash, callbacks, point d'entrée.
+- `callbacks/` : callbacks Dash, un module par onglet (`par_indice.py`,
+  `portefeuille.py`, `portefeuille_reel.py`, `validation.py`) plus
+  `shared.py` (affichage conditionnel, langue, configuration JSON, badge de
+  fraîcheur). Importer le paquet suffit à tout enregistrer ; aucun module
+  n'utilise de fonction d'un autre.
+- `app_instance.py` / `app.py` : instance Dash, point d'entrée.
 
 ## Tests
 
 ```bash
 pip install -r requirements-dev.txt
+ruff check .
 pytest -v
+mypy --disallow-untyped-defs --disallow-incomplete-defs engine.py portfolio_engine.py
 ```
+
+Les deux moteurs de calcul purs sont entièrement annotés et vérifiés par
+mypy en CI (avec `pandas-stubs`, sans quoi pandas serait vu comme non
+typé). `--disallow-untyped-defs` est indispensable : sans lui, mypy ignore
+silencieusement le corps de toute fonction non annotée.
 
 Les tests couvrent les moteurs de calcul purs (frais, fiscalité, bootstrap,
 DCA, simulation Monte Carlo, poids optimaux, mode objectif, validation

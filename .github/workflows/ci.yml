@@ -24,4 +24,11 @@ jobs:
 
       - run: pytest -v
 
+      # Vérification de types limitée aux deux moteurs de calcul purs de portfolio_projection :
+      # toutes les fonctions doivent y rester annotées (--disallow-untyped-defs), sinon mypy
+      # ignorerait silencieusement le corps des fonctions non annotées.
+      - name: mypy (moteurs purs)
+        if: matrix.app == 'portfolio_projection'
+        run: mypy --disallow-untyped-defs --disallow-incomplete-defs engine.py portfolio_engine.py
+
       - run: docker build -t pea-${{ matrix.app }}:ci .

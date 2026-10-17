@@ -5,7 +5,10 @@ couvre test_portfolio_engine.py. Les fonctions ici prennent des DataFrames déj�
 chargés (portfolio_db.get_transactions()/get_dividends()) et des séries de prix déjà
 récupérées (market_data.get_daily_price_history()) -- aucun accès disque ou réseau.
 """
+import datetime as dt
 import math
+from collections.abc import Sequence
+from typing import cast
 
 import numpy as np
 import pandas as pd
@@ -14,6 +17,10 @@ from constants import (
     PEA_CONTRIBUTION_CAP, PEA_EARLY_WITHDRAWAL_TAX_RATE, PEA_MATURITY_YEARS, PEA_TAX_RATE, TICKERS,
 )
 from engine import cap_schedule, overflow_schedule
+
+# Date acceptée en entrée : chaîne ISO (format stocké en base), date ou Timestamp -- toujours
+# normalisée via pd.Timestamp avant tout calcul.
+DateLike = str | dt.date | pd.Timestamp
 
 # Ticker (indice brut ou ETF) -> nom de l'indice, pour ticker_display_label ci-dessous.
 _TICKER_TO_INDEX_NAME = {}
@@ -30,7 +37,7 @@ def reconstruct_holdings(transactions: pd.DataFrame) -> pd.DataFrame:
         return pd.DataFrame(columns=["ticker", "quantity"])
     tx = transactions.copy()
     tx["quantity"] = tx["amount_eur"] / tx["price"]
-    return tx.groupby("ticker", as_index=False)["quantity"].sum()
+    return tx.groupby("ticker")["quantity"].sum().reset_index()
 
 
 def reconstruct_equity_curve(transactions: pd.DataFrame, price_history: dict[str, pd.Series]) -> pd.Series:
@@ -50,7 +57,7 @@ def reconstruct_equity_curve(transactions: pd.DataFrame, price_history: dict[str
 
     value_by_date = pd.Series(dtype=float)
     for ticker, group in tx.groupby("ticker"):
-        prices = price_history.get(ticker)
+        prices = price_history.get(str(ticker))
         if prices is None or prices.empty:
             continue
         prices = prices.copy()
@@ -161,13 +168,13 @@ def _year_fraction(start: pd.Timestamp, end: pd.Timestamp) -> float:
     return (end - start).days / 365.0
 
 
-def _purchase_cost(row) -> float:
+def _purchase_cost(row: pd.Series) -> float:
     """amount_eur + fee_eur d'une ligne d'achat, frais absents (None/NaN) comptés à 0."""
     fee = row.get("fee_eur")
     return float(row["amount_eur"]) + (0.0 if fee is None or pd.isna(fee) else float(fee))
 
 
-def xirr(cash_flows: list[tuple]) -> float | None:
+def xirr(cash_flows: Sequence[tuple[DateLike, float]]) -> float | None:
     """Taux de rendement annuel r (base exact/365) qui annule la valeur actuelle des flux datés
     [(date, montant), ...] -- négatif = sortie de cash (achat), positif = entrée (dividende,
     valeur finale). Rendement "pondéré par les flux" (money-weighted) : il dépend du moment où
@@ -206,7 +213,7 @@ def xirr(cash_flows: list[tuple]) -> float | None:
 
 
 def portfolio_cash_flows(transactions: pd.DataFrame, dividends: pd.DataFrame, current_value_eur: float,
-                         valuation_date) -> list[tuple]:
+                         valuation_date: DateLike) -> list[tuple[pd.Timestamp, float]]:
     """Flux datés du portefeuille réel pour xirr : chaque achat -(amount_eur + fee_eur), chaque
     dividende +amount_eur, et la valeur actuelle comme flux final positif à valuation_date (comme
     si tout était revendu ce jour-là, avant toute fiscalité). Liste vide sans transaction."""
@@ -231,8 +238,8 @@ def _external_flows_by_curve_date(curve_index: pd.DatetimeIndex, transactions: p
     (vers le cash), d'où le signe opposé."""
     flows = pd.Series(0.0, index=curve_index)
 
-    def add(date, amount):
-        pos = curve_index.searchsorted(pd.Timestamp(date))
+    def add(date: DateLike, amount: float) -> None:
+        pos = int(curve_index.searchsorted(pd.Timestamp(date)))
         flows.iloc[min(pos, len(curve_index) - 1)] += amount
 
     for _, row in transactions.iterrows():
@@ -292,7 +299,7 @@ def benchmark_equity_curve(transactions: pd.DataFrame, benchmark_prices: pd.Seri
         prices.index = prices.index.tz_localize(None)
     units = pd.Series(0.0, index=prices.index)
     for _, row in transactions.iterrows():
-        pos = prices.index.searchsorted(pd.Timestamp(row["date"]))
+        pos = int(prices.index.searchsorted(pd.Timestamp(row["date"])))
         if pos >= len(prices):
             continue
         units.iloc[pos] += float(row["amount_eur"]) / float(prices.iloc[pos])
@@ -301,7 +308,8 @@ def benchmark_equity_curve(transactions: pd.DataFrame, benchmark_prices: pd.Seri
     return (held * prices).loc[first:].rename("value")
 
 
-def benchmark_cash_flows(transactions: pd.DataFrame, benchmark_final_value: float, valuation_date) -> list[tuple]:
+def benchmark_cash_flows(transactions: pd.DataFrame, benchmark_final_value: float,
+                         valuation_date: DateLike) -> list[tuple[pd.Timestamp, float]]:
     """Flux du portefeuille fictif pour xirr : les mêmes sorties que le réel -(amount_eur +
     fee_eur), aucun dividende séparé (déjà réinvestis dans les cours ajustés), et la valeur
     finale du portefeuille fictif à valuation_date."""
@@ -317,7 +325,7 @@ def benchmark_cash_flows(transactions: pd.DataFrame, benchmark_final_value: floa
 
 # ============================================================
 # Import CSV (validation structurelle uniquement : pas de vérification réseau du ticker, qui vit
-# dans callbacks.py/market_data.py -- cette couche ne fait que garantir qu'une ligne est
+# dans callbacks/portefeuille_reel.py et market_data.py -- cette couche ne fait que garantir qu'une ligne est
 # exploitable par portfolio_db.insert_*_bulk, pas qu'elle référence un instrument réel.
 # ============================================================
 
@@ -333,7 +341,7 @@ def detect_csv_kind(df: pd.DataFrame) -> str | None:
     """'transactions'/'dividends' pour le schéma maison (voir TRANSACTION_CSV_COLUMNS/
     DIVIDEND_CSV_COLUMNS), 'trade_republic' pour un export Trade Republic brut (symbol contient un
     ISIN, pas un ticker -- la résolution ISIN -> ticker Yahoo se fait réseau, donc hors de ce
-    module, voir market_data.resolve_isin_to_ticker + callbacks.import_csv). None si le fichier ne
+    module, voir market_data.resolve_isin_to_ticker + callbacks/portefeuille_reel.py, import_csv). None si le fichier ne
     correspond à aucun des trois. Testé dans cet ordre : un fichier ayant les colonnes dividendes
     ET price serait quand même détecté "transactions" en premier."""
     cols = set(df.columns)
@@ -361,7 +369,7 @@ def extract_trade_republic_buys(df: pd.DataFrame) -> tuple[list[dict], list[tupl
     portfolio_engine.reconstruct_holdings."""
     rows, errors = [], []
     for i, row in df.iterrows():
-        line = i + 2
+        line = cast(int, i) + 2
         if row.get("account_type") != "PEA" or row.get("category") != "TRADING" or row.get("type") != "BUY":
             continue
         isin = "" if pd.isna(row.get("symbol")) else str(row.get("symbol")).strip()
@@ -404,13 +412,13 @@ def extract_trade_republic_buys(df: pd.DataFrame) -> tuple[list[dict], list[tupl
 def validate_transactions_rows(df: pd.DataFrame) -> tuple[list[dict], list[tuple[int, str]]]:
     """Valide chaque ligne (ticker/date/montant/prix présents et cohérents -- PAS la validité
     réseau du ticker). Renvoie (lignes_valides, erreurs), erreurs étant une liste de (numéro_de_
-    ligne, code_erreur) -- le code erreur est traduit par l'appelant (voir callbacks.py), cette
+    ligne, code_erreur) -- le code erreur est traduit par l'appelant (voir callbacks/portefeuille_reel.py), cette
     couche reste indépendante de la langue. numéro_de_ligne compte depuis 2 (1 pour l'en-tête,
     1 pour l'indexation à partir de 1) afin de correspondre à ce que l'utilisateur voit en ouvrant
     le fichier dans un tableur."""
     valid_rows, errors = [], []
     for i, row in df.iterrows():
-        line = i + 2
+        line = cast(int, i) + 2
         ticker = "" if pd.isna(row.get("ticker")) else str(row.get("ticker")).strip().upper()
         if not ticker:
             errors.append((line, "missing_ticker"))
@@ -452,7 +460,7 @@ def validate_dividends_rows(df: pd.DataFrame) -> tuple[list[dict], list[tuple[in
     """Même validation que validate_transactions_rows pour le schéma dividendes (pas de prix/frais)."""
     valid_rows, errors = [], []
     for i, row in df.iterrows():
-        line = i + 2
+        line = cast(int, i) + 2
         ticker = "" if pd.isna(row.get("ticker")) else str(row.get("ticker")).strip().upper()
         if not ticker:
             errors.append((line, "missing_ticker"))
@@ -519,7 +527,7 @@ def ticker_display_label(ticker: str) -> str:
 # Jalons PEA : 5 ans, plafond des versements, fiscalité latente
 # ============================================================
 
-def pea_milestones(opening_date, today, maturity_years: int = PEA_MATURITY_YEARS) -> dict:
+def pea_milestones(opening_date: DateLike, today: DateLike, maturity_years: int = PEA_MATURITY_YEARS) -> dict:
     """Date des 5 ans (date d'ouverture + 5 ans, au jour près) et compte à rebours. Une ouverture
     un 29 février tombe au 28 février (pd.DateOffset borne au dernier jour du mois), ce qui reste
     du côté prudent : on n'annonce jamais la maturité un jour trop tôt."""
@@ -535,7 +543,7 @@ def pea_milestones(opening_date, today, maturity_years: int = PEA_MATURITY_YEARS
     }
 
 
-def pea_cap_usage(transactions: pd.DataFrame, monthly_pace: float = 0.0, today=None,
+def pea_cap_usage(transactions: pd.DataFrame, monthly_pace: float = 0.0, today: DateLike | None = None,
                   cap: float = PEA_CONTRIBUTION_CAP) -> dict:
     """Part du plafond légal des versements consommée par les versements réels. Les versements
     (dépôts de cash sur le PEA) ne sont pas saisis dans l'appli : les ACHATS (montant + frais, le

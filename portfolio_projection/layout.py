@@ -1,8 +1,8 @@
 """
 Construction de l'interface Dash (sidebar, onglets) et petits helpers d'affichage
 conditionnel (visible/caché, libellé de taxe...) réutilisés à la fois ici (pour
-l'état initial des composants) et par callbacks.py, qui les enregistre comme
-callbacks Dash. Ce module ne dépend jamais de callbacks.py ni de l'instance
+l'état initial des composants) et par callbacks/shared.py, qui les enregistre comme
+callbacks Dash. Ce module ne dépend jamais du paquet callbacks/ ni de l'instance
 `app` (pour éviter tout import circulaire).
 """
 import dash_bootstrap_components as dbc
@@ -93,7 +93,7 @@ TAB_STATE_FIELDS = (
 # ============================================================
 # Fonctions pures (pas de décorateur @app.callback ici) : appelées directement
 # ci-dessous pour l'état initial des composants, et enregistrées comme
-# callbacks Dash dans callbacks.py.
+# callbacks Dash dans callbacks/shared.py.
 
 def toggle_etf_info(source):
     return {"display": "block"} if source == "etf" else {"display": "none"}
@@ -122,7 +122,7 @@ def toggle_pea_cap_container(envelope):
 def toggle_pea_overflow_container(pea_cap_val):
     """La case "Continuer sur un CTO" n'a de sens que si le plafond PEA lui-même est actif (sinon
     il n'y a jamais d'excédent à router) : la masquer dès que pea-cap-checkbox est décochée évite
-    une case visible et cochable qui ne ferait rien (route_overflow dans callbacks.py reste False
+    une case visible et cochable qui ne ferait rien (route_overflow dans callbacks/par_indice.py et portefeuille.py reste False
     tant que pea_cap est None, quoi que vaille cette case)."""
     return {"display": "block"} if (pea_cap_val and "on" in pea_cap_val) else {"display": "none"}
 
@@ -695,12 +695,12 @@ def build_tabs(lang, v=None, active_tab="tab-par-indice"):
 # ---------- Onglet 3 : portefeuille réel ----------
 # État entièrement en base (portfolio_db.py), pas dans TAB_STATE_FIELDS/CONFIG_FIELDS : un
 # changement de langue ou un import/export JSON de config ne restaure donc rien ici (il n'y a
-# rien à restaurer), le re-rendu se fait en re-interrogeant la base (voir callbacks.py).
+# rien à restaurer), le re-rendu se fait en re-interrogeant la base (voir callbacks/portefeuille_reel.py).
 def build_tab3(lang):
     # Les 3 tableaux éditables (tx/dividendes/pondérations) sont pré-remplis avec le contenu RÉEL
     # de la base dès la construction du layout, plutôt que de laisser data vide par défaut : ce
     # composant est reconstruit à chaque changement de langue (voir rebuild_on_language_change dans
-    # callbacks.py, qui remplace tabs-container en entier), et les callbacks de suppression
+    # callbacks/shared.py, qui remplace tabs-container en entier), et les callbacks de suppression
     # (delete_removed_*) interprètent un data vide comme "toutes les lignes ont été supprimées" --
     # sans ce pré-remplissage, un simple changement de langue viderait la base.
     transactions_df = portfolio_db.get_transactions()
@@ -918,7 +918,7 @@ def build_tab4(lang):
     """Backtest walk-forward (voir engine.walk_forward_calibration) : onglet indépendant des 3
     autres, sans State partagé avec eux (indice/horizon/pas propres à ce test) -- seul le
     lancement est explicite (bouton), pas réactif aux curseurs, vu le coût d'une simulation Monte
-    Carlo complète par date d'origine testée (voir callbacks.py)."""
+    Carlo complète par date d'origine testée (voir callbacks/validation.py)."""
     return html.Div([
         html.P(L(lang, "validation_intro"), className="text-muted"),
         html.Div([
