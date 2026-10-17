@@ -237,7 +237,10 @@ def _resolve_field(spec: FieldSpec, frames: dict[str, pd.DataFrame], year: pd.Ti
 # CLASSEMENT SECTORIEL
 # ============================================================
 
-ANALYSES = ("beneish", "altman", "working_capital")
+# earnings_quality : conversion du résultat en cash et accruals. Pour une banque, le CFO est dominé
+# par les flux de dépôts et de crédits (des dizaines de milliards d'une année sur l'autre) : CFO /
+# résultat net n'y mesure rien de la qualité du résultat.
+ANALYSES = ("beneish", "altman", "working_capital", "earnings_quality")
 
 
 def detect_sector_regime(sector: str | None, industry: str | None) -> dict:
@@ -247,8 +250,8 @@ def detect_sector_regime(sector: str | None, industry: str | None) -> dict:
 
     Banques et assureurs : le passif (dépôts, provisions techniques) est la matière première de
     l'activité, il n'y a ni stocks ni cycle clients/fournisseurs au sens industriel. Beneish,
-    Altman et l'analyse du BFR y produiraient des chiffres absurdes, d'où applicable=False pour
-    ces trois analyses. Renvoie {"regime": "bank" | "insurer" | "general", "caution": None |
+    Altman, l'analyse du BFR et la qualité des résultats (conversion en cash, accruals) y
+    produiraient des chiffres absurdes, d'où applicable=False pour toutes ces analyses. Renvoie {"regime": "bank" | "insurer" | "general", "caution": None |
     "third_party_funds" | "unknown_industry", "applicable": {analyse: bool}}."""
     industry = (industry or "").strip()
     if industry.startswith(BANK_INDUSTRY_PREFIXES):
@@ -334,3 +337,184 @@ def minor_unit_consistency(price: float | None, trailing_pe: float | None, trail
     empirical = price / (trailing_pe * trailing_eps)
     consistent = abs(empirical - divisor) / divisor <= tolerance
     return {"empirical_ratio": empirical, "expected_divisor": divisor, "consistent": consistent}
+
+
+# ============================================================
+# RATIOS : forme commune
+# ============================================================
+# Chaque ratio renvoie un dict, pas un simple nombre : la valeur, ses composantes (pour refaire le
+# calcul à la main), la clé de formule, les mentions (repli sur un poste voisin...) et, si la
+# valeur manque, la raison. L'interface n'a ainsi jamais à deviner pourquoi un ratio est « n.d. ».
+
+DAYS_PER_YEAR = 365
+
+# Mentions et raisons qu'un ratio peut porter (listées ici pour que l'interface puisse toutes les
+# traduire : voir test_i18n.py).
+RATIO_FLAGS = ("group_share_fallback", "broad_receivables", "broad_payables")
+RATIO_REASONS = ("missing_inputs", "non_positive_denominator", "no_prior_year")
+RATIO_DENOMINATORS = ("net_income", "revenue", "cost_of_revenue", "average_total_assets")
+BRIDGE_STEPS = ("net_income", "d_and_a", "change_in_working_capital", "other_items")
+
+
+def _ratio(formula: str, numerator: float | None, denominator: float | None, components: dict,
+           denominator_key: str, scale: float = 1.0, flags: tuple[str, ...] = ()) -> dict:
+    """Ratio numerator / denominator x scale. n.d. si une composante manque, ou si le dénominateur
+    est nul ou négatif : un ratio rapporté à une perte ou à un CA négatif inverse son sens, et le
+    lire comme les autres serait trompeur."""
+    result = {
+        "value": None, "formula": formula, "components": components, "reason": None,
+        "missing": (), "denominator": denominator_key, "flags": flags,
+    }
+    missing = tuple(key for key, value in components.items() if value is None)
+    if missing or numerator is None:
+        result["reason"], result["missing"] = "missing_inputs", missing
+        return result
+    if denominator is None or denominator <= 0:
+        result["reason"] = "non_positive_denominator"
+        return result
+    result["value"] = numerator / denominator * scale
+    return result
+
+
+def _net_income_for_cash_comparison(ns: NormalizedStatements, year: pd.Timestamp) -> tuple[float | None, tuple[str, ...]]:
+    """Résultat net à comparer au CFO : y compris minoritaires, même périmètre que le CFO consolidé
+    (qui couvre 100 % des filiales). Repli sur la part du groupe, signalé, si Yahoo ne fournit pas
+    la version y compris minoritaires."""
+    value = ns.get("net_income_incl_minorities", year)
+    if value is not None:
+        return value, ()
+    fallback = ns.get("net_income", year)
+    return fallback, ("group_share_fallback",) if fallback is not None else ()
+
+
+# ============================================================
+# QUALITÉ DES RÉSULTATS : conversion en cash et accruals
+# ============================================================
+
+def cash_conversion(ns: NormalizedStatements) -> dict[pd.Timestamp, dict]:
+    """Par exercice : CFO / résultat net et FCF / résultat net. Un résultat durablement supérieur au
+    cash qu'il génère est le premier signal d'un résultat de faible qualité (produits constatés
+    avant d'être encaissés, charges différées...)."""
+    out = {}
+    for year in ns.years:
+        net_income, flags = _net_income_for_cash_comparison(ns, year)
+        cfo, fcf = ns.get("cfo", year), ns.get("fcf", year)
+        out[year] = {
+            "cfo_to_net_income": _ratio(
+                "cfo_to_net_income", cfo, net_income, {"cfo": cfo, "net_income": net_income}, "net_income", flags=flags,
+            ),
+            "fcf_to_net_income": _ratio(
+                "fcf_to_net_income", fcf, net_income, {"fcf": fcf, "net_income": net_income}, "net_income", flags=flags,
+            ),
+        }
+    return out
+
+
+def sloan_accruals(ns: NormalizedStatements) -> dict[pd.Timestamp, dict]:
+    """Ratio d'accruals de Sloan (1996) : (résultat net - CFO) / actif total moyen de l'exercice.
+
+    La part du résultat qui ne s'est pas (encore) traduite en cash, rapportée à la taille du bilan
+    pour être comparable d'une société à l'autre. Actif moyen = (ouverture + clôture) / 2, d'où un
+    exercice le plus ancien toujours n.d. : son bilan d'ouverture n'est pas fourni par yfinance."""
+    out = {}
+    chronological = sorted(ns.years)
+    for i, year in enumerate(chronological):
+        net_income, flags = _net_income_for_cash_comparison(ns, year)
+        cfo, assets = ns.get("cfo", year), ns.get("total_assets", year)
+        if i == 0:
+            out[year] = {
+                "value": None, "formula": "sloan_accruals", "reason": "no_prior_year", "missing": (),
+                "components": {"net_income": net_income, "cfo": cfo, "total_assets": assets, "total_assets_prior": None},
+                "denominator": "average_total_assets", "flags": flags,
+            }
+            continue
+        assets_prior = ns.get("total_assets", chronological[i - 1])
+        average_assets = (assets + assets_prior) / 2 if assets is not None and assets_prior is not None else None
+        numerator = net_income - cfo if net_income is not None and cfo is not None else None
+        out[year] = _ratio(
+            "sloan_accruals", numerator, average_assets,
+            {"net_income": net_income, "cfo": cfo, "total_assets": assets, "total_assets_prior": assets_prior},
+            "average_total_assets", flags=flags,
+        )
+    return out
+
+
+def net_income_to_cfo_bridge(ns: NormalizedStatements, year: pd.Timestamp) -> dict:
+    """Pont du résultat net au CFO d'un exercice : résultat net, + dotations aux amortissements (charge
+    sans sortie de cash), + variation du BFR (signe du tableau de flux : négative quand le BFR
+    augmente), puis « autres éléments » en résidu.
+
+    Le résidu fait retomber le pont exactement sur le CFO publié. Il regroupe les postes que yfinance
+    ne détaille pas de façon homogène (impôts différés, rémunérations en actions, plus-values de
+    cession...). Un élément identifié mais absent une année donnée n'est pas pris pour 0 : il est
+    signalé comme inclus dans le résidu (missing_items). Renvoie available=False si le résultat net ou
+    le CFO manque : sans ses deux extrémités, le pont n'a pas de sens."""
+    net_income, flags = _net_income_for_cash_comparison(ns, year)
+    cfo = ns.get("cfo", year)
+    if net_income is None or cfo is None:
+        missing = tuple(key for key, value in (("net_income", net_income), ("cfo", cfo)) if value is None)
+        return {"available": False, "missing": missing, "steps": [], "cfo": cfo, "flags": flags, "missing_items": ()}
+    steps = [{"key": "net_income", "value": net_income}]
+    missing_items = []
+    for key in ("d_and_a", "change_in_working_capital"):
+        value = ns.get(key, year)
+        if value is None:
+            missing_items.append(key)
+        else:
+            steps.append({"key": key, "value": value})
+    identified = sum(step["value"] for step in steps)
+    steps.append({"key": "other_items", "value": cfo - identified})
+    return {"available": True, "missing": (), "steps": steps, "cfo": cfo, "flags": flags,
+            "missing_items": tuple(missing_items)}
+
+
+# ============================================================
+# BFR EN JOURS : DSO, DIO, DPO et cycle de conversion de trésorerie
+# ============================================================
+
+def working_capital_days(ns: NormalizedStatements) -> dict[pd.Timestamp, dict]:
+    """Par exercice, sur les soldes de CLÔTURE (pratique courante en Transaction Services, et
+    disponible sur les 4 exercices plutôt que 3 avec des soldes moyens) :
+
+    - DSO = créances clients / chiffre d'affaires x 365 ;
+    - DIO = stocks / coût des ventes x 365 ;
+    - DPO = dettes fournisseurs / coût des ventes x 365 ;
+    - cycle de conversion de trésorerie = DSO + DIO - DPO.
+
+    Sans coût des ventes (fréquent chez les sociétés européennes qui présentent leurs charges par
+    nature), DIO et DPO sont n.d. plutôt que calculés sur le CA : ils changeraient de sens et ne
+    seraient plus comparables. Les postes « Receivables »/« Payables » de Yahoo, plus larges que les
+    seuls clients/fournisseurs, restent utilisés en repli mais signalés (DSO ou DPO surestimé)."""
+    out = {}
+    for year in ns.years:
+        receivables, revenue = ns.get("receivables", year), ns.get("revenue", year)
+        inventory, cogs, payables = ns.get("inventory", year), ns.get("cost_of_revenue", year), ns.get("payables", year)
+        receivables_flags = ("broad_receivables",) if ns.provenance["receivables"][year]["source"] == "equivalent" else ()
+        payables_flags = ("broad_payables",) if ns.provenance["payables"][year]["source"] == "equivalent" else ()
+        dso = _ratio("dso", receivables, revenue, {"receivables": receivables, "revenue": revenue}, "revenue",
+                     scale=DAYS_PER_YEAR, flags=receivables_flags)
+        dio = _ratio("dio", inventory, cogs, {"inventory": inventory, "cost_of_revenue": cogs}, "cost_of_revenue",
+                     scale=DAYS_PER_YEAR)
+        dpo = _ratio("dpo", payables, cogs, {"payables": payables, "cost_of_revenue": cogs}, "cost_of_revenue",
+                     scale=DAYS_PER_YEAR, flags=payables_flags)
+        parts = {"dso": dso["value"], "dio": dio["value"], "dpo": dpo["value"]}
+        missing = tuple(key for key, value in parts.items() if value is None)
+        ccc = {
+            "value": None if missing else parts["dso"] + parts["dio"] - parts["dpo"],
+            "formula": "ccc", "components": parts, "reason": "missing_inputs" if missing else None,
+            "missing": missing, "denominator": None, "flags": receivables_flags + payables_flags,
+        }
+        out[year] = {"dso": dso, "dio": dio, "dpo": dpo, "ccc": ccc}
+    return out
+
+
+def metric_trend(series_by_year: dict[pd.Timestamp, dict], metric: str) -> dict | None:
+    """Évolution d'un indicateur entre le plus ancien et le plus récent exercice où il est
+    disponible : {"first_year", "last_year", "first", "last", "delta"}. None s'il est disponible sur
+    moins de deux exercices (pas d'évolution à mesurer)."""
+    points = [(year, values[metric]["value"]) for year, values in sorted(series_by_year.items())
+              if values[metric]["value"] is not None]
+    if len(points) < 2:
+        return None
+    (first_year, first), (last_year, last) = points[0], points[-1]
+    return {"first_year": first_year, "last_year": last_year, "first": first, "last": last, "delta": last - first}

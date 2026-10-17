@@ -92,6 +92,7 @@ TRANSLATIONS = {
         "analysis_beneish": "Beneish M-score",
         "analysis_altman": "Altman Z-score",
         "analysis_working_capital": "analyse du BFR",
+        "analysis_earnings_quality": "qualité des résultats (conversion en cash, accruals)",
         # ---------- États financiers ----------
         "section_statements": "États financiers normalisés",
         "coverage_note": "yfinance ne fournit qu'environ {typical} exercices annuels : {n} exercice(s) "
@@ -113,6 +114,100 @@ TRANSLATIONS = {
         "prov_missing_derivation": "n.d. : absent des données yfinance, et non dérivable ({formula}) faute "
                                    "de : {missing}.",
         # ---------- Postes ----------
+        # ---------- Qualité des résultats ----------
+        "section_earnings_quality": "Qualité des résultats",
+        "section_bridge": "Du résultat net au cash d'exploitation",
+        "section_working_capital": "BFR en jours",
+        "section_not_applicable": "{regime} : analyse non applicable (voir l'encadré en haut de page).",
+        "col_metric": "Indicateur",
+        "col_trend": "Évolution",
+        "trend_text": "{delta} ({first} → {last})",
+        "trend_na": "n.d. (moins de 2 exercices)",
+        "unit_days": "j",
+        "ratio_cfo_to_net_income": "CFO / résultat net",
+        "ratio_cfo_to_net_income_help": "Mesure la part du résultat effectivement encaissée. Formule : flux de "
+                                        "trésorerie d'exploitation ÷ résultat net y compris minoritaires (même "
+                                        "périmètre que le CFO consolidé). Lecture : autour de 1 ou plus, le résultat "
+                                        "est adossé à du cash ; durablement sous 0,8, il dépasse le cash qu'il génère, "
+                                        "signal à creuser (produits constatés avant encaissement, BFR qui gonfle). "
+                                        "Sous IFRS 16, les remboursements de dettes locatives sont classés en "
+                                        "financement : le CFO des sociétés très locataires (distribution) en est "
+                                        "gonflé. Non interprétable si le résultat est nul ou négatif.",
+        "ratio_fcf_to_net_income": "FCF / résultat net",
+        "ratio_fcf_to_net_income_help": "Mesure le cash restant après investissements, par euro de résultat. Formule "
+                                        ": (CFO + capex, le capex étant négatif) ÷ résultat net y compris "
+                                        "minoritaires. Lecture : proche de 1, le résultat devient du cash disponible ; "
+                                        "durablement bas ou négatif, les investissements absorbent le résultat "
+                                        "(normal en phase d'investissement, inquiétant si cela dure). Non "
+                                        "interprétable si le résultat est nul ou négatif.",
+        "ratio_sloan_accruals": "Accruals (Sloan)",
+        "ratio_sloan_accruals_help": "Mesure la part du résultat non encore traduite en cash, rapportée à la taille "
+                                     "du bilan. Formule : (résultat net − CFO) ÷ actif total moyen, soit (ouverture "
+                                     "+ clôture) / 2. Lecture : proche de 0 ou négatif, le résultat est adossé au "
+                                     "cash ; au-delà d'environ +10 % de l'actif, signal d'alerte : Sloan (1996) "
+                                     "montre que les sociétés aux accruals les plus élevés voient ensuite leurs "
+                                     "résultats se dégrader. Exercice le plus ancien n.d. faute de bilan "
+                                     "d'ouverture.",
+        "ratio_dso": "DSO (jours de créances clients)",
+        "ratio_dso_help": "Mesure le délai moyen d'encaissement des clients. Formule : créances clients de clôture ÷ "
+                          "chiffre d'affaires × 365. Lecture : à comparer aux délais du secteur (en France, la loi "
+                          "LME plafonne les délais entre entreprises à 60 jours, ou 45 jours fin de mois) ; une hausse "
+                          "sans croissance du chiffre d'affaires peut signaler des difficultés d'encaissement ou une "
+                          "comptabilisation agressive du chiffre d'affaires.",
+        "ratio_dio": "DIO (jours de stocks)",
+        "ratio_dio_help": "Mesure combien de jours de coût des ventes les stocks représentent. Formule : stocks de "
+                          "clôture ÷ coût des ventes × 365. Lecture : à comparer au secteur et à son propre historique "
+                          "; une hausse durable peut signaler des stocks lents ou obsolètes (risque de dépréciation). "
+                          "n.d. sans coût des ventes : le calculer sur le chiffre d'affaires en changerait le sens.",
+        "ratio_dpo": "DPO (jours de dettes fournisseurs)",
+        "ratio_dpo_help": "Mesure le délai moyen de paiement des fournisseurs. Formule : dettes fournisseurs de "
+                          "clôture ÷ coût des ventes × 365. Lecture : une hausse fait financer le BFR par les "
+                          "fournisseurs ; très au-delà des délais légaux ou du secteur, elle peut traduire une tension "
+                          "de trésorerie. n.d. sans coût des ventes.",
+        "ratio_ccc": "Cycle de conversion de trésorerie",
+        "ratio_ccc_help": "Mesure le nombre de jours pendant lesquels l'exploitation immobilise du cash, entre le "
+                          "paiement des fournisseurs et l'encaissement des clients. Formule : DSO + DIO − DPO. Lecture "
+                          ": plus il est court, moins l'activité consomme de trésorerie ; négatif, les fournisseurs "
+                          "financent l'exploitation (grande distribution par exemple). Une hausse continue signale une "
+                          "dégradation du BFR.",
+        "formula_cfo_to_net_income": "CFO {cfo} ÷ résultat net {net_income}",
+        "formula_fcf_to_net_income": "FCF {fcf} ÷ résultat net {net_income}",
+        "formula_sloan_accruals": "(résultat net {net_income} − CFO {cfo}) ÷ actif moyen (({total_assets} + "
+                                  "{total_assets_prior}) / 2)",
+        "formula_dso": "créances clients {receivables} ÷ CA {revenue} × 365",
+        "formula_dio": "stocks {inventory} ÷ coût des ventes {cost_of_revenue} × 365",
+        "formula_dpo": "dettes fournisseurs {payables} ÷ coût des ventes {cost_of_revenue} × 365",
+        "formula_ccc": "DSO {dso} + DIO {dio} − DPO {dpo}",
+        "reason_missing_inputs": "n.d. : donnée manquante ({missing}).",
+        "reason_non_positive_denominator": "n.d. : {denominator} nul ou négatif, ratio non interprétable.",
+        "reason_no_prior_year": "n.d. : pas de bilan d'ouverture (exercice le plus ancien disponible).",
+        "denominator_net_income": "résultat net",
+        "denominator_revenue": "chiffre d'affaires",
+        "denominator_cost_of_revenue": "coût des ventes",
+        "denominator_average_total_assets": "actif total moyen",
+        "flag_group_share_fallback": "Résultat net part du groupe utilisé : la version y compris minoritaires "
+                                     "n'est pas fournie par Yahoo.",
+        "flag_broad_receivables": "Poste « Receivables » plus large utilisé : DSO surestimé (inclut des créances "
+                                  "hors clients).",
+        "flag_broad_payables": "Poste « Payables » plus large utilisé : DPO surestimé (inclut des dettes hors "
+                               "fournisseurs).",
+        "bridge_year_label": "Exercice",
+        "bridge_title": "Du résultat net au CFO ({year})",
+        "bridge_step_net_income": "Résultat net (y c. minoritaires)",
+        "bridge_step_d_and_a": "Dotations aux amortissements",
+        "bridge_step_change_in_working_capital": "Variation du BFR",
+        "bridge_step_other_items": "Autres éléments",
+        "bridge_cfo": "CFO publié",
+        "bridge_help": "Explique l'écart entre résultat et cash : les dotations sont des charges sans sortie de "
+                       "trésorerie, la variation du BFR mesure le cash absorbé (négatif) ou libéré (positif) par les "
+                       "stocks, créances et dettes d'exploitation. « Autres éléments » est le résidu qui fait "
+                       "retomber le pont exactement sur le CFO publié (impôts différés, rémunérations en actions, "
+                       "plus-values de cession...).",
+        "bridge_missing_items": "Non fournis par Yahoo pour cet exercice, donc inclus dans « Autres éléments » : "
+                                "{items}.",
+        "bridge_unavailable": "Pont indisponible pour cet exercice : {missing} manquant.",
+        "days_chart_title": "Évolution des jours de BFR",
+        "days_axis": "Jours",
         "field_revenue": "Chiffre d'affaires",
         "field_revenue_help": "Produits de l'activité ordinaire de l'exercice, hors taxes.",
         "field_cost_of_revenue": "Coût des ventes",
@@ -285,6 +380,7 @@ TRANSLATIONS = {
         "analysis_beneish": "Beneish M-score",
         "analysis_altman": "Altman Z-score",
         "analysis_working_capital": "working capital analysis",
+        "analysis_earnings_quality": "earnings quality (cash conversion, accruals)",
         "section_statements": "Normalized financial statements",
         "coverage_note": "yfinance only provides about {typical} annual fiscal years: {n} usable year(s) here "
                          "({years}). Trends and scores comparing two fiscal years therefore rest on a short "
@@ -304,6 +400,92 @@ TRANSLATIONS = {
         "prov_missing_not_in_yfinance": "n/a: item missing from yfinance data for this fiscal year.",
         "prov_missing_derivation": "n/a: missing from yfinance data, and not derivable ({formula}) for lack "
                                    "of: {missing}.",
+        "section_earnings_quality": "Earnings quality",
+        "section_bridge": "From net income to operating cash flow",
+        "section_working_capital": "Working capital in days",
+        "section_not_applicable": "{regime}: analysis not applicable (see the box at the top of the page).",
+        "col_metric": "Metric",
+        "col_trend": "Change",
+        "trend_text": "{delta} ({first} → {last})",
+        "trend_na": "n/a (fewer than 2 fiscal years)",
+        "unit_days": "d",
+        "ratio_cfo_to_net_income": "CFO / net income",
+        "ratio_cfo_to_net_income_help": "Measures the share of earnings actually collected in cash. Formula: cash "
+                                        "flow from operations ÷ net income including minorities (same scope as the "
+                                        "consolidated CFO). Reading: around 1 or above, earnings are backed by cash; "
+                                        "persistently below 0.8, earnings exceed the cash they generate, a signal to "
+                                        "investigate (revenue booked before collection, growing working capital). "
+                                        "Under IFRS 16, lease principal repayments are classified as financing: the "
+                                        "CFO of heavy lessees (retail) is inflated accordingly. Not meaningful if "
+                                        "net income is zero or negative.",
+        "ratio_fcf_to_net_income": "FCF / net income",
+        "ratio_fcf_to_net_income_help": "Measures the cash left after investment, per unit of earnings. Formula: (CFO "
+                                        "+ capex, capex being negative) ÷ net income including minorities. Reading: "
+                                        "close to 1, earnings turn into free cash; persistently low or negative, "
+                                        "investment absorbs earnings (normal during an investment phase, worrying if "
+                                        "it lasts). Not meaningful if net income is zero or negative.",
+        "ratio_sloan_accruals": "Accruals (Sloan)",
+        "ratio_sloan_accruals_help": "Measures the share of earnings not yet turned into cash, scaled by balance "
+                                     "sheet size. Formula: (net income − CFO) ÷ average total assets, i.e. (opening "
+                                     "+ closing) / 2. Reading: close to 0 or negative, earnings are backed by cash; "
+                                     "above roughly +10% of assets, a warning sign: Sloan (1996) shows that firms "
+                                     "with the highest accruals subsequently see their earnings deteriorate. The "
+                                     "oldest fiscal year is n/a for lack of an opening balance sheet.",
+        "ratio_dso": "DSO (days sales outstanding)",
+        "ratio_dso_help": "Measures the average customer collection period. Formula: closing trade receivables ÷ "
+                          "revenue × 365. Reading: compare with the sector's payment terms (in France, the LME law caps "
+                          "business-to-business terms at 60 days, or 45 days end of month); a rise without revenue "
+                          "growth may signal collection problems or aggressive revenue recognition.",
+        "ratio_dio": "DIO (days inventory outstanding)",
+        "ratio_dio_help": "Measures how many days of cost of revenue inventories represent. Formula: closing "
+                          "inventories ÷ cost of revenue × 365. Reading: compare with the sector and the company's own "
+                          "history; a lasting rise may signal slow-moving or obsolete stock (impairment risk). n/a "
+                          "without cost of revenue: computing it on revenue would change its meaning.",
+        "ratio_dpo": "DPO (days payables outstanding)",
+        "ratio_dpo_help": "Measures the average supplier payment period. Formula: closing trade payables ÷ cost of "
+                          "revenue × 365. Reading: a rise makes suppliers finance working capital; far beyond legal or "
+                          "sector terms, it may reflect cash strain. n/a without cost of revenue.",
+        "ratio_ccc": "Cash conversion cycle",
+        "ratio_ccc_help": "Measures the number of days the business ties up cash, between paying suppliers and "
+                          "collecting from customers. Formula: DSO + DIO − DPO. Reading: the shorter, the less cash the "
+                          "business consumes; negative, suppliers finance operations (retail for example). A steady "
+                          "rise signals deteriorating working capital.",
+        "formula_cfo_to_net_income": "CFO {cfo} ÷ net income {net_income}",
+        "formula_fcf_to_net_income": "FCF {fcf} ÷ net income {net_income}",
+        "formula_sloan_accruals": "(net income {net_income} − CFO {cfo}) ÷ average assets (({total_assets} + "
+                                  "{total_assets_prior}) / 2)",
+        "formula_dso": "trade receivables {receivables} ÷ revenue {revenue} × 365",
+        "formula_dio": "inventories {inventory} ÷ cost of revenue {cost_of_revenue} × 365",
+        "formula_dpo": "trade payables {payables} ÷ cost of revenue {cost_of_revenue} × 365",
+        "formula_ccc": "DSO {dso} + DIO {dio} − DPO {dpo}",
+        "reason_missing_inputs": "n/a: missing data ({missing}).",
+        "reason_non_positive_denominator": "n/a: {denominator} zero or negative, ratio not meaningful.",
+        "reason_no_prior_year": "n/a: no opening balance sheet (oldest fiscal year available).",
+        "denominator_net_income": "net income",
+        "denominator_revenue": "revenue",
+        "denominator_cost_of_revenue": "cost of revenue",
+        "denominator_average_total_assets": "average total assets",
+        "flag_group_share_fallback": "Group-share net income used: the version including minorities is not "
+                                     "provided by Yahoo.",
+        "flag_broad_receivables": "Broader \"Receivables\" item used: DSO overstated (includes non-trade "
+                                  "receivables).",
+        "flag_broad_payables": "Broader \"Payables\" item used: DPO overstated (includes non-trade payables).",
+        "bridge_year_label": "Fiscal year",
+        "bridge_title": "From net income to CFO ({year})",
+        "bridge_step_net_income": "Net income (incl. minorities)",
+        "bridge_step_d_and_a": "Depreciation and amortization",
+        "bridge_step_change_in_working_capital": "Change in working capital",
+        "bridge_step_other_items": "Other items",
+        "bridge_cfo": "Published CFO",
+        "bridge_help": "Explains the gap between earnings and cash: depreciation is a non-cash charge, the change in "
+                       "working capital measures the cash absorbed (negative) or released (positive) by inventories, "
+                       "receivables and operating payables. \"Other items\" is the residual that makes the bridge land "
+                       "exactly on the published CFO (deferred taxes, share-based pay, disposal gains...).",
+        "bridge_missing_items": "Not provided by Yahoo for this fiscal year, hence included in \"Other items\": "
+                                "{items}.",
+        "bridge_unavailable": "Bridge unavailable for this fiscal year: {missing} missing.",
+        "days_chart_title": "Working capital days over time",
+        "days_axis": "Days",
         "field_revenue": "Revenue",
         "field_revenue_help": "Revenue from ordinary activities for the fiscal year, excluding taxes.",
         "field_cost_of_revenue": "Cost of revenue",

@@ -157,6 +157,124 @@ def statement_table(normalized: NormalizedStatements, statement: str, lang: str,
     )
 
 
+# ============================================================
+# Ratios : affichage et détail du calcul
+# ============================================================
+# Unité d'affichage de chaque ratio : multiple (1,52x), pourcentage (-5,0 %) ou jours (44 j).
+RATIO_KINDS = {
+    "cfo_to_net_income": "multiple", "fcf_to_net_income": "multiple", "sloan_accruals": "percent",
+    "dso": "days", "dio": "days", "dpo": "days", "ccc": "days",
+}
+
+
+def format_ratio(value: float | None, kind: str, lang: str, signed: bool = False) -> str:
+    if value is None:
+        return L(lang, "na")
+    if kind == "percent":
+        return f"{value * 100:+.1f} %" if signed or value < 0 else f"{value * 100:.1f} %"
+    if kind == "days":
+        return f"{value:+.0f} {L(lang, 'unit_days')}" if signed else f"{value:.0f} {L(lang, 'unit_days')}"
+    return f"{value:+.2f}x" if signed else f"{value:.2f}x"
+
+
+def _component_label(key: str, lang: str) -> str:
+    """Nom lisible d'une composante : poste des états financiers, ou ratio (le cycle de conversion se
+    compose de DSO, DIO et DPO)."""
+    field_label = L(lang, f"field_{key}")
+    return field_label if field_label != f"field_{key}" else L(lang, f"ratio_{key}")
+
+
+def ratio_tooltip(result: dict, lang: str) -> str:
+    """Détail du calcul d'un ratio : formule remplie avec les montants réels, puis mentions (repli sur
+    un poste voisin...) et, si la valeur manque, la raison. De quoi refaire le calcul à la main."""
+    components = result["components"]
+    formatted = {
+        key: (format_ratio(value, RATIO_KINDS[key], lang) if key in RATIO_KINDS else format_amount(value, lang))
+        for key, value in components.items()
+    }
+    lines = [L(lang, f"formula_{result['formula']}", **formatted)]
+    if result["value"] is not None:
+        lines[0] += f" = {format_ratio(result['value'], RATIO_KINDS[result['formula']], lang)}"
+    elif result["reason"] == "missing_inputs":
+        lines.append(L(lang, "reason_missing_inputs",
+                       missing=", ".join(_component_label(key, lang) for key in result["missing"])))
+    elif result["reason"] == "non_positive_denominator":
+        lines.append(L(lang, "reason_non_positive_denominator",
+                       denominator=L(lang, f"denominator_{result['denominator']}")))
+    elif result["reason"] == "no_prior_year":
+        lines.append(L(lang, "reason_no_prior_year"))
+    lines += [L(lang, f"flag_{flag}") for flag in result["flags"]]
+    # Un paragraphe par ligne : les infobulles dash_table sont rendues en markdown (voir ratio_table),
+    # où un simple retour à la ligne serait fusionné avec la ligne précédente.
+    return "\n\n".join(lines)
+
+
+def ratio_table(results_by_year: dict, metrics: tuple[str, ...], years: list, lang: str, dark: bool,
+                table_id: str, trends: dict | None = None):
+    """Tableau d'indicateurs : une ligne par ratio, une colonne par exercice (du plus récent au plus
+    ancien, comme les états financiers), et une colonne d'évolution si trends est fourni. L'en-tête de
+    ligne porte la définition du ratio (ce qu'il mesure, formule, seuil), chaque cellule le détail de
+    son calcul. Cellules avec une mention (repli) en italique, n.d. en gris."""
+    year_ids = [f"y{i}" for i in range(len(years))]
+    columns = [{"name": L(lang, "col_metric"), "id": "metric"}] + [
+        {"name": format_year(year, lang), "id": year_id} for year, year_id in zip(years, year_ids)
+    ]
+    if trends is not None:
+        columns.append({"name": L(lang, "col_trend"), "id": "trend"})
+    rows, tooltips = [], []
+    for metric in metrics:
+        kind = RATIO_KINDS[metric]
+        row = {"metric": L(lang, f"ratio_{metric}")}
+        tooltip = {"metric": {"value": L(lang, f"ratio_{metric}_help"), "type": "text"}}
+        for year, year_id in zip(years, year_ids):
+            result = results_by_year[year][metric]
+            row[year_id] = format_ratio(result["value"], kind, lang)
+            row[f"_state_{year_id}"] = "na" if result["value"] is None else ("flagged" if result["flags"] else "ok")
+            tooltip[year_id] = {"value": ratio_tooltip(result, lang), "type": "markdown"}
+        if trends is not None:
+            trend = trends.get(metric)
+            row["trend"] = L(lang, "trend_na") if trend is None else L(
+                lang, "trend_text", delta=format_ratio(trend["delta"], kind, lang, signed=True),
+                first=trend["first_year"].year, last=trend["last_year"].year,
+            )
+        rows.append(row)
+        tooltips.append(tooltip)
+
+    style_header, style_cell, style_data = table_style_overrides(dark)
+    muted = "#8b93a7" if dark else "#8a8f99"
+    conditional = []
+    for year_id in year_ids:
+        conditional.append({"if": {"column_id": year_id, "filter_query": f"{{_state_{year_id}}} = flagged"},
+                            "fontStyle": "italic"})
+        conditional.append({"if": {"column_id": year_id, "filter_query": f"{{_state_{year_id}}} = na"}, "color": muted})
+    return dash_table.DataTable(
+        id=table_id, columns=columns, data=rows, tooltip_data=tooltips, tooltip_delay=0, tooltip_duration=None,
+        style_header=style_header, style_cell=style_cell, style_data=style_data,
+        style_cell_conditional=[
+            {"if": {"column_id": "metric"}, "textAlign": "left", "minWidth": "260px"},
+            {"if": {"column_id": "trend"}, "minWidth": "170px"},
+        ],
+        style_data_conditional=conditional, style_table={"overflowX": "auto"},
+    )
+
+
+def bridge_controls(years: list, lang: str):
+    """Sélecteur d'exercice du pont résultat net -> CFO (exercice le plus récent par défaut) et
+    emplacements du graphique et de ses notes, remplis par callbacks.update_bridge."""
+    return html.Div([
+        html.Div([dbc.Label(L(lang, "bridge_year_label"), className="mb-0")] + info_tooltip(
+            "bridge-help-info", L(lang, "bridge_help"),
+        )),
+        dcc.Dropdown(
+            id="bridge-year-dropdown",
+            options=[{"label": format_year(year, lang), "value": year.isoformat()} for year in years],
+            value=years[0].isoformat(), clearable=False, style={"width": "200px"},
+        ),
+        dcc.Graph(id="bridge-graph", config=GRAPH_CONFIG),
+        html.Div(id="bridge-notes", className="text-muted", style={"fontSize": "0.8rem"}),
+    ])
+
+
 def _stat(label: str, value_text: str, extra=None):
     children = [html.Small(label, className="text-muted d-block"), html.H6(value_text, className="mb-0")]
     if extra is not None:

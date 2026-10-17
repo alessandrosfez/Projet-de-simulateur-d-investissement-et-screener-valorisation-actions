@@ -191,7 +191,7 @@ def test_available_count():
 def test_banks_are_detected_and_analyses_disabled(industry):
     regime = m.detect_sector_regime("Financial Services", industry)
     assert regime["regime"] == "bank"
-    assert regime["applicable"] == {"beneish": False, "altman": False, "working_capital": False}
+    assert regime["applicable"] == {"beneish": False, "altman": False, "working_capital": False, "earnings_quality": False}
 
 
 @pytest.mark.parametrize("industry", ["Insurance - Diversified", "Insurance - Life", "Insurance - Reinsurance"])
@@ -216,7 +216,7 @@ def test_industrial_company_has_everything_applicable():
     regime = m.detect_sector_regime("Basic Materials", "Specialty Chemicals")
     assert regime == {
         "regime": "general", "caution": None,
-        "applicable": {"beneish": True, "altman": True, "working_capital": True},
+        "applicable": {"beneish": True, "altman": True, "working_capital": True, "earnings_quality": True},
         "sector": "Basic Materials", "industry": "Specialty Chemicals",
     }
 
@@ -285,3 +285,142 @@ def test_minor_unit_consistency_flags_mismatch():
 def test_minor_unit_consistency_not_computable_without_positive_pe():
     assert m.minor_unit_consistency(100.0, None, 2.0, 1.0)["consistent"] is None
     assert m.minor_unit_consistency(100.0, -5.0, -2.0, 1.0)["consistent"] is None
+
+
+# ---------- qualité des résultats (cas calculés à la main) ----------
+
+def _quality_case(**overrides):
+    """Société synthétique sur deux exercices, chiffres ronds pour un calcul à la main."""
+    income = {"Net Income Including Noncontrolling Interests": [100, 80], "Net Income": [90, 72],
+              "Total Revenue": [1000, 900], "Cost Of Revenue": [600, 540], "Reconciled Depreciation": [30, 28]}
+    balance = {"Total Assets": [1100, 900], "Accounts Receivable": [120, 100], "Inventory": [80, 75],
+               "Accounts Payable": [90, 70]}
+    cashflow = {"Operating Cash Flow": [150, 70], "Capital Expenditure": [-50, -40], "Change In Working Capital": [-20, -15]}
+    for group in (income, balance, cashflow):
+        for label, values in overrides.items():
+            if label in group:
+                group[label] = values
+    extra = {k: v for k, v in overrides.items() if not any(k in g for g in (income, balance, cashflow))}
+    for label, (statement, values) in extra.items():
+        {"income": income, "balance": balance, "cashflow": cashflow}[statement][label] = values
+    return m.normalize_statements(_frame(income), _frame(balance), _frame(cashflow))
+
+
+def test_cash_conversion_uses_net_income_including_minorities():
+    # CFO 150 / RN y compris minoritaires 100 = 1,5 (pas 150 / 90, la part du groupe).
+    # FCF = CFO 150 + capex -50 = 100 -> FCF / RN = 100 / 100 = 1,0.
+    result = m.cash_conversion(_quality_case())[Y1]
+    assert result["cfo_to_net_income"]["value"] == pytest.approx(1.5)
+    assert result["fcf_to_net_income"]["value"] == pytest.approx(1.0)
+    assert result["cfo_to_net_income"]["components"] == {"cfo": 150.0, "net_income": 100.0}
+    assert result["cfo_to_net_income"]["flags"] == ()
+
+
+def test_cash_conversion_falls_back_to_group_share_and_flags_it():
+    ns = _quality_case(**{"Net Income Including Noncontrolling Interests": [np.nan, np.nan]})
+    result = m.cash_conversion(ns)[Y1]["cfo_to_net_income"]
+    assert result["value"] == pytest.approx(150 / 90)
+    assert result["flags"] == ("group_share_fallback",)
+
+
+def test_cash_conversion_not_meaningful_on_a_loss():
+    ns = _quality_case(**{"Net Income Including Noncontrolling Interests": [-40, 80]})
+    result = m.cash_conversion(ns)[Y1]["cfo_to_net_income"]
+    assert result["value"] is None
+    assert result["reason"] == "non_positive_denominator"
+    assert result["denominator"] == "net_income"
+
+
+def test_cash_conversion_missing_cfo_is_reported():
+    ns = _quality_case(**{"Operating Cash Flow": [np.nan, 70]})
+    result = m.cash_conversion(ns)[Y1]
+    assert result["cfo_to_net_income"]["reason"] == "missing_inputs"
+    assert result["cfo_to_net_income"]["missing"] == ("cfo",)
+    # Le FCF n'est pas publié ici et sa dérivation (CFO + capex) échoue aussi.
+    assert result["fcf_to_net_income"]["missing"] == ("fcf",)
+
+
+def test_sloan_accruals_on_average_total_assets():
+    # (RN 100 - CFO 150) / ((1 100 + 900) / 2) = -50 / 1 000 = -5 % : CFO supérieur au résultat.
+    result = m.sloan_accruals(_quality_case())
+    assert result[Y1]["value"] == pytest.approx(-0.05)
+    assert result[Y1]["components"] == {"net_income": 100.0, "cfo": 150.0, "total_assets": 1100.0,
+                                        "total_assets_prior": 900.0}
+
+
+def test_sloan_accruals_oldest_year_has_no_opening_balance():
+    result = m.sloan_accruals(_quality_case())
+    assert result[Y0]["value"] is None
+    assert result[Y0]["reason"] == "no_prior_year"
+
+
+def test_sloan_accruals_positive_when_earnings_exceed_cash():
+    # (100 - 60) / 1 000 = +4 % : 40 de résultat non encore encaissé.
+    ns = _quality_case(**{"Operating Cash Flow": [60, 70]})
+    assert m.sloan_accruals(ns)[Y1]["value"] == pytest.approx(0.04)
+
+
+def test_bridge_reconciles_exactly_to_cfo():
+    # RN 100 + dotations 30 + variation BFR -20 = 110 ; autres éléments = 150 - 110 = 40.
+    bridge = m.net_income_to_cfo_bridge(_quality_case(), Y1)
+    assert bridge["available"] is True
+    assert [(s["key"], s["value"]) for s in bridge["steps"]] == [
+        ("net_income", 100.0), ("d_and_a", 30.0), ("change_in_working_capital", -20.0), ("other_items", 40.0),
+    ]
+    assert sum(s["value"] for s in bridge["steps"]) == pytest.approx(bridge["cfo"])
+
+
+def test_bridge_missing_item_goes_into_residual_and_is_reported_not_zeroed():
+    ns = _quality_case(**{"Change In Working Capital": [np.nan, -15]})
+    bridge = m.net_income_to_cfo_bridge(ns, Y1)
+    assert bridge["missing_items"] == ("change_in_working_capital",)
+    assert [s["key"] for s in bridge["steps"]] == ["net_income", "d_and_a", "other_items"]
+    assert bridge["steps"][-1]["value"] == pytest.approx(150 - 100 - 30)
+
+
+def test_bridge_unavailable_without_cfo():
+    ns = _quality_case(**{"Operating Cash Flow": [np.nan, 70]})
+    bridge = m.net_income_to_cfo_bridge(ns, Y1)
+    assert bridge["available"] is False
+    assert bridge["missing"] == ("cfo",)
+
+
+# ---------- BFR en jours (cas calculés à la main) ----------
+
+def test_working_capital_days_on_closing_balances():
+    # DSO = 120 / 1 000 × 365 = 43,8 j ; DIO = 80 / 600 × 365 = 48,67 j ; DPO = 90 / 600 × 365 = 54,75 j.
+    # Cycle = 43,8 + 48,67 - 54,75 = 37,72 j.
+    days = m.working_capital_days(_quality_case())[Y1]
+    assert days["dso"]["value"] == pytest.approx(43.8)
+    assert days["dio"]["value"] == pytest.approx(80 / 600 * 365)
+    assert days["dpo"]["value"] == pytest.approx(54.75)
+    assert days["ccc"]["value"] == pytest.approx(43.8 + 80 / 600 * 365 - 54.75)
+
+
+def test_dio_and_dpo_not_computed_on_revenue_when_cost_of_revenue_missing():
+    ns = _quality_case(**{"Cost Of Revenue": [np.nan, np.nan]})
+    days = m.working_capital_days(ns)[Y1]
+    assert days["dso"]["value"] == pytest.approx(43.8)
+    assert days["dio"]["value"] is None and days["dio"]["missing"] == ("cost_of_revenue",)
+    assert days["dpo"]["value"] is None
+    assert days["ccc"]["value"] is None and days["ccc"]["missing"] == ("dio", "dpo")
+
+
+def test_broad_receivables_used_but_flagged():
+    ns = _quality_case(**{"Accounts Receivable": [np.nan, np.nan], "Receivables": ("balance", [150, 130])})
+    days = m.working_capital_days(ns)[Y1]
+    assert days["dso"]["value"] == pytest.approx(150 / 1000 * 365)
+    assert days["dso"]["flags"] == ("broad_receivables",)
+    assert "broad_receivables" in days["ccc"]["flags"]
+
+
+def test_metric_trend_first_to_last_available_year():
+    # DSO 2023 = 100 / 900 × 365 = 40,56 j -> 2024 = 43,8 j.
+    trend = m.metric_trend(m.working_capital_days(_quality_case()), "dso")
+    assert trend["first_year"] == Y0 and trend["last_year"] == Y1
+    assert trend["delta"] == pytest.approx(43.8 - 100 / 900 * 365)
+
+
+def test_metric_trend_needs_two_points():
+    days = m.working_capital_days(_quality_case(**{"Accounts Receivable": [120, np.nan]}))
+    assert m.metric_trend(days, "dso") is None
