@@ -712,6 +712,40 @@ TRANSLATIONS = {
         "import_unit_thousands": "milliers",
         "import_unit_millions": "millions",
         "import_unit_billions": "milliards",
+        # ---------- Databook Excel ----------
+        "databook_btn": "Exporter le databook (Excel)",
+        "databook_help": "Classeur Excel de toute l'analyse, un onglet par section : synthèse, états normalisés "
+                         "et provenance de chaque chiffre, qualité des résultats, BFR, scores (Altman avec ses deux "
+                         "modèles), dette nette et EBITDA ajusté avec tes saisies. Chiffres en cellules numériques, "
+                         "« n.d. » pour une donnée absente.",
+        "databook_filename": "databook_{name}.xlsx",
+        "sheet_summary": "Synthèse",
+        "sheet_statements": "États financiers",
+        "sheet_provenance": "Provenance",
+        "sheet_earnings_quality": "Qualité des résultats",
+        "sheet_working_capital": "BFR",
+        "sheet_scores": "Scores",
+        "sheet_transaction": "Dette nette et EBITDA",
+        "databook_title": "{company} : databook d'analyse financière",
+        "databook_source_yahoo": "Yahoo Finance (ticker {ticker})",
+        "databook_source_import": "Fichier importé : {filename}",
+        "databook_label_source": "Source des comptes",
+        "databook_label_years": "Exercices",
+        "databook_label_regime": "Régime",
+        "databook_label_export_date": "Date d'export",
+        "databook_key_indicators": "Indicateurs clés (dernier exercice ou dernier couple d'exercices)",
+        "databook_col_period": "Exercice",
+        "databook_col_value": "Valeur",
+        "databook_col_reading": "Lecture",
+        "databook_not_applicable": "{regime} : non applicable",
+        "databook_indicative_only": "M-score officiel n.d. : variante indicative, indices manquants neutralisés à 1 "
+                                    "(voir l'onglet Scores).",
+        "databook_values_note": "Valeurs calculées par l'outil et écrites telles quelles (pas de formules Excel) : le "
+                                "détail de chaque calcul figure à côté, et « n.d. » signale une donnée absente, jamais "
+                                "remplacée par 0.",
+        "databook_calculation_detail": "Détail du calcul",
+        "databook_altman_default": "Les deux modèles sont présentés ; modèle retenu par défaut pour le secteur : "
+                                   "{model}.",
     },
     "en": {
         "app_title": "Financial analysis: quality and soundness of the accounts (work in progress)",
@@ -1371,6 +1405,38 @@ TRANSLATIONS = {
         "import_unit_thousands": "thousands",
         "import_unit_millions": "millions",
         "import_unit_billions": "billions",
+        # ---------- Excel databook ----------
+        "databook_btn": "Export the databook (Excel)",
+        "databook_help": "Excel workbook of the whole analysis, one sheet per section: summary, normalized "
+                         "statements and the provenance of every figure, earnings quality, working capital, scores "
+                         "(Altman with both models), net debt and adjusted EBITDA with your inputs. Figures in "
+                         "numeric cells, \"n/a\" for missing data.",
+        "databook_filename": "databook_{name}.xlsx",
+        "sheet_summary": "Summary",
+        "sheet_statements": "Financial statements",
+        "sheet_provenance": "Provenance",
+        "sheet_earnings_quality": "Earnings quality",
+        "sheet_working_capital": "Working capital",
+        "sheet_scores": "Scores",
+        "sheet_transaction": "Net debt and EBITDA",
+        "databook_title": "{company}: financial analysis databook",
+        "databook_source_yahoo": "Yahoo Finance (ticker {ticker})",
+        "databook_source_import": "Imported file: {filename}",
+        "databook_label_source": "Source of the accounts",
+        "databook_label_years": "Fiscal years",
+        "databook_label_regime": "Regime",
+        "databook_label_export_date": "Export date",
+        "databook_key_indicators": "Key indicators (latest fiscal year or latest pair of fiscal years)",
+        "databook_col_period": "Period",
+        "databook_col_value": "Value",
+        "databook_col_reading": "Reading",
+        "databook_not_applicable": "{regime}: not applicable",
+        "databook_indicative_only": "Official M-score n/a: indicative variant, missing indices neutralized at 1 (see "
+                                    "the Scores sheet).",
+        "databook_values_note": "Values computed by the tool and written as is (no Excel formulas): the detail of each "
+                                "calculation is shown alongside, and \"n/a\" flags missing data, never replaced by 0.",
+        "databook_calculation_detail": "Calculation detail",
+        "databook_altman_default": "Both models are shown; default model for the sector: {model}.",
     },
 }
 

@@ -14,6 +14,7 @@ from dash import Input, Output, State, dcc, html
 
 import layout
 from app_instance import app
+from databook import build_databook
 from charts import empty_figure_with_message, make_bridge_waterfall, make_working_capital_days_chart
 from constants import TYPICAL_YFINANCE_YEARS
 from engine import (
@@ -318,35 +319,16 @@ def update_transaction_view(net_debt_rows, ebitda_rows, pension_tax_pct, lang, d
     ctx = _load_context(store)
     if ctx is None or not ctx.normalized.years:
         raise dash.exceptions.PreventUpdate
-    normalized = ctx.normalized
-    year = normalized.years[0]
     currency = ctx.profile["reporting_currency"] or L(lang, "na")
-    tax_rate = (pension_tax_pct if pension_tax_pct is not None else 25) / 100
-
-    net_debt_items, invalid_debt = parse_user_items(net_debt_rows)
-    ebitda_items, invalid_ebitda = parse_user_items(ebitda_rows)
-    bridge = net_debt_bridge(normalized, year, pension_tax_rate=tax_rate, user_items=net_debt_items)
-    ebitda = adjusted_ebitda(normalized.get("ebitda", year), ebitda_items)
-    market = ctx.market
-    minorities = normalized.get("minority_interest", year)
-    published = transaction_multiples(market["market_cap"], minorities, bridge["net_debt_data"], ebitda["published"])
-    adjusted = transaction_multiples(market["market_cap"], minorities, bridge["adjusted_net_debt"], ebitda["adjusted"])
-
+    figures = _transaction_figures(ctx, net_debt_rows, ebitda_rows, pension_tax_pct)
+    bridge, ebitda = figures["bridge"], figures["ebitda"]
     effects = layout.effects_table(
-        {"ebitda": ebitda["published"], "net_debt": bridge["net_debt_data"], **published},
-        {"ebitda": ebitda["adjusted"], "net_debt": bridge["adjusted_net_debt"], **adjusted}, lang, dark,
+        {"ebitda": ebitda["published"], "net_debt": bridge["net_debt_data"], **figures["published"]},
+        {"ebitda": ebitda["adjusted"], "net_debt": bridge["adjusted_net_debt"], **figures["adjusted"]}, lang, dark,
     )
-    notes = []
-    if bridge["adjusted_net_debt_excl_ifrs16"] is not None:
-        notes.append(html.Div(L(lang, "ifrs16_note",
-                                value=f"{layout.format_amount(bridge['adjusted_net_debt_excl_ifrs16'], lang)} {currency}")))
-    notes += [html.Div(L(lang, f"flag_{flag}")) for flag in bridge["flags"] + published["flags"]]
-    if market["market_cap"] is None:
-        notes.append(html.Div(L(lang, "market_cap_unavailable_import" if ctx.imported else "market_cap_unavailable")))
-    elif ctx.imported:
-        notes.append(html.Div(L(lang, "import_market_cap_note", year=layout.format_year(year, lang))))
+    notes = [html.Div(note) for note in _transaction_notes(ctx, figures, currency, lang)]
     warnings = []
-    for rows in (invalid_debt, invalid_ebitda):
+    for rows in (figures["invalid_debt_rows"], figures["invalid_ebitda_rows"]):
         if rows:
             warnings.append(dbc.Alert(L(lang, "invalid_rows", rows=", ".join(map(str, rows))), color="warning",
                                       className="py-1 px-2 mb-2"))
@@ -357,6 +339,41 @@ def update_transaction_view(net_debt_rows, ebitda_rows, pension_tax_pct, lang, d
     return (layout.net_debt_bridge_table(bridge, currency, lang, dark),
             html.Div([effects, html.Div(notes, className="text-muted mt-2", style={"fontSize": "0.8rem"})]),
             warnings, saved_store)
+
+
+def _transaction_figures(ctx: AnalysisContext, net_debt_rows, ebitda_rows, pension_tax_pct) -> dict:
+    """Pont de dette nette, EBITDA ajusté et multiples du dernier exercice, à partir des saisies (lignes
+    du tableau en millions, taux d'impôt en %). Partagé par l'écran et le databook, pour qu'ils
+    affichent les mêmes chiffres."""
+    normalized = ctx.normalized
+    year = normalized.years[0]
+    tax_rate = (pension_tax_pct if pension_tax_pct is not None else 25) / 100
+    net_debt_items, invalid_debt = parse_user_items(net_debt_rows)
+    ebitda_items, invalid_ebitda = parse_user_items(ebitda_rows)
+    bridge = net_debt_bridge(normalized, year, pension_tax_rate=tax_rate, user_items=net_debt_items)
+    ebitda = adjusted_ebitda(normalized.get("ebitda", year), ebitda_items)
+    market_cap = ctx.market["market_cap"]
+    minorities = normalized.get("minority_interest", year)
+    return {
+        "year": year, "bridge": bridge, "ebitda": ebitda, "market_cap": market_cap,
+        "published": transaction_multiples(market_cap, minorities, bridge["net_debt_data"], ebitda["published"]),
+        "adjusted": transaction_multiples(market_cap, minorities, bridge["adjusted_net_debt"], ebitda["adjusted"]),
+        "invalid_debt_rows": invalid_debt, "invalid_ebitda_rows": invalid_ebitda,
+    }
+
+
+def _transaction_notes(ctx: AnalysisContext, figures: dict, currency: str, lang: str) -> list[str]:
+    bridge = figures["bridge"]
+    notes = []
+    if bridge["adjusted_net_debt_excl_ifrs16"] is not None:
+        notes.append(L(lang, "ifrs16_note",
+                       value=f"{layout.format_amount(bridge['adjusted_net_debt_excl_ifrs16'], lang)} {currency}"))
+    notes += [L(lang, f"flag_{flag}") for flag in bridge["flags"] + figures["published"]["flags"]]
+    if figures["market_cap"] is None:
+        notes.append(L(lang, "market_cap_unavailable_import" if ctx.imported else "market_cap_unavailable"))
+    elif ctx.imported:
+        notes.append(L(lang, "import_market_cap_note", year=layout.format_year(figures["year"], lang)))
+    return notes
 
 
 def _append_empty_row(n_clicks, rows):
@@ -423,6 +440,8 @@ def render_analysis(store, lang, dark_mode, palette_code, saved_store):
     # Couverture rappelée AVANT les analyses : toutes reposent sur ces ~4 exercices.
     return html.Div([
         card,
+        html.Div([dbc.Button(L(lang, "databook_btn"), id="databook-btn", color="primary", outline=True, size="sm")]
+                 + layout.info_tooltip("databook-info", L(lang, "databook_help")), className="mb-3"),
         *layout.analysis_alerts(profile, regime, market, consistency, lang),
         dbc.Alert(coverage, color="light", className="py-2"),
         *_earnings_quality_section(normalized, regime, lang, dark),
@@ -606,3 +625,67 @@ def download_statements_template(n_clicks, lang):
     text = statements_csv_template(labels, comments, meta_lines, years)
     # BOM UTF-8 : sans lui, Excel ouvre le fichier en Windows-1252 et abîme les accents des libellés.
     return dcc.send_string("﻿" + text, L(lang, "import_template_filename"))
+
+
+# ============================================================
+# Databook Excel
+# ============================================================
+
+def databook_inputs(ctx: AnalysisContext, saved: dict | None, lang: str) -> dict:
+    """Tous les résultats du moteur pour le databook, calculés comme à l'écran. Une analyse non
+    applicable (banque, assureur) vaut None ; une liste vide signifie « applicable, mais aucun couple
+    d'exercices disponible ». Altman est calculé avec les deux modèles : le databook ne dépend pas de
+    la bascule affichée à l'écran, et indique le modèle retenu par défaut pour le secteur."""
+    normalized, regime = ctx.normalized, ctx.regime
+    applicable = regime["applicable"]
+    pairs = consecutive_pairs(normalized)
+    earnings = None
+    if applicable["earnings_quality"]:
+        conversion, accruals = cash_conversion(normalized), sloan_accruals(normalized)
+        earnings = {year: {**conversion[year], "sloan_accruals": accruals[year]} for year in normalized.years}
+    altman = None
+    if applicable["altman"]:
+        market_values = (imported_market_caps(ctx.dataset) if ctx.imported
+                         else _market_values_at_year_end(ctx.ticker, normalized, ctx.profile))
+        altman = {
+            "original": [altman_z_score(normalized, year, "original", market_values.get(year)) for year in normalized.years],
+            "z_double_prime": [altman_z_score(normalized, year, "z_double_prime") for year in normalized.years],
+        }
+    piotroski = None
+    if applicable["piotroski"]:
+        piotroski = [r for r in (piotroski_f_score(normalized, year) for year, _prior in pairs) if r["n_available"] > 0]
+    transaction = None
+    if applicable["transaction_services"]:
+        saved = saved or {}
+        currency = ctx.profile["reporting_currency"] or L(lang, "na")
+        figures = _transaction_figures(ctx, saved.get("net_debt_items"), saved.get("ebitda_adjustments"),
+                                       saved.get("pension_tax_rate_pct"))
+        transaction = {**figures, "notes": _transaction_notes(ctx, figures, currency, lang)}
+    return {
+        "company": ctx.profile["name"], "identifier": ctx.filename if ctx.imported else ctx.ticker,
+        "imported": ctx.imported, "currency": ctx.profile["reporting_currency"], "regime": regime,
+        "normalized": normalized, "export_date": pd.Timestamp.today().strftime(L(lang, "date_format")),
+        "earnings": earnings,
+        "wc_days": working_capital_days(normalized) if applicable["working_capital"] else None,
+        "beneish": [beneish_m_score(normalized, year, prior) for year, prior in pairs] if applicable["beneish"] else None,
+        "altman": altman, "altman_default_model": altman_default_model(ctx.profile["sector"]),
+        "piotroski": piotroski, "transaction": transaction,
+    }
+
+
+@app.callback(
+    Output("databook-download", "data"),
+    Input("databook-btn", "n_clicks"),
+    State("analysis-ticker-store", "data"),
+    State("adjustments-store", "data"),
+    State("lang-radio", "value"),
+    prevent_initial_call=True,
+)
+def download_databook(n_clicks, store, saved_store, lang):
+    lang = lang or "fr"
+    ctx = _load_context(store) if n_clicks else None
+    if ctx is None or not ctx.normalized.years:
+        raise dash.exceptions.PreventUpdate
+    content = build_databook(databook_inputs(ctx, (saved_store or {}).get(ctx.key), lang), lang)
+    name = (ctx.filename.rsplit(".", 1)[0] if ctx.imported else ctx.ticker) or "analyse"
+    return dcc.send_bytes(content, L(lang, "databook_filename", name=name.replace(" ", "_")))

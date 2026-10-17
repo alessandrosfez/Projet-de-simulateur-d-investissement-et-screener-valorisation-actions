@@ -82,6 +82,8 @@ app.layout = dbc.Container([
     # Saisies de la vision Transaction Services ({ticker: {...}}), conservées pour la session du
     # navigateur : survivent au changement de langue et au passage d'une société à l'autre.
     dcc.Store(id="adjustments-store", storage_type="session"),
+    # Hors de results-container : le bouton d'export y est recréé à chaque rendu, le téléchargement non.
+    dcc.Download(id="databook-download"),
     dcc.Loading(type="circle", color="#636efa", children=[html.Div(id="results-container", className="px-3")]),
     # Module Benford : ses contrôles sont reconstruits au changement de langue, mais le fichier importé
     # (benford-file-store) et le résultat (benford-result) restent hors de cette zone, pour ne jamais

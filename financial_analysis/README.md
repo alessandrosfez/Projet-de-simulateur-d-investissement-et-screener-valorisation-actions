@@ -58,6 +58,11 @@ Yahoo Finance sans retraitement par un analyste.
   qualité des résultats, l'analyse du BFR et la vision Transaction
   Services y sont déclarés non applicables, avec un message clair plutôt
   que des chiffres absurdes.
+- **Databook Excel** : export de toute l'analyse en un classeur, le
+  livrable standard d'une mission de Transaction Services. Il comporte un
+  onglet par section : synthèse, états normalisés, provenance de chaque
+  chiffre, qualité des résultats, BFR, scores, dette nette et EBITDA
+  ajusté avec les saisies de la session.
 - Interface FR/EN, thèmes clair et sombre, cache disque des appels
   yfinance.
 
@@ -156,6 +161,22 @@ Yahoo Finance sans retraitement par un analyste.
     sert au Z d'origine d'Altman et, pour la dernière clôture, aux
     multiples, signalés comme tels. Aucun contrôle de cohérence n'est fait
     avec les comptes publiés : les chiffres sont analysés tels que saisis.
+- **Databook : des chiffres réutilisables, et le calcul à côté** :
+  - **Cellules numériques** : montants et ratios sont écrits en nombres,
+    avec un format Excel (x, %, jours), pour pouvoir les reprendre. Ce sont
+    des valeurs, pas des formules Excel : le détail de chaque calcul est
+    écrit en clair à côté, avec les mêmes textes que les infobulles de
+    l'écran. Une donnée absente s'écrit « n.d. », jamais 0.
+  - **Même grille que l'import** : l'onglet des états financiers porte la
+    clé interne de chaque poste, celle du modèle d'import CSV. L'onglet
+    Provenance reprend la même grille, cellule par cellule.
+  - **Altman sous ses deux modèles** : le Z d'origine et le Z'' sont
+    exportés tous les deux, avec le modèle retenu par défaut pour le
+    secteur. Le classeur ne dépend ainsi pas de la bascule affichée à
+    l'écran.
+  - **Mêmes chiffres que l'écran** : la vision Transaction Services est
+    recalculée à partir des saisies de la session par la même fonction que
+    l'écran (`callbacks._transaction_figures`).
 - **Banques et assureurs** : la conversion en cash et les accruals y sont
   aussi non applicables, leur CFO étant dominé par les flux de dépôts et de
   crédits (des dizaines de milliards d'une année sur l'autre).
@@ -321,6 +342,9 @@ L'application est servie sur [http://localhost:8052](http://localhost:8052)
 - `charts.py` : constructeurs de graphiques Plotly (cascade, jours de BFR).
 - `layout.py` : construction de l'écran et mise en forme (montants,
   ratios et détail de leur calcul, provenance, tableaux).
+- `databook.py` : mise en forme du databook Excel (openpyxl) à partir des
+  résultats du moteur. Il ne calcule rien, et n'utilise ni Dash ni le
+  réseau.
 - `app_instance.py` / `callbacks.py` / `app.py` : instance Dash, callbacks,
   point d'entrée.
 
@@ -350,7 +374,11 @@ exactement les mêmes postes normalisés.
 multiples et la lecture des saisies sur des cas calculés à la main.
 `test_benford.py` vérifie qu'un échantillon conforme généré
 synthétiquement passe, qu'un échantillon uniforme échoue, que les seuils
-de taille se déclenchent, et la lecture des montants et des CSV. `test_i18n.py` vérifie que chaque clé de
+de taille se déclenchent, et la lecture des montants et des CSV.
+`test_databook.py` génère un classeur à partir d'un fichier importé et le
+relit : onglets, montants numériques, « n.d. » et jamais 0 pour une donnée
+absente, saisies Transaction Services reprises, analyses non applicables
+d'une banque. `test_i18n.py` vérifie que chaque clé de
 traduction construite dynamiquement existe en FR et en EN.
 
 ## Docker
