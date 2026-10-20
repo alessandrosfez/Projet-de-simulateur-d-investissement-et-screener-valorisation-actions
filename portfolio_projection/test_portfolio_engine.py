@@ -46,6 +46,17 @@ def test_reconstruct_equity_curve_single_ticker_step_function():
     assert curve[pd.Timestamp("2024-01-03")] == pytest.approx(10 * 12.0)
 
 
+def test_position_is_worth_the_amount_invested_on_the_purchase_date():
+    """Invariant : achetée au cours de clôture du jour, une ligne vaut exactement le montant investi ce
+    jour-là. Il suppose prix payé et historique dans la même devise : c'est ce qu'un ETF résolu en
+    dollars (VWRA.L) cassait, avant que market_data ne convertisse les cours en euros."""
+    closes = pd.Series([95.0, 98.5, 101.0], index=pd.to_datetime(["2024-03-01", "2024-03-04", "2024-03-05"]))
+    transactions = pd.DataFrame([_tx("AAA", "2024-03-04", 1000.0, 98.5), _tx("BBB", "2024-03-01", 500.0, 95.0)])
+    curve = m.reconstruct_equity_curve(transactions, {"AAA": closes, "BBB": closes})
+    assert curve[pd.Timestamp("2024-03-01")] == pytest.approx(500.0)
+    assert curve[pd.Timestamp("2024-03-04")] == pytest.approx(1000.0 + 500.0 / 95.0 * 98.5)
+
+
 def test_reconstruct_equity_curve_sums_across_tickers():
     transactions = pd.DataFrame([
         _tx("AAA", "2024-01-01", 100.0, 10.0),  # 10 parts

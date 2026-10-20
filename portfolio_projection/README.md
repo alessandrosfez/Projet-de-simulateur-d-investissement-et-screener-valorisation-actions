@@ -129,6 +129,21 @@ qu'une simulation aurait donné.
   aucune part à partir d'un dividende) ; il compte quand même dans le XIRR
   et le TWR, sinon un ETF distribuant paraîtrait moins bon qu'un ETF
   capitalisant à performance égale. Tout est calculé avant fiscalité.
+- **Tous les cours en euros** : les montants saisis (achats, dividendes)
+  sont en euros, mais yfinance cote chaque titre dans la devise de sa
+  place. Or les ISIN d'un export Trade Republic se résolvent souvent vers
+  une cotation en dollars : Apple → AAPL, Vanguard FTSE All-World →
+  VWRA.L, iShares Core MSCI World → IWDA.L. La quantité (montant € ÷ prix
+  €) était juste, mais la valeur était calculée avec le cours en dollars :
+  VWRA.L surévalué d'environ 12 %, et une courbe qui ignorait le change.
+  Les cours courants et historiques sont désormais divisés par la
+  sous-unité éventuelle (pence) puis convertis au change Yahoo de chaque
+  jour (XXXEUR=X, dernier taux connu un jour sans cotation). Sans taux de
+  change, le cours est n.d. plutôt que laissé en dollars. Un test vérifie
+  l'invariant qui aurait détecté le problème : achetée au cours du jour,
+  une ligne vaut exactement le montant investi ce jour-là. La calibration
+  Monte Carlo des tickers du portefeuille réel reste, elle, sur les
+  rendements dans la devise de cotation (sans effet de change).
 - **Cours bruts pour le réel, ajustés pour la référence** : yfinance ajuste
   par défaut les cours passés des dividendes (CAC.PA début 2024 : ~70 €
   ajusté contre ~74 € réel). Pour valoriser les positions réelles, on prend

@@ -181,7 +181,7 @@ def test_daily_price_history_empty_when_unavailable_without_caching_the_empty_re
     _FakeTicker.history_by_ticker = {}
     assert md.get_daily_price_history("NOPE", "2024-01-01").empty
     # Une série vide ne doit pas être mise en cache à la place de vraies données.
-    assert not any(key[0] == "_fetch_daily_close" for key in md._cache)
+    assert not any(key[0] == "_fetch_daily_close_eur" for key in md._cache)
 
 
 def test_daily_price_history_keeps_last_known_data_when_yfinance_returns_nothing(monkeypatch):
@@ -197,3 +197,59 @@ def test_daily_price_history_keeps_last_known_data_when_yfinance_returns_nothing
     _FakeTicker.history_by_ticker = {}  # yfinance ne renvoie plus rien (coupure réseau)
     again = md.get_daily_price_history("AAA", "2024-01-01")
     assert list(again) == [10.0, 11.0]
+
+
+class _MarketTicker:
+    """yf.Ticker remplacé : chaque symbole a une devise de cotation, un cours courant et un
+    historique ; les paires « XXXEUR=X » renvoient l'historique de change fourni par le test."""
+    quotes: dict = {}
+
+    def __init__(self, symbol):
+        self.symbol = symbol
+
+    def get_info(self):
+        currency, price, _history = self.quotes[self.symbol]
+        return {"currency": currency, "currentPrice": price}
+
+    def history(self, start=None, interval=None, auto_adjust=None, **_kwargs):
+        return pd.DataFrame({"Close": self.quotes[self.symbol][2]})
+
+
+DATES = pd.to_datetime(["2024-03-01", "2024-03-04", "2024-03-05"])
+
+
+def test_usd_listing_is_valued_in_euros_at_each_day_rate(monkeypatch):
+    """Régression : un ETF Trade Republic résolu en VWRA.L (USD) était valorisé en dollars comme si
+    c'étaient des euros. Les cours doivent passer en euros au change de chaque jour ; le change du
+    lundi manquant (week-end côté Yahoo) reprend le dernier taux connu."""
+    fx = pd.Series([0.90, 0.95], index=pd.to_datetime(["2024-03-01", "2024-03-05"]))
+    _MarketTicker.quotes = {"VWRA.L": ("USD", 120.0, pd.Series([100.0, 110.0, 120.0], index=DATES)),
+                            "USDEUR=X": (None, None, fx)}
+    monkeypatch.setattr(md.yf, "Ticker", _MarketTicker)
+    prices = md.get_daily_price_history("VWRA.L", "2024-03-01")
+    assert list(prices) == pytest.approx([100.0 * 0.90, 110.0 * 0.90, 120.0 * 0.95])
+    assert md.get_current_price("VWRA.L") == pytest.approx(120.0 * 0.95)
+
+
+def test_pence_listing_is_divided_then_converted(monkeypatch):
+    fx = pd.Series([1.17], index=pd.to_datetime(["2024-02-28"]))
+    _MarketTicker.quotes = {"VUSA.L": ("GBp", 8000.0, pd.Series([7900.0, 8000.0, 8100.0], index=DATES)),
+                            "GBPEUR=X": (None, None, fx)}
+    monkeypatch.setattr(md.yf, "Ticker", _MarketTicker)
+    assert list(md.get_daily_price_history("VUSA.L", "2024-02-28")) == pytest.approx([79.0 * 1.17, 80.0 * 1.17,
+                                                                                      81.0 * 1.17])
+
+
+def test_missing_exchange_rate_never_returns_unconverted_prices(monkeypatch):
+    _MarketTicker.quotes = {"AAPL": ("USD", 200.0, pd.Series([190.0, 195.0, 200.0], index=DATES)),
+                            "USDEUR=X": (None, None, pd.Series(dtype=float))}
+    monkeypatch.setattr(md.yf, "Ticker", _MarketTicker)
+    assert md.get_daily_price_history("AAPL", "2024-03-01").empty
+    assert md.get_current_price("AAPL") is None
+
+
+def test_euro_listing_is_unchanged(monkeypatch):
+    _MarketTicker.quotes = {"CW8.PA": ("EUR", 500.0, pd.Series([490.0, 495.0, 500.0], index=DATES))}
+    monkeypatch.setattr(md.yf, "Ticker", _MarketTicker)
+    assert list(md.get_daily_price_history("CW8.PA", "2024-03-01")) == [490.0, 495.0, 500.0]
+    assert md.get_current_price("CW8.PA") == 500.0

@@ -175,19 +175,67 @@ def _price_scale_factor(trailing_pe, trailing_eps, current_price) -> float:
     return 1.0
 
 
-@cached_ttl(3600)
-def get_current_price(ticker: str) -> float | None:
-    """Prix courant d'un ticker quelconque, corrigé de l'éventuel décalage d'échelle
-    pence/livre -- sert à valoriser les positions du portefeuille réel et à valider
-    un ticker à la saisie (voir callbacks/portefeuille_reel.py, formulaires d'ajout). None si
-    indisponible (ticker invalide/délisté).
+# Les montants du portefeuille réel (achats, dividendes) sont en euros : tout cours doit l'être
+# aussi. Or yfinance cote chaque titre dans la devise de SA place, éventuellement en sous-unité
+# (pence). Vérifié sur les ISIN d'un export Trade Republic : Apple, Microsoft, Vanguard FTSE
+# All-World et iShares Core MSCI World se résolvent en AAPL, MSFT, VWRA.L et IWDA.L, toutes en USD,
+# alors que Trade Republic exécute en euros.
+PORTFOLIO_CURRENCY = "EUR"
+# Sous-unités de cotation : (devise principale, diviseur). Recopié de stock_valuation.
+MINOR_CURRENCY_UNITS = {"GBp": ("GBP", 100), "GBX": ("GBP", 100), "ZAc": ("ZAR", 100), "ILA": ("ILS", 100)}
 
-    currentPrice/regularMarketPrice sont souvent absents pour les ETF (champs surtout
-    peuplés pour les actions individuelles chez Yahoo, constaté en pratique en dehors
-    des heures de cotation) -- repli sur la dernière clôture connue plutôt que de
-    traiter l'instrument comme introuvable : sans ça, un ETF réellement détenu
-    disparaissait silencieusement de la valorisation du portefeuille réel (montant
-    investi resté correct, valeur actuelle sous-évaluée d'autant)."""
+
+def _quote_currency(info: dict) -> tuple[str | None, float]:
+    """Devise principale de cotation et diviseur de sous-unité ((None, 1) si Yahoo ne la donne pas)."""
+    code = info.get("currency")
+    if not code:
+        return None, 1.0
+    major, divisor = MINOR_CURRENCY_UNITS.get(code, (code, 1))
+    return major, float(divisor)
+
+
+@cached_ttl(3600)
+def _fetch_fx_history(currency: str, start_date: str) -> pd.Series:
+    """Clôtures quotidiennes de la paire Yahoo « XXXEUR=X » (1 XXX en euros), index de dates sans
+    fuseau. Lève une exception sans données, pour ne jamais mettre en cache une série vide."""
+    closes = yf.Ticker(f"{currency}{PORTFOLIO_CURRENCY}=X").history(start=start_date, interval="1d")["Close"].dropna()
+    closes = closes[closes > 0]
+    if closes.empty:
+        raise ValueError(f"Pas de cours pour {currency}{PORTFOLIO_CURRENCY}=X")
+    closes.index = _naive_dates(closes.index)
+    return closes[~closes.index.duplicated(keep="last")]
+
+
+def _naive_dates(index: pd.DatetimeIndex) -> pd.DatetimeIndex:
+    index = pd.DatetimeIndex(index)
+    return (index.tz_localize(None) if index.tz is not None else index).normalize()
+
+
+def _fx_rate_on_dates(currency: str, dates: pd.DatetimeIndex, start_date: str) -> pd.Series:
+    """Taux XXX -> EUR à chaque date de dates : dernier cours de change connu à cette date (les
+    marchés des changes et des actions n'ont pas exactement les mêmes jours de cotation)."""
+    fx = _fetch_fx_history(currency, start_date)
+    target = _naive_dates(dates)
+    return fx.reindex(fx.index.union(target)).ffill().reindex(target)
+
+
+def _to_portfolio_currency(prices: pd.Series, info: dict, start_date: str) -> pd.Series:
+    """Cours en euros : division par la sous-unité (pence -> livres) puis change du jour. Devise
+    inconnue : repli sur l'ancien facteur pence/livre déduit du P/E (voir _price_scale_factor). Un
+    jour sans taux de change connu est écarté plutôt que valorisé dans la mauvaise devise."""
+    major, divisor = _quote_currency(info)
+    if major is None:
+        price = info.get("currentPrice") or info.get("regularMarketPrice")
+        return prices / _price_scale_factor(info.get("trailingPE"), info.get("trailingEps"), price)
+    prices = prices / divisor
+    if major == PORTFOLIO_CURRENCY:
+        return prices
+    rates = _fx_rate_on_dates(major, prices.index, start_date)
+    return (prices * rates.to_numpy()).dropna()
+
+
+@cached_ttl(3600)
+def _fetch_current_price_eur(ticker: str) -> float | None:
     info = _get_ticker_info(ticker)
     price = (
         info.get("currentPrice") or info.get("regularMarketPrice")
@@ -195,29 +243,51 @@ def get_current_price(ticker: str) -> float | None:
     )
     if price is None:
         return None
-    price_scale = _price_scale_factor(info.get("trailingPE"), info.get("trailingEps"), price)
-    return price / price_scale
+    today = pd.Timestamp.today().normalize()
+    start = (today - pd.Timedelta(days=10)).strftime("%Y-%m-%d")
+    converted = _to_portfolio_currency(pd.Series([float(price)], index=pd.DatetimeIndex([today])), info, start)
+    return float(converted.iloc[0]) if not converted.empty else None
+
+
+def get_current_price(ticker: str) -> float | None:
+    """Prix courant d'un ticker quelconque, EN EUROS (voir _to_portfolio_currency) -- sert à
+    valoriser les positions du portefeuille réel et à valider un ticker à la saisie (voir
+    callbacks/portefeuille_reel.py, formulaires d'ajout). None si indisponible (ticker
+    invalide/délisté, ou taux de change introuvable : jamais un cours en dollars présenté comme
+    un cours en euros).
+
+    currentPrice/regularMarketPrice sont souvent absents pour les ETF (champs surtout
+    peuplés pour les actions individuelles chez Yahoo, constaté en pratique en dehors
+    des heures de cotation) -- repli sur la dernière clôture connue plutôt que de
+    traiter l'instrument comme introuvable : sans ça, un ETF réellement détenu
+    disparaissait silencieusement de la valorisation du portefeuille réel (montant
+    investi resté correct, valeur actuelle sous-évaluée d'autant)."""
+    try:
+        return _fetch_current_price_eur(ticker)
+    except Exception:
+        return None
 
 
 @cached_ttl(3600)
-def _fetch_daily_close(ticker: str, start_date: str, auto_adjust: bool) -> pd.Series:
-    """Couche cachée des deux historiques quotidiens ci-dessous. Lève une exception si yfinance
-    ne renvoie rien (souvent sans erreur explicite en cas de coupure réseau) plutôt que de
+def _fetch_daily_close_eur(ticker: str, start_date: str, auto_adjust: bool) -> pd.Series:
+    """Couche cachée des deux historiques quotidiens ci-dessous, en euros. Lève une exception si
+    yfinance ne renvoie rien (souvent sans erreur explicite en cas de coupure réseau) plutôt que de
     renvoyer une série vide : une série vide serait mise en cache à la place des bonnes données,
-    alors qu'une exception laisse cached_ttl servir la dernière version connue."""
+    alors qu'une exception laisse cached_ttl servir la dernière version connue. Le nom porte « eur »
+    pour que le cache disque ne resserve jamais une série d'avant la conversion de devise."""
     info = _get_ticker_info(ticker)
-    price = info.get("currentPrice") or info.get("regularMarketPrice")
-    price_scale = _price_scale_factor(info.get("trailingPE"), info.get("trailingEps"), price)
     hist = yf.Ticker(ticker).history(start=start_date, interval="1d", auto_adjust=auto_adjust)["Close"].dropna()
     if hist.empty:
         raise ValueError(f"Pas d'historique quotidien pour {ticker}")
-    return hist / price_scale
+    converted = _to_portfolio_currency(hist, info, start_date)
+    if converted.empty:
+        raise ValueError(f"Pas de taux de change pour convertir {ticker} en {PORTFOLIO_CURRENCY}")
+    return converted
 
 
 def get_daily_price_history(ticker: str, start_date: str) -> pd.Series:
-    """Historique de prix de clôture QUOTIDIEN depuis start_date (ISO "YYYY-MM-DD"), corrigé du
-    même décalage d'échelle que get_current_price sur toute la série (pas seulement le dernier
-    point) -- nécessaire pour reconstruire la valeur du portefeuille réel à une date passée, pas
+    """Historique de prix de clôture QUOTIDIEN depuis start_date (ISO "YYYY-MM-DD"), en euros comme
+    get_current_price, au change de chaque jour (pas seulement au dernier) -- nécessaire pour reconstruire la valeur du portefeuille réel à une date passée, pas
     seulement sa valeur actuelle. Série vide si le ticker est invalide ou n'a pas coté sur la
     période. Premier (et seul) point de collecte quotidien de cette app : get_monthly_returns
     ci-dessus ne fait que du mensuel, suffisant pour la calibration Monte Carlo mais pas pour
@@ -229,7 +299,7 @@ def get_daily_price_history(ticker: str, start_date: str) -> pd.Series:
     début 2024), ce qui sous-évaluerait la courbe passée et compterait deux fois les dividendes
     déjà saisis en cash (voir portfolio_engine, section performance réelle)."""
     try:
-        return _fetch_daily_close(ticker, start_date, False)
+        return _fetch_daily_close_eur(ticker, start_date, False)
     except Exception:
         return pd.Series(dtype=float)
 
@@ -238,10 +308,12 @@ def get_daily_total_return_history(ticker: str, start_date: str) -> pd.Series:
     """Historique quotidien AJUSTÉ des dividendes (dividendes réinvestis) depuis start_date : sert
     d'indice de référence pour le portefeuille réel (portfolio_engine.benchmark_equity_curve),
     convention usuelle d'une référence "dividendes réinvestis" -- contrairement à
-    get_daily_price_history, qui veut les cours bruts. Même correction d'échelle pence/livre.
+    get_daily_price_history, qui veut les cours bruts. Même conversion en euros : une référence
+    cotée en dollars (un ETF S&P 500 de Londres) mesure ainsi le rendement d'un investisseur en
+    euros, change compris, comme le portefeuille réel auquel elle est comparée.
     Série vide si le ticker est invalide ou n'a pas coté sur la période."""
     try:
-        return _fetch_daily_close(ticker, start_date, True)
+        return _fetch_daily_close_eur(ticker, start_date, True)
     except Exception:
         return pd.Series(dtype=float)
 
