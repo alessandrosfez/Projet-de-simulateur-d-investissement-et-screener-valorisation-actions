@@ -161,6 +161,43 @@ Yahoo Finance sans retraitement par un analyste.
     sert au Z d'origine d'Altman et, pour la dernière clôture, aux
     multiples, signalés comme tels. Aucun contrôle de cohérence n'est fait
     avec les comptes publiés : les chiffres sont analysés tels que saisis.
+- **Cas d'école : Wirecard 2015-2018** (`examples/wirecard_2015_2018.csv`,
+  à importer depuis l'écran) :
+  - **Source** : comptes consolidés relevés à la main dans les rapports
+    annuels 2015 à 2018. Chaque exercice vient de son propre rapport, tel
+    que publié à l'origine, avant toute correction.
+  - **Contrôle de la saisie** : actif = capitaux propres + passif à l'euro
+    près. L'écart entre CA − coût des matières et la marge brute publiée
+    vaut exactement la production immobilisée publiée (`test_wirecard_example.py`).
+  - **Choix de méthode**, chacun écrit en tête du fichier :
+    - charges par nature : coût des matières en guise de coût des ventes,
+      et marge brute publiée (production immobilisée incluse) ;
+    - créances commerciales seules, sans les créances de l'activité
+      d'acquisition ;
+    - CFO avant activité bancaire. Pour 2015, ce sous-total vient du
+      rapport 2016 : il n'existait pas encore.
+  - **Ce que montrent les scores** : rien. Les frais généraux ne sont pas
+    publiés, donc le M-score officiel est n.d. Sa variante indicative
+    (indice des frais généraux neutralisé à 1, comme le faisait Beneish)
+    reste sous −1,78 sur les trois couples : −2,01 (2016), −2,22 (2017),
+    −2,33 (2018). Z et Z'' sont en zone sûre en 2017 et 2018, et le CFO
+    dépasse le résultat net de 34 %. Seuls signaux nets : une croissance du
+    chiffre d'affaires de 33 à 45 % par an, et des créances qui ont crû bien
+    plus vite que lui en 2016 (DSRI de 1,26).
+  - **Pourquoi** : la fraude adossait du chiffre d'affaires fictif à une
+    trésorerie elle aussi fictive (les comptes séquestres des partenaires
+    asiatiques). Il n'y a donc presque pas d'accruals, alors que Beneish,
+    le ratio de Sloan et la conversion en cash les cherchent justement.
+    C'est la limite principale de ces scores : ils détectent un résultat
+    sans cash, pas un cash inventé. Seule une confirmation directe de la
+    trésorerie, du ressort de l'audit, pouvait le révéler.
+  - **Comparaison externe non reproduite** : une présentation de
+    l'Université de Toronto (2023) donne M = −1,16 pour 2017, au-dessus du
+    seuil. Ses données d'entrée et ses choix ne sont pas publiés. Or les
+    choix pèsent : le CFO total, avec les dépôts bancaires, baisserait
+    encore le M-score d'environ 0,22, tandis que l'ajout des créances
+    d'acquisition change le DSRI. L'écart ne peut donc pas être expliqué
+    ligne à ligne.
 - **Databook : des chiffres réutilisables, et le calcul à côté** :
   - **Cellules numériques** : montants et ratios sont écrits en nombres,
     avec un format Excel (x, %, jours), pour pouvoir les reprendre. Ce sont
@@ -342,6 +379,7 @@ L'application est servie sur [http://localhost:8052](http://localhost:8052)
 - `charts.py` : constructeurs de graphiques Plotly (cascade, jours de BFR).
 - `layout.py` : construction de l'écran et mise en forme (montants,
   ratios et détail de leur calcul, provenance, tableaux).
+- `examples/` : fichiers d'états financiers prêts à importer (cas Wirecard).
 - `databook.py` : mise en forme du databook Excel (openpyxl) à partir des
   résultats du moteur. Il ne calcule rien, et n'utilise ni Dash ni le
   réseau.
@@ -375,6 +413,8 @@ multiples et la lecture des saisies sur des cas calculés à la main.
 `test_benford.py` vérifie qu'un échantillon conforme généré
 synthétiquement passe, qu'un échantillon uniforme échoue, que les seuils
 de taille se déclenchent, et la lecture des montants et des CSV.
+`test_wirecard_example.py` contrôle la saisie du cas Wirecard par les
+identités comptables et fige le constat ci-dessus.
 `test_databook.py` génère un classeur à partir d'un fichier importé et le
 relit : onglets, montants numériques, « n.d. » et jamais 0 pour une donnée
 absente, saisies Transaction Services reprises, analyses non applicables

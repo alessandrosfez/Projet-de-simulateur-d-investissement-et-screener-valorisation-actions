@@ -1,0 +1,58 @@
+# Wirecard AG, comptes consolidés IFRS 2015 à 2018, relevés à la main dans les rapports annuels publiés.
+# Chaque exercice vient de son propre rapport (chiffres tels que publiés à l'origine, non retraités) :
+# rapports annuels 2015 (p. 152-156), 2016 (p. 158-162), 2017 (p. 174-178) et 2018 (p. 118-123).
+# Montants en milliers d'euros ; ceux de 2018, publiés en millions à une décimale, sont convertis.
+# Choix de méthode (voir le README de financial_analysis, section Wirecard) :
+# compte de résultat par nature : coût des ventes = coût des matières, marge brute = ligne Gross profit publiée.
+# Elle inclut la production immobilisée (28 à 45 M EUR par an).
+# Créances clients : Trade and other receivables seules ; les créances de l'activité d'acquisition sont exclues.
+# Flux d'exploitation (CFO) : Cash flow from operating business before banking operations (hors dépôts bancaires).
+# 2015 : ce sous-total n'existait pas dans le rapport 2015 ; il vient du comparatif du rapport 2016.
+# Amortissements des immobilisations corporelles seules : tableau de variation de l'actif immobilisé.
+# Investissements (capex) : incorporels + corporels. Trésorerie et placements : trésorerie + titres à court terme.
+# Dette long terme y compris locations : la dette long terme (IAS 17, pas de dette locative distincte avant 2019).
+# Aucun intérêt minoritaire : capitaux propres entièrement attribuables aux actionnaires de Wirecard AG.
+# Capitalisation : cours de clôture XETRA au 31/12 (46,50 / 40,89 / 93,07 / 132,80 EUR) x 123 565 586 actions.
+# Frais généraux (SG&A) : non publiés (charges par nature), laissés vides.
+# societe = Wirecard AG
+# devise = EUR
+# unite = milliers
+# regime = general
+# secteur = Technology
+# industrie = Software - Infrastructure
+poste;libelle;2018-12-31;2017-12-31;2016-12-31;2015-12-31
+revenue;Revenues;2016200;1489954;1028358;771340
+cost_of_revenue;Cost of materials;1090000;788755;530761;418935
+gross_profit;Gross profit (publié);971200;746504;527799;380698
+sga;Frais généraux (non publiés);;;;
+d_and_a;Amortisation/depreciation;122000;97914;72175;54470
+depreciation;Dépréciation des immobilisations corporelles;24500;19936;13906;10683
+interest_expense;Financial expenses;49000;33371;26218;9338
+pretax_income;Earnings before tax;409400;296504;302840;165669
+ebit;EBIT;438500;314699;235188;172844
+ebitda;EBITDA;560500;412613;307363;227315
+tax_provision;Income tax expense;62100;36785;36091;23023
+net_income;Earnings after tax;347400;259719;266749;142646
+net_income_incl_minorities;Earnings after tax (aucun minoritaire);347400;259719;266749;142646
+total_assets;Total assets;5854900;4527521;3482062;2935501
+current_assets;Total current assets;3925500;2746420;2095624;1655240
+current_liabilities;Total current liabilities;2339600;1975223;1336452;1171663
+equity;Total equity;1922700;1635183;1474963;1280513
+total_equity_incl_minorities;Total equity (aucun minoritaire);1922700;1635183;1474963;1280513
+minority_interest;Intérêts minoritaires (aucun);0;0;0;0
+total_liabilities;Total liabilities;3932200;2892338;2007099;1654988
+retained_earnings;Retained earnings;1375700;1069234;829286;579837
+receivables;Trade and other receivables;357400;269669;190185;113204
+inventory;Inventories and work in progress;10600;13349;4540;3599
+payables;Trade payables;63400;71393;34920;25988
+cash;Cash and cash equivalents;2719800;1901334;1332631;1062968
+cash_and_short_term_investments;Trésorerie + titres et dépôts à terme courants;2859400;2010433;1489124;1196096
+ppe_net;Property, plant and equipment;81500;57460;44656;30987
+current_debt;Current interest-bearing liabilities;117400;311611;15066;12579
+long_term_debt;Non-current interest-bearing liabilities;1348700;754792;579475;358146
+long_term_debt_incl_leases;Non-current interest-bearing liabilities (IAS 17);1348700;754792;579475;358146
+shares_outstanding;Actions (milliers);123565.586;123565.586;123565.586;123565.586
+cfo;Cash flow from operating business before banking operations;466900;349305;266498;207826
+capex;Investissements incorporels + corporels;-109700;-111228;-73160;-64012
+common_stock_issuance;Cash inflows from issuing of shares;;;0;1684
+market_cap;Capitalisation au 31/12;16409510;11500249;5052597;5745800
