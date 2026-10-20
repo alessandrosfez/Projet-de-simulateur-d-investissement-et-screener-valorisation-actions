@@ -61,7 +61,9 @@ TRANSLATIONS = {
                          "comptes = cours coté ÷ diviseur de sous-unité (100 pour un cours en pence, GBp) "
                          "× taux de change ; capitalisation = capitalisation Yahoo (déjà en devise "
                          "principale) × taux de change.",
-        "fx_detail": "1 {quote} = {rate:.4f} {reporting}",
+        "fx_detail": "1 {quote} = {rate} {reporting}",
+        # Séparateurs Plotly : décimal puis milliers.
+        "plotly_separators": ", ",
         "fx_same_currency": "aucune conversion (même devise)",
         "minor_unit_detail": "cours coté en sous-unité ({quote_raw}) : divisé par {divisor:.0f}",
         "warn_fx_unavailable": "Taux de change {quote} → {reporting} indisponible sur Yahoo Finance : cours "
@@ -69,7 +71,7 @@ TRANSLATIONS = {
                                "en dépendent ne pourront pas être calculés.",
         "warn_currency_unknown": "Devise de cotation ou des comptes inconnue : cours et capitalisation ne "
                                  "peuvent pas être ramenés dans la devise des comptes (affichés n.d.).",
-        "warn_minor_unit_inconsistent": "Contrôle de cohérence : cours ÷ (P/E × BPA) = {ratio:.1f}, alors que "
+        "warn_minor_unit_inconsistent": "Contrôle de cohérence : cours ÷ (P/E × BPA) = {ratio}, alors que "
                                         "le code devise indique un diviseur de {divisor:.0f}. Une donnée de "
                                         "marché de Yahoo semble incohérente : vérifie le cours avant de "
                                         "t'appuyer sur la capitalisation.",
@@ -315,7 +317,8 @@ TRANSLATIONS = {
                           "naturellement les sociétés jeunes.",
         "altman_x3": "X3 EBIT / actif",
         "altman_x3_help": "Rentabilité économique de l'actif : EBIT ÷ actif total, le ratio le plus pondéré.",
-        "altman_x4": "X4 capitaux propres / passif",
+        "altman_x4": "X4 capitaux propres comptables / passif",
+        "altman_x4_market": "X4 capitalisation / passif",
         "altman_x4_help": "Coussin avant insolvabilité : capitalisation boursière à la clôture (Z d'origine) ou "
                           "capitaux propres comptables (Z'') ÷ passif total. La capitalisation historique = cours de "
                           "clôture à la date de l'exercice × nombre d'actions du bilan, convertie au taux de change "
@@ -788,7 +791,8 @@ TRANSLATIONS = {
                          "cap) is converted. Formula: price in reporting currency = quoted price ÷ minor-unit "
                          "divisor (100 for a price in pence, GBp) × exchange rate; market cap = Yahoo market "
                          "cap (already in the major unit) × exchange rate.",
-        "fx_detail": "1 {quote} = {rate:.4f} {reporting}",
+        "fx_detail": "1 {quote} = {rate} {reporting}",
+        "plotly_separators": ". ",
         "fx_same_currency": "no conversion (same currency)",
         "minor_unit_detail": "price quoted in a minor unit ({quote_raw}): divided by {divisor:.0f}",
         "warn_fx_unavailable": "Exchange rate {quote} → {reporting} unavailable on Yahoo Finance: price and "
@@ -796,7 +800,7 @@ TRANSLATIONS = {
                                "cannot be computed.",
         "warn_currency_unknown": "Unknown quote or reporting currency: price and market cap cannot be "
                                  "expressed in the reporting currency (shown as n/a).",
-        "warn_minor_unit_inconsistent": "Consistency check: price ÷ (P/E × EPS) = {ratio:.1f}, while the "
+        "warn_minor_unit_inconsistent": "Consistency check: price ÷ (P/E × EPS) = {ratio}, while the "
                                         "currency code implies a divisor of {divisor:.0f}. A Yahoo market "
                                         "data point looks inconsistent: check the price before relying on "
                                         "the market cap.",
@@ -1024,7 +1028,8 @@ TRANSLATIONS = {
                           "companies.",
         "altman_x3": "X3 EBIT / assets",
         "altman_x3_help": "Return on assets: EBIT ÷ total assets, the most heavily weighted ratio.",
-        "altman_x4": "X4 equity / liabilities",
+        "altman_x4": "X4 book equity / liabilities",
+        "altman_x4_market": "X4 market cap / liabilities",
         "altman_x4_help": "Cushion before insolvency: market capitalization at year end (original Z) or book equity "
                           "(Z'') ÷ total liabilities. Historical market cap = closing price at the fiscal year-end date "
                           "× shares from the balance sheet, converted at that date's exchange rate.",

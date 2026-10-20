@@ -76,6 +76,15 @@ def gv(v, cid, default):
 # Mise en forme
 # ============================================================
 
+def format_number(value: float, spec: str, lang: str) -> str:
+    """Nombre mis en forme selon spec (« .2f », « +.3f », « ,.0f »...) avec les conventions de la
+    langue : virgule décimale en français, point en anglais, espace comme séparateur de milliers dans
+    les deux (convention déjà employée partout dans l'outil). Seul point de passage des nombres
+    affichés, pour qu'aucun « 2.87 » ne subsiste dans un texte français."""
+    text = format(value, spec).replace(",", " ")
+    return text.replace(".", ",") if lang == "fr" else text
+
+
 def format_amount(value: float | None, lang: str) -> str:
     """Montant abrégé (Md/M en français, bn/m en anglais), signe conservé ; « n.d. » si None.
     Les états financiers se comptent en milliards : les afficher en entier les rendrait illisibles."""
@@ -85,8 +94,8 @@ def format_amount(value: float | None, lang: str) -> str:
     abs_value = abs(value)
     for threshold, unit_key in ((1e9, "unit_billion"), (1e6, "unit_million")):
         if abs_value >= threshold:
-            return f"{sign}{abs_value / threshold:,.2f} {L(lang, unit_key)}".replace(",", " ")
-    return f"{sign}{abs_value:,.0f}".replace(",", " ")
+            return f"{sign}{format_number(abs_value / threshold, ',.2f', lang)} {L(lang, unit_key)}"
+    return f"{sign}{format_number(abs_value, ',.0f', lang)}"
 
 
 def format_year(year: pd.Timestamp, lang: str) -> str:
@@ -181,11 +190,12 @@ RATIO_KINDS = {
 def format_ratio(value: float | None, kind: str, lang: str, signed: bool = False) -> str:
     if value is None:
         return L(lang, "na")
+    sign = "+" if signed else ""
     if kind == "percent":
-        return f"{value * 100:+.1f} %" if signed or value < 0 else f"{value * 100:.1f} %"
+        return f"{format_number(value * 100, '+.1f' if signed or value < 0 else '.1f', lang)} %"
     if kind == "days":
-        return f"{value:+.0f} {L(lang, 'unit_days')}" if signed else f"{value:.0f} {L(lang, 'unit_days')}"
-    return f"{value:+.2f}x" if signed else f"{value:.2f}x"
+        return f"{format_number(value, sign + '.0f', lang)} {L(lang, 'unit_days')}"
+    return f"{format_number(value, sign + '.2f', lang)}x"
 
 
 def _component_label(key: str, lang: str) -> str:
@@ -376,14 +386,14 @@ def beneish_table(results: list[dict], lang: str, dark: bool):
             if item["value"] is None:
                 cells.append(_na_cell(f"{formula}\n\n{_reason_text(item, lang)}", lang))
                 continue
-            lines = [f"{formula} = {item['value']:.3f}", L(
-                lang, "contribution_text", coefficient=f"{BENEISH_COEFFICIENTS[index]:+.3f}", value=f"{item['value']:.3f}",
-                contribution=f"{result['contributions'][index]:+.3f}",
+            lines = [f"{formula} = {format_number(item['value'], '.3f', lang)}", L(
+                lang, "contribution_text", coefficient=f"{format_number(BENEISH_COEFFICIENTS[index], '+.3f', lang)}", value=f"{format_number(item['value'], '.3f', lang)}",
+                contribution=f"{format_number(result['contributions'][index], '+.3f', lang)}",
             )]
             lines += [L(lang, f"flag_{flag}") for flag in item["flags"]]
-            cells.append({"text": f"{item['value']:.3f}", "tooltip": "\n\n".join(lines),
+            cells.append({"text": f"{format_number(item['value'], '.3f', lang)}", "tooltip": "\n\n".join(lines),
                           "state": "flagged" if item["flags"] else "ok"})
-        cells += [{"text": f"{BENEISH_REFERENCE_MEANS[group][index]:.3f}", "state": "ok"}
+        cells += [{"text": f"{format_number(BENEISH_REFERENCE_MEANS[group][index], '.3f', lang)}", "state": "ok"}
                   for group in ("manipulators", "non_manipulators")]
         rows.append({"label": L(lang, f"beneish_{index}"), "help": L(lang, f"beneish_{index}_help"), "cells": cells})
 
@@ -394,13 +404,13 @@ def beneish_table(results: list[dict], lang: str, dark: bool):
             missing = ", ".join(L(lang, f"beneish_{i}") for i in score["missing"])
             m_cells.append(_na_cell(L(lang, "beneish_official_na", pair=pair_label(result["pair"], lang), missing=missing), lang))
         else:
-            m_cells.append({"text": f"{score['value']:.2f}", "state": "bad" if score["value"] > BENEISH_THRESHOLD else "good",
+            m_cells.append({"text": f"{format_number(score['value'], '.2f', lang)}", "state": "bad" if score["value"] > BENEISH_THRESHOLD else "good",
                             "tooltip": L(lang, f"beneish_verdict_{score['verdict']}", pair=pair_label(result["pair"], lang),
-                                         value=f"{score['value']:.2f}")})
+                                         value=f"{format_number(score['value'], '.2f', lang)}")})
     reference_scores = []
     for group in ("manipulators", "non_manipulators"):
         value = beneish_m_score_from_indices(BENEISH_REFERENCE_MEANS[group])
-        reference_scores.append({"text": f"{value:.2f}", "state": "bad" if value > BENEISH_THRESHOLD else "good"})
+        reference_scores.append({"text": f"{format_number(value, '.2f', lang)}", "state": "bad" if value > BENEISH_THRESHOLD else "good"})
     rows.append({"label": L(lang, "beneish_m_score"), "help": L(lang, "beneish_help"), "cells": m_cells + reference_scores})
 
     if any(r["m_score_indicative"] for r in results):
@@ -412,7 +422,7 @@ def beneish_table(results: list[dict], lang: str, dark: bool):
                 continue
             neutralized = ", ".join(L(lang, f"beneish_{i}") for i in indicative["neutralized"])
             indicative_cells.append({
-                "text": f"{indicative['value']:.2f}", "state": "warn",
+                "text": f"{format_number(indicative['value'], '.2f', lang)}", "state": "warn",
                 "tooltip": L(lang, "beneish_indicative_note", neutralized=neutralized),
             })
         indicative_cells += [{"text": "—", "state": "ok"}, {"text": "—", "state": "ok"}]
@@ -428,7 +438,7 @@ def beneish_summary(result: dict, lang: str):
     score = result["m_score"]
     if score["value"] is not None:
         color = "warning" if score["verdict"] == "manipulation_risk" else "success"
-        return dbc.Alert(L(lang, f"beneish_verdict_{score['verdict']}", pair=pair, value=f"{score['value']:.2f}"),
+        return dbc.Alert(L(lang, f"beneish_verdict_{score['verdict']}", pair=pair, value=f"{format_number(score['value'], '.2f', lang)}"),
                          color=color, className="py-2 mt-2")
     missing = ", ".join(L(lang, f"beneish_{i}") for i in score["missing"])
     children = [html.Div(L(lang, "beneish_official_na", pair=pair, missing=missing))]
@@ -436,12 +446,18 @@ def beneish_summary(result: dict, lang: str):
     if indicative is not None:
         neutralized = ", ".join(L(lang, f"beneish_{i}") for i in indicative["neutralized"])
         verdict = L(lang, f"beneish_verdict_{beneish_verdict(indicative['value'])}", pair=pair,
-                    value=f"{indicative['value']:.2f}")
+                    value=f"{format_number(indicative['value'], '.2f', lang)}")
         children += [html.Div(L(lang, "beneish_indicative_note", neutralized=neutralized)), html.Div(verdict)]
     return dbc.Alert(children, color="secondary", className="py-2 mt-2")
 
 
 ZONE_STATES = {"safe": "good", "grey": "warn", "distress": "bad"}
+
+
+def altman_ratio_label_key(model: str, x: str) -> str:
+    """Libellé d'un ratio d'Altman : X4 n'a pas le même numérateur selon le modèle (capitalisation
+    boursière pour le Z d'origine, capitaux propres comptables pour Z''), d'où deux libellés."""
+    return "altman_x4_market" if model == "original" and x == "x4" else f"altman_{x}"
 
 
 def altman_table(results: list[dict], lang: str, dark: bool, imported: bool = False):
@@ -462,7 +478,7 @@ def altman_table(results: list[dict], lang: str, dark: bool, imported: bool = Fa
                 numerator=format_amount(component["numerator"], lang),
                 denominator_label=_component_label(component["denominator_key"], lang),
                 denominator=format_amount(component["denominator"], lang),
-                value=f"{component['value']:.3f}" if component["value"] is not None else L(lang, "na"),
+                value=f"{format_number(component['value'], '.3f', lang)}" if component["value"] is not None else L(lang, "na"),
             )
             if component["value"] is None:
                 text = formula
@@ -470,10 +486,11 @@ def altman_table(results: list[dict], lang: str, dark: bool, imported: bool = Fa
                     text += "\n\n" + L(lang, "altman_mve_unavailable_import" if imported else "altman_mve_unavailable")
                 cells.append(_na_cell(text, lang))
                 continue
-            contribution = L(lang, "contribution_text", coefficient=f"{coefficient:g}", value=f"{component['value']:.3f}",
-                             contribution=f"{result['contributions'][x]:+.3f}")
-            cells.append({"text": f"{component['value']:.3f}", "tooltip": f"{formula}\n\n{contribution}", "state": "ok"})
-        rows.append({"label": L(lang, f"altman_{x}"), "help": L(lang, f"altman_{x}_help"), "cells": cells})
+            contribution = L(lang, "contribution_text", coefficient=f"{format_number(coefficient, 'g', lang)}", value=f"{format_number(component['value'], '.3f', lang)}",
+                             contribution=f"{format_number(result['contributions'][x], '+.3f', lang)}")
+            cells.append({"text": f"{format_number(component['value'], '.3f', lang)}", "tooltip": f"{formula}\n\n{contribution}", "state": "ok"})
+        rows.append({"label": L(lang, altman_ratio_label_key(model, x)), "help": L(lang, f"altman_{x}_help"),
+                     "cells": cells})
     z_cells, zone_cells = [], []
     for result in results:
         if result["value"] is None:
@@ -483,7 +500,7 @@ def altman_table(results: list[dict], lang: str, dark: bool, imported: bool = Fa
         else:
             state = ZONE_STATES[result["zone"]]
             flags = "\n\n".join(L(lang, f"flag_{flag}") for flag in result["flags"])
-            z_cells.append({"text": f"{result['value']:.2f}", "state": state, "tooltip": flags or None})
+            z_cells.append({"text": f"{format_number(result['value'], '.2f', lang)}", "state": state, "tooltip": flags or None})
             zone_cells.append({"text": L(lang, f"zone_{result['zone']}"), "state": state})
     rows.append({"label": L(lang, "altman_z"), "help": L(lang, "altman_help"), "cells": z_cells})
     rows.append({"label": L(lang, "altman_zone"), "help": L(lang, "altman_help"), "cells": zone_cells})
@@ -616,7 +633,7 @@ def net_debt_bridge_table(bridge: dict, currency: str, lang: str, dark: bool):
     rows = []
     for line in bridge["lines"]:
         label = L(lang, f"bridge_line_{line['key']}", label=line.get("label", ""),
-                  rate=f"{line.get('rate', 0) * 100:g}")
+                  rate=f"{format_number(line.get('rate', 0) * 100, 'g', lang)}")
         source = line["source"]
         if line["value"] is None:
             amount_cell = _na_cell(L(lang, "bridge_excluded") if line.get("excluded") else "", lang)
@@ -731,7 +748,7 @@ def benford_result_view(result: dict, counts: dict | None, demo: bool, lang: str
         children.append(html.Small(L(lang, "benford_counts", **counts), className="text-muted d-block mb-2"))
     if result["n"] == 0:
         return children + [dbc.Alert(L(lang, "benford_empty"), color="secondary", className="py-2")]
-    expected_mad = f"{result['expected_mad']:.4f}"
+    expected_mad = f"{format_number(result['expected_mad'], '.4f', lang)}"
     if result["sample_warning"] in ("not_interpretable", "caution"):
         color = "danger" if result["sample_warning"] == "not_interpretable" else "warning"
         children.append(dbc.Alert(L(lang, f"benford_warning_{result['sample_warning']}", n=result["n"],
@@ -747,22 +764,23 @@ def benford_result_view(result: dict, counts: dict | None, demo: bool, lang: str
     children.append(dbc.Card(dbc.CardBody([
         dbc.Row([
             stat("col_count", f"{result['n']:,}".replace(",", " ")),
-            stat("benford_mad_label", f"{result['mad']:.4f}", "benford_mad_help"),
+            stat("benford_mad_label", f"{format_number(result['mad'], '.4f', lang)}", "benford_mad_help"),
             stat("benford_conformity_label", L(lang, f"conformity_{result['conformity']}"), "benford_mad_help",
                  color=zone_state[result["conformity"]]),
-            stat("benford_chi2_label", f"{result['chi2']:.1f} (p = {result['p_value']:.3g})", "benford_chi2_help"),
+            stat("benford_chi2_label", f"{format_number(result['chi2'], '.1f', lang)} (p = {format_number(result['p_value'], '.3g', lang)})", "benford_chi2_help"),
         ]),
         html.Small(L(lang, "benford_expected_mad", n=result["n"], value=expected_mad), className="text-muted"),
     ]), className="mb-2"))
     labels = {k: L(lang, f"benford_{k}") for k in ("observed", "expected", "digit", "frequency")}
     children.append(dcc.Graph(figure=make_benford_chart(result["observed"], result["expected"], labels,
-                                                        L(lang, "benford_chart_title"), dark=dark, palette=palette),
+                                                        L(lang, "benford_chart_title"), dark=dark, palette=palette,
+                                                        separators=L(lang, "plotly_separators")),
                               config=GRAPH_CONFIG))
     style_header, style_cell, style_data = table_style_overrides(dark)
     rows = [{
-        "digit": d, "count": result["counts"][d], "observed": f"{result['observed'][d] * 100:.1f}",
-        "expected": f"{result['expected'][d] * 100:.1f}",
-        "deviation": f"{(result['observed'][d] - result['expected'][d]) * 100:+.1f}",
+        "digit": d, "count": result["counts"][d], "observed": f"{format_number(result['observed'][d] * 100, '.1f', lang)}",
+        "expected": f"{format_number(result['expected'][d] * 100, '.1f', lang)}",
+        "deviation": f"{format_number((result['observed'][d] - result['expected'][d]) * 100, '+.1f', lang)}",
     } for d in sorted(result["expected"])]
     children.append(dash_table.DataTable(
         id="table-benford", data=rows,
@@ -791,15 +809,16 @@ def company_card(ticker: str, profile: dict, regime: dict, market: dict, lang: s
     elif market["fx_rate"] == 1.0 and market["quote_major_currency"] == market["reporting_currency"]:
         fx_text = L(lang, "fx_same_currency")
     else:
-        fx_text = L(lang, "fx_detail", quote=market["quote_major_currency"], rate=market["fx_rate"],
-                    reporting=market["reporting_currency"])
+        fx_text = L(lang, "fx_detail", quote=market["quote_major_currency"],
+                    rate=format_number(market["fx_rate"], ".4f", lang), reporting=market["reporting_currency"])
     minor_unit_note = None
     if market["divisor"] != 1.0:
         minor_unit_note = html.Small(
             L(lang, "minor_unit_detail", quote_raw=profile["quote_currency"], divisor=market["divisor"]),
             className="text-muted",
         )
-    price_text = f"{market['price']:,.2f} {reporting}".replace(",", " ") if market["price"] is not None else L(lang, "na")
+    price_text = (f"{format_number(market['price'], ',.2f', lang)} {reporting}" if market["price"] is not None
+                  else L(lang, "na"))
     cap_text = f"{format_amount(market['market_cap'], lang)} {reporting}" if market["market_cap"] is not None else L(lang, "na")
     header = html.Div([
         html.H5(f"{profile['name']} ({ticker})", className="mb-1 d-inline"),
@@ -831,7 +850,7 @@ IMPORT_UNIT_NAMES = {1.0: "import_unit_units", 1e3: "import_unit_thousands", 1e6
 def _unit_text(unit: float, lang: str) -> str:
     """Unité de saisie du fichier en toutes lettres (« millions »), ou le multiplicateur s'il est inhabituel."""
     key = IMPORT_UNIT_NAMES.get(float(unit))
-    return L(lang, key) if key else f"× {unit:g}"
+    return L(lang, key) if key else f"× {format_number(unit, 'g', lang)}"
 
 
 def import_card(filename: str, meta: dict, regime: dict, latest_market_cap: float | None,
@@ -902,7 +921,8 @@ def analysis_alerts(profile: dict, regime: dict, market: dict, consistency: dict
     elif market["reason"] == "currency_unknown":
         alerts.append(dbc.Alert(L(lang, "warn_currency_unknown"), color="warning"))
     if consistency["consistent"] is False:
-        alerts.append(dbc.Alert(L(lang, "warn_minor_unit_inconsistent", ratio=consistency["empirical_ratio"],
+        alerts.append(dbc.Alert(L(lang, "warn_minor_unit_inconsistent",
+                                  ratio=format_number(consistency["empirical_ratio"], ".1f", lang),
                                   divisor=consistency["expected_divisor"]), color="warning"))
     return alerts
 

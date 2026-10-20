@@ -191,6 +191,7 @@ def _working_capital_section(normalized: NormalizedStatements, regime: dict, lan
         {metric: [days[year][metric]["value"] for year in chronological] for metric in WORKING_CAPITAL_METRICS},
         {metric: L(lang, f"ratio_{metric}") for metric in WORKING_CAPITAL_METRICS},
         L(lang, "days_chart_title"), L(lang, "days_axis"), dark=dark, palette=palette,
+        separators=L(lang, "plotly_separators"),
     )
     return section + [
         layout.ratio_table(days, WORKING_CAPITAL_METRICS, normalized.years, lang, dark, "table-working-capital",

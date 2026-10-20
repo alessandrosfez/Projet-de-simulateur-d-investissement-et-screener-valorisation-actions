@@ -150,7 +150,7 @@ def _summary(wb: Workbook, inputs: dict, lang: str):
         official, indicative = result["m_score"], result["m_score_indicative"]
         if official["value"] is not None:
             s.line([L(lang, "beneish_m_score"), pair, (official["value"], "score"),
-                    L(lang, f"beneish_verdict_{official['verdict']}", pair=pair, value=f"{official['value']:.2f}")])
+                    L(lang, f"beneish_verdict_{official['verdict']}", pair=pair, value=f"{layout.format_number(official['value'], '.2f', lang)}")])
         elif indicative is not None:
             s.line([L(lang, "beneish_m_score_indicative"), pair, (indicative["value"], "score"),
                     L(lang, "databook_indicative_only")])
@@ -295,7 +295,8 @@ def _scores(wb: Workbook, inputs: dict, lang: str):
             s.line([L(lang, f"altman_model_{model}")], bold=True)
             s.header([L(lang, "col_metric"), *[layout.format_year(r["year"], lang) for r in results]])
             for x in ALTMAN_MODELS[model]["coefficients"]:
-                s.line([L(lang, f"altman_{x}"), *[(r["components"][x]["value"], "index") for r in results]])
+                s.line([L(lang, layout.altman_ratio_label_key(model, x)),
+                        *[(r["components"][x]["value"], "index") for r in results]])
             s.line([L(lang, "altman_z"), *[(r["value"], "score") for r in results]], bold=True)
             s.line([L(lang, "altman_zone"), *[L(lang, f"zone_{r['zone']}") if r["zone"] else None for r in results]])
             s.blank()
@@ -329,7 +330,7 @@ def _transaction(wb: Workbook, inputs: dict, lang: str):
     s.heading(L(lang, "net_debt_bridge_title"))
     s.header([L(lang, "col_item"), L(lang, "col_amount", currency=currency), L(lang, "col_source")])
     for line in transaction["bridge"]["lines"]:
-        label = L(lang, f"bridge_line_{line['key']}", label=line.get("label", ""), rate=f"{line.get('rate', 0) * 100:g}")
+        label = L(lang, f"bridge_line_{line['key']}", label=line.get("label", ""), rate=f"{layout.format_number(line.get('rate', 0) * 100, 'g', lang)}")
         s.line([label, (line["value"], "amount"), L(lang, f"source_{line['source']}")],
                bold=line["source"] == "subtotal")
     for flag in transaction["bridge"]["flags"]:

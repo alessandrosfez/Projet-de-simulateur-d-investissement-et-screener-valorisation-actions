@@ -31,8 +31,9 @@ def make_bridge_waterfall(steps: list[dict], cfo: float, labels: dict[str, str],
 
 
 def make_benford_chart(observed: dict[int, float], expected: dict[int, float], labels: dict[str, str], title: str,
-                       dark: bool = False, palette=None) -> go.Figure:
-    """Fréquences observées du premier chiffre (barres) contre la loi de Benford (courbe), en %."""
+                       dark: bool = False, palette=None, separators: str | None = None) -> go.Figure:
+    """Fréquences observées du premier chiffre (barres) contre la loi de Benford (courbe), en %.
+    separators : séparateurs décimal et de milliers de Plotly (« , » en français), None par défaut."""
     palette = palette or ["#636EFA", "#EF553B"]
     digits = sorted(expected)
     fig = go.Figure()
@@ -49,12 +50,14 @@ def make_benford_chart(observed: dict[int, float], expected: dict[int, float], l
     fig.update_layout(
         template="plotly_dark" if dark else "plotly", title=title, xaxis=dict(title=labels["digit"], dtick=1),
         yaxis_title=labels["frequency"], margin=dict(t=60), legend=dict(orientation="h", y=-0.2),
+        separators=separators,
     )
     return fig
 
 
 def make_working_capital_days_chart(years: list, series: dict[str, list], labels: dict[str, str], title: str,
-                                    y_title: str, dark: bool = False, palette=None) -> go.Figure:
+                                    y_title: str, dark: bool = False, palette=None,
+                                    separators: str | None = None) -> go.Figure:
     """Évolution des jours de BFR, exercices dans l'ordre chronologique (gauche -> droite). series :
     {indicateur: [valeur ou None par exercice]} ; un None laisse un trou dans la courbe plutôt que de
     la faire passer par 0."""
@@ -69,7 +72,7 @@ def make_working_capital_days_chart(years: list, series: dict[str, list], labels
         ))
     fig.update_layout(
         template="plotly_dark" if dark else "plotly", title=title, yaxis_title=y_title,
-        margin=dict(t=60), hovermode="x unified", xaxis=dict(type="category"),
+        margin=dict(t=60), hovermode="x unified", xaxis=dict(type="category"), separators=separators,
     )
     return fig
 
