@@ -26,6 +26,7 @@ from engine import (
 from i18n import L, PALETTE, PALETTE_CODES, PALETTE_NAMES, PALETTES
 from market_data import (
     get_dcf_inputs, get_stock_pe_history, get_stock_price_history, get_stock_quality_metrics, get_stock_valuation,
+    major_currency,
 )
 
 # ============================================================
@@ -64,7 +65,8 @@ def rebuild_on_language_change(lang, *state_values):
 # ============================================================
 
 def _format_market_cap(value):
-    """Formate une capitalisation dans la devise locale de cotation (EUR, GBP ou USD selon le marché)."""
+    """Formate une capitalisation (montant abrégé, sans devise : l'appelant ajoute la devise principale,
+    voir market_data.major_currency)."""
     if not value or (isinstance(value, float) and np.isnan(value)):
         return "N/A"
     for threshold, suffix in [(1e12, "T"), (1e9, "Md"), (1e6, "M")]:
@@ -490,7 +492,13 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
         "PEG", "EV/EBITDA", "P/B", "Rendement dividende (%)",
         "P/E moyen 5 ans (approx.)", "Position vs historique 5 ans (percentile)", "Capitalisation",
     ]).copy()
-    table_df["Capitalisation"] = table_df["Capitalisation"].map(_format_market_cap)
+    # Devise principale accolée : à Londres, la colonne Devise affiche GBp (cours en pence) alors que
+    # la capitalisation Yahoo est en livres, ce qu'un « 221.9 Md » nu à côté de « GBp » cachait.
+    table_df["Capitalisation"] = [
+        f"{_format_market_cap(cap)} {major_currency(cur)}" if _format_market_cap(cap) != "N/A" and cur not in (None, "N/A")
+        else _format_market_cap(cap)
+        for cap, cur in zip(table_df["Capitalisation"], table_df["Devise"])
+    ]
     for col in ["Score", "Prix", "P/E (trailing)", "P/E (prévisionnel)", "PEG", "EV/EBITDA", "P/B",
                 "Rendement dividende (%)", "P/E moyen 5 ans (approx.)", "Position vs historique 5 ans (percentile)"]:
         table_df[col] = table_df[col].round(2)

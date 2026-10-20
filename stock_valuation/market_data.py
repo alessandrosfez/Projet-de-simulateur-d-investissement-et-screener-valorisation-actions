@@ -134,13 +134,28 @@ def _statement_to_price_units(info: dict) -> tuple[float, float]:
     return legacy, legacy
 
 
+def major_currency(code: str | None) -> str | None:
+    """Devise principale d'un code de cotation (GBP pour GBp) : la capitalisation Yahoo est exprimée
+    dans la devise principale, même quand le cours est coté en sous-unité."""
+    if not code or code == "N/A":
+        return code
+    return MINOR_CURRENCY_UNITS.get(code, (code, 1))[0]
+
+
 @cached_ttl(3600)
 def get_stock_pe_history(ticker: str) -> pd.Series:
     """Série de P/E implicite sur 5 ans (prix historique / BPA actuel), corrigée d'un
     éventuel décalage d'échelle prix/BPA. Approximatif : suppose le BPA à peu près
     stable sur la période, ce qui n'est pas vrai pour une valeur très cyclique ou en
     forte croissance des bénéfices, à prendre comme indication, pas comme vérité.
-    Série vide si le BPA n'est pas disponible."""
+    Série vide si le BPA n'est pas disponible.
+
+    Cours BRUTS (auto_adjust=False) : par défaut, yfinance ajuste rétroactivement les cours passés
+    des dividendes versés depuis, ce qui minore le P/E de l'époque. Vérifié sur TotalEnergies : le
+    cours ajusté d'il y a 5 ans ne vaut que 75 % du cours réellement coté (91 % pour Air Liquide),
+    si bien que le P/E moyen sur 5 ans sortait trop bas et le titre paraissait plus cher que son
+    historique. Les cours bruts restent ajustés des divisions, comme le BPA : le rapport garde un
+    sens d'un bout à l'autre de la période."""
     info = _get_ticker_info(ticker)
     trailing_pe = info.get("trailingPE")
     trailing_eps = info.get("trailingEps")
@@ -150,7 +165,7 @@ def get_stock_pe_history(ticker: str) -> pd.Series:
 
     price_scale = _price_scale_factor(trailing_pe, trailing_eps, current_price)
     try:
-        hist = yf.Ticker(ticker).history(period="5y", interval="1wk")["Close"].dropna()
+        hist = yf.Ticker(ticker).history(period="5y", interval="1wk", auto_adjust=False)["Close"].dropna()
     except Exception:
         return pd.Series(dtype=float)
     implied_pe = (hist / price_scale) / trailing_eps
@@ -162,7 +177,9 @@ def get_stock_price_history(ticker: str, period: str = "5y", interval: str = "1m
     """Série de prix de clôture, corrigée du même décalage d'échelle prix/BPA que
     get_stock_pe_history (voir _price_scale_factor), mais sans exiger de BPA positif :
     sert au calcul de rendement/volatilité/drawdown réalisés (track record), utiles
-    même pour une valeur sans bénéfice net positif, contrairement au P/E historique."""
+    même pour une valeur sans bénéfice net positif, contrairement au P/E historique.
+    Cours ajustés des dividendes, à dessein ici (contrairement au P/E historique) : le track record
+    mesure le rendement total, dividendes réinvestis."""
     info = _get_ticker_info(ticker)
     trailing_pe = info.get("trailingPE")
     trailing_eps = info.get("trailingEps")

@@ -152,6 +152,46 @@ def test_enterprise_value_units_make_ev_ebitda_comparables_return_the_price(monk
     assert fair_value == pytest.approx(price)
 
 
+def _history_recorder(closes: list[float], info: dict, calls: list):
+    """yf.Ticker remplacé : history() enregistre ses arguments et renvoie des clôtures fixes."""
+    def factory(symbol):
+        fake = MagicMock()
+        fake.get_info.return_value = info
+
+        def history(**kwargs):
+            calls.append(kwargs)
+            return pd.DataFrame({"Close": closes}, index=pd.date_range("2021-01-01", periods=len(closes), freq="W"))
+        fake.history.side_effect = history
+        return fake
+    return factory
+
+
+def test_pe_history_uses_raw_closes_not_dividend_adjusted(monkeypatch):
+    """Régression : par défaut, yfinance ajuste les cours passés des dividendes, ce qui minorait le
+    P/E historique (de 25 % il y a 5 ans pour TotalEnergies). Le P/E implicite doit être calculé sur les
+    cours réellement cotés."""
+    calls = []
+    info = {"currentPrice": 80.0, "trailingPE": 11.7, "trailingEps": 80.0 / 11.7, "currency": "EUR"}
+    monkeypatch.setattr(md.yf, "Ticker", _history_recorder([60.0, 70.0, 80.0], info, calls))
+    md.get_stock_pe_history("TTE.PA")
+    assert calls and calls[0].get("auto_adjust") is False
+
+
+def test_pe_history_last_point_returns_the_current_pe_even_in_pence(monkeypatch):
+    """Invariant : au cours actuel, le P/E implicite redonne exactement le P/E affiché par Yahoo, y
+    compris pour une valeur cotée en pence (Shell : 3 900 GBp, BPA 3,38 GBP)."""
+    info = {"currentPrice": 3900.0, "trailingPE": 3900.0 / 100 / 3.38, "trailingEps": 3.38, "currency": "GBp"}
+    monkeypatch.setattr(md.yf, "Ticker", _history_recorder([3500.0, 3700.0, 3900.0], info, []))
+    pe = md.get_stock_pe_history("SHEL.L")
+    assert pe.iloc[-1] == pytest.approx(info["trailingPE"])
+
+
+def test_major_currency_of_a_minor_unit_quote():
+    assert md.major_currency("GBp") == "GBP"
+    assert md.major_currency("EUR") == "EUR"
+    assert md.major_currency("N/A") == "N/A"
+
+
 def test_unknown_accounts_currency_falls_back_on_empirical_factor(monkeypatch):
     info = {"currentPrice": 3000.0, "trailingPE": 15.0, "trailingEps": 2.0, "currency": "GBp",
             "financialCurrency": "USD", "freeCashflow": 200.0, "sharesOutstanding": 1000.0}

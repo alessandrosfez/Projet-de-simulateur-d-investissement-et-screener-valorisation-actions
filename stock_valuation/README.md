@@ -73,6 +73,21 @@ titre doit valoir exactement son cours. La valorisation par comparables
 P/E n'a jamais été affectée : en travaillant par ratio au prix courant,
 l'unité du BPA n'entre jamais en jeu.
 
+**P/E historique sur cours bruts, track record sur cours ajustés.** Le
+P/E moyen sur 5 ans divise les cours passés par le BPA actuel. Par
+défaut, yfinance ajuste rétroactivement ces cours des dividendes versés
+depuis : pour TotalEnergies, le cours ajusté d'il y a 5 ans ne vaut que
+75 % du cours réellement coté. Le P/E de l'époque était donc minoré, et
+un titre distribuant paraissait plus cher que son historique. Corrigé en
+lisant les cours bruts (`auto_adjust=False`, toujours ajustés des
+divisions comme le BPA) : le P/E moyen sur 5 ans passe de 7,5 à 8,5 pour
+TotalEnergies et de 24,5 à 27,6 pour Sanofi. Un test vérifie
+l'invariant : au cours actuel, le P/E implicite redonne le P/E affiché,
+y compris en pence. Le track record (rendement, volatilité, drawdown)
+garde au contraire les cours ajustés : il mesure le rendement total,
+dividendes réinvestis. Dans le tableau, la capitalisation porte
+désormais sa devise principale (GBP, et non le GBp du cours).
+
 **Comparables toujours calculés au sein du même secteur.** Le panier de
 pairs est filtré sur le secteur du titre sélectionné, indépendamment du
 filtre sectoriel du tableau au-dessus — comparer un P/E tech à un P/E
