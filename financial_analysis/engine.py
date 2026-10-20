@@ -1558,3 +1558,86 @@ def statements_csv_template(labels: dict[str, str], comments: list[str], meta_li
     for key in IMPORT_KEYS:
         writer.writerow([key, labels[key], *([""] * len(years))])
     return out.getvalue()
+
+
+# ============================================================
+# COMPARAISON SECTORIELLE
+# ============================================================
+# Un DSO de 60 jours ou une conversion en cash de 0,9x ne disent pas grand-chose dans l'absolu : ils
+# se lisent par rapport à des sociétés comparables. Pairs : sociétés du CAC 40 du même secteur Yahoo,
+# avec repli signalé sur l'ensemble des non-financières du CAC 40 quand le secteur en compte trop peu
+# (même logique que le seuil de pairs des comparables de stock_valuation).
+
+PEER_METRICS = ("cfo_to_net_income", "fcf_to_net_income", "sloan_accruals", "dso", "dio", "dpo", "ccc",
+                "beneish_m_score", "altman_z_double_prime", "piotroski_f_score")
+PEER_SCOPES = ("sector", "all_non_financial")
+MIN_SECTOR_PEERS = 4
+
+
+def peer_metrics(ns: NormalizedStatements, regime: dict) -> dict:
+    """Indicateurs comparables du dernier exercice d'une société (None si non calculable). Pour Beneish,
+    le M-score officiel, ou à défaut sa variante indicative : beaucoup de sociétés européennes ne
+    publient pas leurs frais généraux, et sans elle la plupart des pairs seraient n.d. ; indicative
+    signale les sociétés concernées. Le F-score n'est retenu que complet (9 critères sur 9), seul cas
+    où deux scores se comparent. Banque ou assureur : tout est None, ces indicateurs n'y ont pas de
+    sens."""
+    values: dict[str, float | None] = {metric: None for metric in PEER_METRICS}
+    result = {"year": ns.years[0] if ns.years else None, "values": values, "indicative": False}
+    if not ns.years or regime["regime"] != "general":
+        return result
+    latest = ns.years[0]
+    conversion, accruals, days = cash_conversion(ns)[latest], sloan_accruals(ns)[latest], working_capital_days(ns)[latest]
+    values["cfo_to_net_income"] = conversion["cfo_to_net_income"]["value"]
+    values["fcf_to_net_income"] = conversion["fcf_to_net_income"]["value"]
+    values["sloan_accruals"] = accruals["value"]
+    for metric in ("dso", "dio", "dpo", "ccc"):
+        values[metric] = days[metric]["value"]
+    pairs = consecutive_pairs(ns)
+    if pairs:
+        beneish = beneish_m_score(ns, *pairs[0])
+        if beneish["m_score"]["value"] is not None:
+            values["beneish_m_score"] = beneish["m_score"]["value"]
+        elif beneish["m_score_indicative"] is not None:
+            values["beneish_m_score"] = beneish["m_score_indicative"]["value"]
+            result["indicative"] = True
+        piotroski = piotroski_f_score(ns, pairs[0][0])
+        if piotroski["n_available"] == piotroski["n_criteria"]:
+            values["piotroski_f_score"] = float(piotroski["score"])
+    values["altman_z_double_prime"] = altman_z_score(ns, latest, "z_double_prime")["value"]
+    return result
+
+
+def select_peers(target: str | None, target_sector: str | None, universe: dict[str, dict]) -> tuple[list[str], str]:
+    """Pairs de target dans universe ({ticker: {"sector", "regime"}}) : même secteur, banques et
+    assureurs exclus, target exclu. Moins de MIN_SECTOR_PEERS pairs (ou secteur inconnu) : repli sur
+    toutes les non-financières, signalé par le second élément ("sector" ou "all_non_financial")."""
+    eligible = {ticker: info for ticker, info in universe.items()
+                if ticker != target and info.get("regime") == "general"}
+    same_sector = sorted(t for t, info in eligible.items() if target_sector and info.get("sector") == target_sector)
+    if len(same_sector) >= MIN_SECTOR_PEERS:
+        return same_sector, "sector"
+    return sorted(eligible), "all_non_financial"
+
+
+def peer_distribution(values: list[float | None]) -> dict:
+    """Médiane et quartiles (interpolation linéaire) des valeurs disponibles. Un pair sans la donnée
+    est écarté de cet indicateur seulement, jamais compté pour 0 : n dit sur combien de pairs porte la
+    statistique."""
+    available = [v for v in values if v is not None]
+    if not available:
+        return {"n": 0, "q1": None, "median": None, "q3": None}
+    series = pd.Series(available, dtype=float)
+    return {"n": len(available), "q1": float(series.quantile(0.25)), "median": float(series.median()),
+            "q3": float(series.quantile(0.75))}
+
+
+def percentile_rank(value: float | None, values: list[float | None]) -> float | None:
+    """Rang de value parmi les pairs, en % : part des pairs strictement inférieurs, plus la moitié des
+    ex aequo (convention usuelle du rang centile). 50 = au milieu de ses pairs. None sans valeur ou sans
+    pair disponible."""
+    available = [v for v in values if v is not None]
+    if value is None or not available:
+        return None
+    below = sum(1 for v in available if v < value)
+    equal = sum(1 for v in available if v == value)
+    return (below + 0.5 * equal) / len(available) * 100

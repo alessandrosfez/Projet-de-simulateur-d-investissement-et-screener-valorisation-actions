@@ -715,6 +715,34 @@ TRANSLATIONS = {
         "import_unit_thousands": "milliers",
         "import_unit_millions": "millions",
         "import_unit_billions": "milliards",
+        # ---------- Comparaison sectorielle ----------
+        "section_peers": "Comparaison aux pairs du CAC 40",
+        "peers_help": "Situe chaque indicateur du dernier exercice par rapport aux sociétés du CAC 40 du même "
+                      "secteur Yahoo (banques et assureurs exclus) : médiane, intervalle interquartile et rang "
+                      "centile de la société (50 = au milieu de ses pairs). Sous 4 pairs dans le secteur, "
+                      "comparaison avec toutes les non-financières de l'indice, signalée.",
+        "peers_btn": "Comparer aux pairs du CAC 40",
+        "peers_scope_sector": "Pairs : les {n} sociétés du CAC 40 du secteur « {sector} » ({names}).",
+        "peers_scope_all_non_financial": "Moins de {threshold} pairs dans le secteur « {sector} » au CAC 40 : "
+                                         "comparaison avec les {n} sociétés non financières de l'indice "
+                                         "({names}). À lire avec prudence : ces indicateurs varient beaucoup "
+                                         "d'un secteur à l'autre.",
+        "peers_none": "Aucun pair disponible pour la comparaison.",
+        "col_company": "Société",
+        "col_peer_median": "Médiane des pairs",
+        "col_peer_iqr": "Q1 – Q3 des pairs",
+        "col_peer_rank": "Rang de la société",
+        "col_peer_n": "Pairs",
+        "peers_rank_text": "{rank}e centile",
+        "peers_beneish_note": "M-score officiel, ou sa variante indicative (indices manquants neutralisés à 1) "
+                              "quand il manque un indice : c'est le cas de {n} pair(s), faute de frais généraux "
+                              "publiés.",
+        "peers_years_note": "Chaque société est prise à son dernier exercice disponible : les dates de clôture "
+                            "peuvent différer. Le F-score n'est comparé que complet (9 critères sur 9). Un pair "
+                            "sans la donnée est écarté de l'indicateur concerné, jamais compté pour 0.",
+        "peers_target_indicative": "M-score de la société : variante indicative (un indice manque).",
+        "peers_year_gap": "Attention : le dernier exercice de la société ({target}) est éloigné de celui de la plupart "
+                          "de ses pairs ({peers}). La comparaison porte sur des périodes différentes.",
         # ---------- Databook Excel ----------
         "databook_btn": "Exporter le databook (Excel)",
         "databook_help": "Classeur Excel de toute l'analyse, un onglet par section : synthèse, états normalisés "
@@ -1410,6 +1438,32 @@ TRANSLATIONS = {
         "import_unit_thousands": "thousands",
         "import_unit_millions": "millions",
         "import_unit_billions": "billions",
+        # ---------- Peer comparison ----------
+        "section_peers": "Comparison with CAC 40 peers",
+        "peers_help": "Places each indicator of the latest fiscal year against CAC 40 companies in the same Yahoo "
+                      "sector (banks and insurers excluded): median, interquartile range and the company's "
+                      "percentile rank (50 = in the middle of its peers). With fewer than 4 peers in the sector, "
+                      "the comparison uses all non-financial companies of the index, flagged as such.",
+        "peers_btn": "Compare with CAC 40 peers",
+        "peers_scope_sector": "Peers: the {n} CAC 40 companies in the \"{sector}\" sector ({names}).",
+        "peers_scope_all_non_financial": "Fewer than {threshold} peers in the \"{sector}\" sector in the CAC 40: "
+                                         "comparison with the {n} non-financial companies of the index ({names}). "
+                                         "Read with care: these indicators vary widely across sectors.",
+        "peers_none": "No peer available for the comparison.",
+        "col_company": "Company",
+        "col_peer_median": "Peer median",
+        "col_peer_iqr": "Peer Q1 – Q3",
+        "col_peer_rank": "Company rank",
+        "col_peer_n": "Peers",
+        "peers_rank_text": "percentile {rank}",
+        "peers_beneish_note": "Official M-score, or its indicative variant (missing indices neutralized at 1) when an "
+                              "index is missing: the case for {n} peer(s), for lack of published SG&A.",
+        "peers_years_note": "Each company is taken at its latest available fiscal year: closing dates may differ. "
+                            "The F-score is only compared when complete (9 criteria out of 9). A peer without the "
+                            "data is left out of that indicator, never counted as 0.",
+        "peers_target_indicative": "Company's M-score: indicative variant (an index is missing).",
+        "peers_year_gap": "Warning: the company's latest fiscal year ({target}) is far from that of most of its peers "
+                          "({peers}). The comparison covers different periods.",
         # ---------- Excel databook ----------
         "databook_btn": "Export the databook (Excel)",
         "databook_help": "Excel workbook of the whole analysis, one sheet per section: summary, normalized "

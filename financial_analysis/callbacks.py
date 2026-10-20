@@ -5,6 +5,7 @@ données (market_data.py), les fait passer par le moteur pur (engine.py) et met 
 (layout.py).
 """
 import base64
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 import dash
@@ -16,9 +17,10 @@ import layout
 from app_instance import app
 from databook import build_databook
 from charts import empty_figure_with_message, make_bridge_waterfall, make_working_capital_days_chart
-from constants import TYPICAL_YFINANCE_YEARS
+from constants import CAC40_TICKERS, TYPICAL_YFINANCE_YEARS
 from engine import (
-    DEFAULT_BENFORD_MIN_AMOUNT, FIELD_KEYS, IMPORT_MARKET_CAP_KEY, NormalizedStatements, adjusted_ebitda,
+    DEFAULT_BENFORD_MIN_AMOUNT, FIELD_KEYS, IMPORT_MARKET_CAP_KEY, MIN_SECTOR_PEERS, PEER_METRICS, NormalizedStatements,
+    adjusted_ebitda, peer_distribution, peer_metrics, percentile_rank, select_peers,
     benford_first_digit_test, financial_statement_amounts, guess_amount_column, read_ledger_csv,
     select_benford_amounts, altman_default_model, altman_z_score, beneish_m_score, cash_conversion,
     consecutive_pairs, detect_sector_regime, imported_market_caps, imported_statement_amounts, market_value_of_equity,
@@ -230,6 +232,82 @@ def _scores_section(normalized: NormalizedStatements, regime: dict, lang: str, d
         if results:
             section.append(layout.piotroski_table(results, lang, dark))
     return section
+
+
+def _peers_section(regime: dict, lang: str) -> list:
+    """Bouton plutôt que calcul automatique : la première comparaison télécharge les comptes d'une
+    quarantaine de sociétés (ensuite en cache 24 h), ce qu'on n'impose pas à chaque analyse."""
+    section = [html.H5([L(lang, "section_peers")] + layout.info_tooltip("peers-info", L(lang, "peers_help")),
+                       className="section-title")]
+    if regime["regime"] != "general":
+        return section + [_not_applicable(regime, lang)]
+    return section + [
+        dbc.Button(L(lang, "peers_btn"), id="peers-btn", color="secondary", outline=True, size="sm", className="mb-2"),
+        dcc.Loading(type="circle", color="#636efa", children=[html.Div(id="peers-container")]),
+    ]
+
+
+PEER_DOWNLOAD_WORKERS = 8
+# Écart (en années) entre le dernier exercice de la société et celui de la plupart de ses pairs au-delà
+# duquel la comparaison est signalée comme portant sur des périodes différentes.
+PEER_YEAR_GAP_WARNING = 2
+
+
+def _peer_universe() -> dict[str, dict]:
+    """Secteur, régime et indicateurs de chaque société du CAC 40, téléchargés en parallèle (les
+    appels yfinance attendent surtout le réseau). Une société indisponible garde des indicateurs n.d.,
+    sans bloquer les autres."""
+    def load(ticker: str) -> tuple[str, dict]:
+        profile = get_company_profile(ticker)
+        regime = detect_sector_regime(profile["sector"], profile["industry"])
+        return ticker, {"name": profile["name"], "sector": profile["sector"], "regime": regime["regime"],
+                        "metrics": peer_metrics(_load_normalized(ticker), regime)}
+
+    with ThreadPoolExecutor(max_workers=PEER_DOWNLOAD_WORKERS) as executor:
+        return dict(executor.map(load, CAC40_TICKERS.values()))
+
+
+@app.callback(
+    Output("peers-container", "children"),
+    Input("peers-btn", "n_clicks"),
+    State("analysis-ticker-store", "data"),
+    State("lang-radio", "value"),
+    State("dark-mode-switch", "value"),
+    prevent_initial_call=True,
+)
+def compare_to_peers(n_clicks, store, lang, dark_mode):
+    lang = lang or "fr"
+    ctx = _load_context(store) if n_clicks else None
+    if ctx is None or not ctx.normalized.years:
+        raise dash.exceptions.PreventUpdate
+    universe = _peer_universe()
+    peers, scope = select_peers(ctx.ticker, ctx.profile["sector"], universe)
+    if not peers:
+        return dbc.Alert(L(lang, "peers_none"), color="secondary", className="py-2")
+    target = peer_metrics(ctx.normalized, ctx.regime)
+    stats, ranks = {}, {}
+    for metric in PEER_METRICS:
+        values = [universe[ticker]["metrics"]["values"][metric] for ticker in peers]
+        stats[metric] = peer_distribution(values)
+        ranks[metric] = percentile_rank(target["values"][metric], values)
+    names = ", ".join(universe[ticker]["name"] for ticker in peers)
+    scope_text = L(lang, f"peers_scope_{scope}", sector=ctx.profile["sector"] or L(lang, "na"), n=len(peers),
+                   names=names, threshold=MIN_SECTOR_PEERS)
+    indicative = [universe[ticker]["name"] for ticker in peers if universe[ticker]["metrics"]["indicative"]]
+    notes = [L(lang, "peers_years_note")]
+    peer_years = sorted(universe[t]["metrics"]["year"].year for t in peers if universe[t]["metrics"]["year"] is not None)
+    if peer_years and target["year"] is not None:
+        median_year = peer_years[len(peer_years) // 2]
+        if abs(target["year"].year - median_year) >= PEER_YEAR_GAP_WARNING:
+            # Cas typique : société radiée importée (Wirecard 2018) face aux comptes récents des pairs.
+            notes.insert(0, L(lang, "peers_year_gap", target=target["year"].year, peers=median_year))
+    if target["indicative"]:
+        notes.append(L(lang, "peers_target_indicative"))
+    return html.Div([
+        dbc.Alert(scope_text, color="light" if scope == "sector" else "warning", className="py-2"),
+        layout.peers_table(target, stats, ranks, indicative, lang, bool(dark_mode)),
+        html.Div([html.Div(note) for note in notes], className="text-muted mt-2", style={"fontSize": "0.8rem"}),
+    ])
 
 
 def _market_values_at_year_end(ticker: str, normalized: NormalizedStatements, profile: dict) -> dict:
@@ -448,6 +526,7 @@ def render_analysis(store, lang, dark_mode, palette_code, saved_store):
         *_earnings_quality_section(normalized, regime, lang, dark),
         *_working_capital_section(normalized, regime, lang, dark, palette),
         *_scores_section(normalized, regime, lang, dark),
+        *_peers_section(regime, lang),
         *_transaction_section(normalized, regime, (saved_store or {}).get(ctx.key, {}), reporting, lang, dark),
         html.H5(L(lang, "section_statements"), className="section-title"),
         html.Small(L(lang, "amounts_unit", currency=reporting), className="text-muted d-block"),

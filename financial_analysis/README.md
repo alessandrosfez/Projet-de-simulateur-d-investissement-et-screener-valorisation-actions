@@ -58,6 +58,10 @@ Yahoo Finance sans retraitement par un analyste.
   qualité des résultats, l'analyse du BFR et la vision Transaction
   Services y sont déclarés non applicables, avec un message clair plutôt
   que des chiffres absurdes.
+- **Comparaison aux pairs du CAC 40** : chaque indicateur du dernier
+  exercice (conversion en cash, accruals, jours de BFR, M-score, Z'',
+  F-score) est situé par rapport aux sociétés du même secteur : médiane,
+  intervalle interquartile et rang centile.
 - **Databook Excel** : export de toute l'analyse en un classeur, le
   livrable standard d'une mission de Transaction Services. Il comporte un
   onglet par section : synthèse, états normalisés, provenance de chaque
@@ -198,6 +202,29 @@ Yahoo Finance sans retraitement par un analyste.
     encore le M-score d'environ 0,22, tandis que l'ajout des créances
     d'acquisition change le DSRI. L'écart ne peut donc pas être expliqué
     ligne à ligne.
+- **Comparaison aux pairs** :
+  - **Pairs** : sociétés du CAC 40 du même secteur Yahoo, hors banques et
+    assureurs. Sous 4 pairs, la comparaison passe, avec un avertissement, à
+    toutes les non-financières de l'indice. C'est la même logique que le
+    seuil de pairs des comparables de `stock_valuation`. La composition
+    réelle du CAC 40 donne souvent peu de pairs : Industrials en compte 10,
+    Technology 4, Basic Materials 2. Air Liquide ou Capgemini sont donc
+    comparés à l'indice entier.
+  - **Indicateurs comparables seulement** : le F-score n'entre que
+    complet (9 critères sur 9). Pour Beneish, on prend le M-score officiel,
+    sinon sa variante indicative, sans quoi la plupart des sociétés
+    européennes, qui ne publient pas leurs frais généraux, seraient n.d. Le
+    tableau indique combien de pairs sont concernés.
+  - **Pas de 0 à la place d'une donnée** : un pair sans la donnée est
+    écarté de cet indicateur seulement, et le nombre de pairs est affiché
+    pour chacun.
+  - **Rang centile** : part des pairs strictement inférieurs, plus la
+    moitié des ex aequo. Chaque société est prise à son dernier exercice ;
+    un écart d'au moins deux ans avec la plupart des pairs est signalé
+    (cas d'une société radiée importée, comme Wirecard).
+  - **Sur demande** : la comparaison se lance par un bouton. Le premier
+    appel télécharge en parallèle les comptes des 40 sociétés, puis le
+    cache les garde 24 h.
 - **Databook : des chiffres réutilisables, et le calcul à côté** :
   - **Cellules numériques** : montants et ratios sont écrits en nombres,
     avec un format Excel (x, %, jours), pour pouvoir les reprendre. Ce sont
@@ -413,6 +440,8 @@ multiples et la lecture des saisies sur des cas calculés à la main.
 `test_benford.py` vérifie qu'un échantillon conforme généré
 synthétiquement passe, qu'un échantillon uniforme échoue, que les seuils
 de taille se déclenchent, et la lecture des montants et des CSV.
+`test_peers.py` vérifie le choix des pairs et le repli, les quartiles
+calculés sur les seuls pairs disponibles et le rang centile.
 `test_wirecard_example.py` contrôle la saisie du cas Wirecard par les
 identités comptables et fige le constat ci-dessus.
 `test_databook.py` génère un classeur à partir d'un fichier importé et le

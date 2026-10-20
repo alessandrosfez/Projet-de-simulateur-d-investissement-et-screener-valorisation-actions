@@ -12,9 +12,9 @@ from charts import make_benford_chart
 from constants import CAC40_TICKERS
 from engine import (
     ALTMAN_MODELS, BENEISH_COEFFICIENTS, BENEISH_INDICES, BENEISH_REFERENCE_MEANS, BENEISH_THRESHOLD, FIELD_SCHEMA,
-    PIOTROSKI_CRITERIA, NormalizedStatements, beneish_verdict, beneish_m_score_from_indices,
+    PEER_METRICS, PIOTROSKI_CRITERIA, NormalizedStatements, beneish_verdict, beneish_m_score_from_indices,
 )
-from i18n import L
+from i18n import TRANSLATIONS, L
 
 GRAPH_CONFIG = {
     "displaylogo": False,
@@ -841,6 +841,45 @@ def company_card(ticker: str, profile: dict, regime: dict, market: dict, lang: s
             ], width=6, className="mb-2"),
         ]),
     ]), className="mb-3")
+
+
+PEER_METRIC_LABELS = {"beneish_m_score": "beneish_m_score", "altman_z_double_prime": "altman_model_z_double_prime",
+                      "piotroski_f_score": "piotroski_score"}
+
+
+def _peer_value_text(metric: str, value: float | None, lang: str) -> str:
+    if value is None:
+        return L(lang, "na")
+    if metric in RATIO_KINDS:
+        return format_ratio(value, RATIO_KINDS[metric], lang)
+    return format_number(value, ".0f" if metric == "piotroski_f_score" else ".2f", lang)
+
+
+def peers_table(target: dict, stats: dict, ranks: dict, indicative_peers: list[str], lang: str, dark: bool):
+    """Une ligne par indicateur : valeur de la société, médiane et intervalle interquartile des pairs,
+    rang centile de la société parmi eux, nombre de pairs disposant de la donnée."""
+    rows = []
+    for metric in PEER_METRICS:
+        label_key = PEER_METRIC_LABELS.get(metric, f"ratio_{metric}")
+        stat = stats[metric]
+        iqr = (f"{_peer_value_text(metric, stat['q1'], lang)} – {_peer_value_text(metric, stat['q3'], lang)}"
+               if stat["n"] else L(lang, "na"))
+        rank = ranks[metric]
+        help_text = L(lang, f"{label_key}_help") if f"{label_key}_help" in TRANSLATIONS[lang] else ""
+        if metric == "beneish_m_score":
+            help_text = L(lang, "peers_beneish_note", n=len(indicative_peers))
+        rows.append({"label": L(lang, label_key), "help": help_text, "cells": [
+            {"text": _peer_value_text(metric, target["values"][metric], lang),
+             "state": "na" if target["values"][metric] is None else "subtotal"},
+            {"text": _peer_value_text(metric, stat["median"], lang), "state": "na" if stat["median"] is None else "ok"},
+            {"text": iqr, "state": "na" if not stat["n"] else "ok"},
+            {"text": L(lang, "peers_rank_text", rank=format_number(rank, ".0f", lang)) if rank is not None else L(lang, "na"),
+             "state": "na" if rank is None else "ok"},
+            {"text": str(stat["n"]), "state": "ok"},
+        ]})
+    columns = [L(lang, "col_company"), L(lang, "col_peer_median"), L(lang, "col_peer_iqr"), L(lang, "col_peer_rank"),
+               L(lang, "col_peer_n")]
+    return detail_table("table-peers", L(lang, "col_metric"), columns, rows, dark)
 
 
 IMPORT_UNIT_NAMES = {1.0: "import_unit_units", 1e3: "import_unit_thousands", 1e6: "import_unit_millions",

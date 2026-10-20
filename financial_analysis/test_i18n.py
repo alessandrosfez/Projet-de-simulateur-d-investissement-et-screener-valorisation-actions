@@ -39,6 +39,8 @@ def _expected_keys() -> set[str]:
         keys |= {f"altman_{x}_help" for x in engine.ALTMAN_MODELS[model]["coefficients"]}
         keys |= {layout.altman_ratio_label_key(model, x) for x in engine.ALTMAN_MODELS[model]["coefficients"]}
     keys.add("plotly_separators")
+    keys |= {f"peers_scope_{scope}" for scope in engine.PEER_SCOPES}
+    keys |= {layout.PEER_METRIC_LABELS.get(metric, f"ratio_{metric}") for metric in engine.PEER_METRICS}
     keys |= {f"zone_{zone}" for zone in ("safe", "grey", "distress")}
     for criterion in engine.PIOTROSKI_CRITERIA:
         keys |= {f"piotroski_{criterion}", f"piotroski_{criterion}_help"}
