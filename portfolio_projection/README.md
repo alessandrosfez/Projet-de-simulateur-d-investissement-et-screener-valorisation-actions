@@ -26,6 +26,12 @@ qu'une simulation aurait donné.
   Trade Republic) des transactions et dividendes, valeur reconstruite dans le
   temps, réel vs simulé, projection depuis aujourd'hui avec la pondération
   actuelle, corrélations entre les lignes détenues, plan de rééquilibrage.
+- **Répartition actuelle** : anneau des lignes détenues, à leur valeur de
+  marché en euros, avec le total au centre et le nom de chaque fonds en
+  légende. Une couleur fixe par ligne, attribuée par ticker et non par rang,
+  pour qu'une ligne qui grossit ne change pas de couleur. Au-delà de six
+  lignes, les plus petites sont regroupées en « Autres ». Une ligne sans
+  cours est signalée sous le graphique plutôt que comptée pour 0.
 - **Performance réelle** : XIRR (rendement pondéré par les flux), TWR
   (rendement pondéré par le temps) et comparaison à un indice de référence
   choisi (mêmes versements investis dans ce ticker : valeur et XIRR côte à

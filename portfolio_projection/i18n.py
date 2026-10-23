@@ -175,6 +175,14 @@ TRANSLATIONS = {
         "real_portfolio_projection_no_data": "Pas assez d'historique pour projeter ta pondération actuelle "
                                               "(ticker trop récent ou jamais coté sur la période choisie).",
         "section_real_portfolio_corr": "Corrélations entre tes lignes",
+        "section_allocation": "Répartition actuelle",
+        "allocation_chart_title": "Répartition par ligne (valeur de marché)",
+        "allocation_center": "{total} €",
+        "allocation_other": "Autres",
+        "allocation_unpriced": "Sans cours disponible, donc absentes du graphique : {tickers}.",
+        "allocation_no_data": "Aucune ligne valorisée pour l'instant : ajoute une transaction pour voir la répartition.",
+        # Séparateurs Plotly : décimal puis milliers.
+        "plotly_separators": ", ",
         "real_portfolio_corr_hint": "Corrélation des rendements mensuels historiques entre les tickers réellement "
                                      "détenus (même lecture que l'onglet Portefeuille pondéré) — proche de 1 : les "
                                      "lignes montent et baissent ensemble, la diversification apportée est limitée.",
@@ -643,6 +651,13 @@ TRANSLATIONS = {
         "real_portfolio_projection_no_data": "Not enough history to project your current weighting (a ticker is "
                                               "too recent or never traded over the chosen period).",
         "section_real_portfolio_corr": "Correlation between your holdings",
+        "section_allocation": "Current allocation",
+        "allocation_chart_title": "Allocation by holding (market value)",
+        "allocation_center": "€{total}",
+        "allocation_other": "Other",
+        "allocation_unpriced": "No price available, so left out of the chart: {tickers}.",
+        "allocation_no_data": "No priced holding yet: add a transaction to see the allocation.",
+        "plotly_separators": ". ",
         "real_portfolio_corr_hint": "Correlation of historical monthly returns across the tickers you actually "
                                      "hold (same reading as the Weighted portfolio tab) — close to 1: the holdings "
                                      "move up and down together, limited diversification benefit.",

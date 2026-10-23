@@ -124,6 +124,28 @@ def compute_rebalancing_plan(target_weights: pd.DataFrame, current_values_by_tic
     return df.sort_values("delta_eur", ascending=False).reset_index(drop=True)
 
 
+OTHER_ALLOCATION_KEY = "__other__"
+
+
+def allocation_slices(current_values: pd.Series, max_slices: int) -> pd.DataFrame:
+    """Répartition actuelle du portefeuille réel pour un graphique en anneau : une ligne par ticker
+    (colonnes key, value, share), de la plus grosse à la plus petite. Au-delà de max_slices lignes,
+    les plus petites sont regroupées dans une seule part OTHER_ALLOCATION_KEY, rangée en dernier :
+    au-delà de quelques parts, un anneau devient illisible et les couleurs se répètent. Les lignes
+    sans valeur (cours indisponible) ou de valeur nulle sont écartées, pas comptées pour 0 : c'est à
+    l'appelant de signaler les lignes manquantes."""
+    values = current_values.dropna()
+    values = values[values > 0].sort_values(ascending=False)
+    if values.empty:
+        return pd.DataFrame(columns=["key", "value", "share"])
+    if len(values) > max_slices:
+        kept = values.iloc[:max_slices - 1]
+        values = pd.concat([kept, pd.Series({OTHER_ALLOCATION_KEY: float(values.iloc[max_slices - 1:].sum())})])
+    total = float(values.sum())
+    return pd.DataFrame({"key": [str(k) for k in values.index], "value": values.to_numpy(dtype=float),
+                         "share": values.to_numpy(dtype=float) / total})
+
+
 def compute_totals(transactions: pd.DataFrame, dividends: pd.DataFrame, current_value_eur: float) -> dict:
     """Résumé chiffré du portefeuille réel : capital investi (coût d'achat, pas la valeur
     de marché), frais cumulés, dividendes perçus, valeur actuelle et P&L (euros et %).

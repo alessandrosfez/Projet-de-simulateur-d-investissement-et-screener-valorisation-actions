@@ -801,6 +801,12 @@ def build_tab3(lang):
                        className="p-0"),
         ], className="mb-3"),
 
+        html.H5(L(lang, "section_allocation"), className="section-title", id="anchor-tab3-allocation"),
+        dbc.Card(dbc.CardBody([
+            dcc.Loading(type="circle", children=[dcc.Graph(id="tab3-allocation-graph", config=GRAPH_CONFIG)]),
+            html.Div(id="tab3-allocation-note", className="text-muted", style={"fontSize": "0.8rem"}),
+        ]), className="mb-4"),
+
         html.H5(L(lang, "section_pea_milestones"), className="section-title", id="anchor-tab3-milestones"),
         dbc.Card(dbc.CardBody([
             html.Div([

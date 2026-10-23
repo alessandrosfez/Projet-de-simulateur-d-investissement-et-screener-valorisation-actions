@@ -57,6 +57,28 @@ def test_position_is_worth_the_amount_invested_on_the_purchase_date():
     assert curve[pd.Timestamp("2024-03-04")] == pytest.approx(1000.0 + 500.0 / 95.0 * 98.5)
 
 
+def test_allocation_slices_sorted_with_shares_summing_to_one():
+    slices = m.allocation_slices(pd.Series({"AAA": 300.0, "BBB": 600.0, "CCC": 100.0}), max_slices=6)
+    assert list(slices["key"]) == ["BBB", "AAA", "CCC"]
+    assert list(slices["share"]) == pytest.approx([0.6, 0.3, 0.1])
+
+
+def test_allocation_slices_fold_the_smallest_into_other():
+    values = pd.Series({f"T{i}": float(v) for i, v in enumerate([50, 40, 30, 20, 10, 5, 3, 2])})
+    slices = m.allocation_slices(values, max_slices=6)
+    assert len(slices) == 6
+    assert list(slices["key"])[:5] == ["T0", "T1", "T2", "T3", "T4"]
+    assert slices["key"].iloc[-1] == m.OTHER_ALLOCATION_KEY
+    assert slices["value"].iloc[-1] == pytest.approx(5 + 3 + 2)
+    assert slices["share"].sum() == pytest.approx(1.0)
+
+
+def test_allocation_slices_drop_unpriced_lines_instead_of_counting_zero():
+    slices = m.allocation_slices(pd.Series({"AAA": 100.0, "BBB": float("nan"), "CCC": 0.0}), max_slices=6)
+    assert list(slices["key"]) == ["AAA"] and slices["share"].iloc[0] == 1.0
+    assert m.allocation_slices(pd.Series(dtype=float), max_slices=6).empty
+
+
 def test_reconstruct_equity_curve_sums_across_tickers():
     transactions = pd.DataFrame([
         _tx("AAA", "2024-01-01", 100.0, 10.0),  # 10 parts

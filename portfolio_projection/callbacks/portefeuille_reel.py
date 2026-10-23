@@ -17,7 +17,7 @@ import layout
 import portfolio_db
 import portfolio_engine
 from app_instance import app
-from charts import make_correlation_heatmap
+from charts import make_allocation_donut, make_correlation_heatmap
 from constants import PEA_TAX_RATE
 from engine import (
     simulate_portfolio_asset_returns,
@@ -60,6 +60,46 @@ def _ticker_display_label(ticker: str) -> str:
         return curated
     name = get_ticker_name(ticker)
     return f"{ticker} ({name})" if name else ticker
+
+
+OTHER_SLICE_COLOR = "#9AA0A6"
+LEGEND_LABEL_MAX = 42
+
+
+def _allocation_view(current_values: pd.Series, total: float, unpriced: list, lang: str, dark: bool):
+    """Anneau de la répartition actuelle (valeurs de marché en euros). Couleur attribuée dans l'ordre
+    alphabétique des tickers affichés, pas selon leur rang : une ligne qui grossit ou maigrit ne
+    change pas de couleur. Six couleurs dans la palette : au-delà de six lignes, les plus petites
+    sont regroupées en « Autres » (gris)."""
+    empty_fig = go.Figure()
+    empty_fig.update_layout(template="plotly_dark" if dark else "plotly")
+    notes = []
+    if unpriced:
+        notes.append(html.Div(L(lang, "allocation_unpriced", tickers=", ".join(unpriced))))
+    slices = portfolio_engine.allocation_slices(current_values, max_slices=len(PALETTE))
+    if slices.empty:
+        return empty_fig, notes or L(lang, "allocation_no_data")
+    # Ordre alphabétique des seules parts affichées : jamais deux parts visibles de même couleur.
+    shown = sorted(k for k in slices["key"] if k != portfolio_engine.OTHER_ALLOCATION_KEY)
+    color_of = {ticker: PALETTE[i] for i, ticker in enumerate(shown)}
+    labels, hover_names, colors = [], [], []
+    for key in slices["key"]:
+        if key == portfolio_engine.OTHER_ALLOCATION_KEY:
+            labels.append(L(lang, "allocation_other"))
+            hover_names.append(L(lang, "allocation_other"))
+            colors.append(OTHER_SLICE_COLOR)
+        else:
+            # Nom du fonds dans la légende : un ticker seul (« PAASI.PA ») ne dit pas ce qu'est la ligne.
+            full_name = _ticker_display_label(key)
+            labels.append(full_name if len(full_name) <= LEGEND_LABEL_MAX else full_name[:LEGEND_LABEL_MAX - 1] + "…")
+            hover_names.append(full_name)
+            colors.append(color_of[key])
+    total_text = f"{total:,.0f}".replace(",", " ")
+    fig = make_allocation_donut(
+        labels, list(slices["value"]), hover_names, colors, L(lang, "allocation_chart_title"),
+        L(lang, "allocation_center", total=total_text), "€", dark=dark, separators=L(lang, "plotly_separators"),
+    )
+    return fig, notes
 
 
 def _validated_ticker(ticker: str):
@@ -299,6 +339,8 @@ def delete_removed_weights(table_data):
 
 @app.callback(
     Output("tab3-totals-cards", "children"),
+    Output("tab3-allocation-graph", "figure"),
+    Output("tab3-allocation-note", "children"),
     Output("tab3-real-pace-display", "children"),
     Output("tab3-real-vs-sim-graph", "figure"),
     Output("tab3-projection-graph", "figure"),
@@ -364,6 +406,8 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
     current_value_total = float(current_values.sum()) if not current_values.empty else 0.0
     totals = portfolio_engine.compute_totals(transactions, dividends, current_value_total)
     totals_cards = build_portfolio_totals_cards(totals, lang)
+    unpriced = [t for t in holdings["ticker"] if t not in current_values.index] if not holdings.empty else []
+    allocation_fig, allocation_note = _allocation_view(current_values, current_value_total, unpriced, lang, dark)
 
     real_series = portfolio_engine.reconstruct_equity_curve(transactions, price_histories)
 
@@ -457,7 +501,7 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
     ]
 
     return (
-        totals_cards, real_pace_display, real_vs_sim_fig, projection_fig, corr_fig,
+        totals_cards, allocation_fig, allocation_note, real_pace_display, real_vs_sim_fig, projection_fig, corr_fig,
         rebalancing_data, rebalancing_columns, *table_styles, rebalancing_warning,
         weights_data, *table_styles,
         tx_data, *table_styles,

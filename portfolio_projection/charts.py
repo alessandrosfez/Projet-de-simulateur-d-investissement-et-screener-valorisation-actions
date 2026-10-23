@@ -28,6 +28,28 @@ def make_correlation_heatmap(corr: pd.DataFrame, lang="fr", dark: bool = False):
     return fig
 
 
+def make_allocation_donut(labels: list, values: list, hover_names: list, colors: list, title: str,
+                          center_text: str, value_suffix: str, dark: bool = False, separators: str | None = None):
+    """Répartition en anneau : parts dans l'ordre fourni (de la plus grosse à la plus petite, sens
+    horaire depuis midi), pourcentage inscrit dans les parts assez grandes, nom complet, montant et
+    part au survol, total au centre. Fin liseré de la couleur du fond entre les parts, pour que deux
+    parts voisines restent distinctes même de teintes proches."""
+    surface = "#111111" if dark else "#FFFFFF"
+    fig = go.Figure(go.Pie(
+        labels=labels, values=values, customdata=hover_names, hole=0.58, sort=False, direction="clockwise",
+        marker=dict(colors=colors, line=dict(color=surface, width=2)),
+        texttemplate="%{percent:.1%}", textposition="inside", insidetextorientation="horizontal",
+        hovertemplate=f"%{{customdata}}<br>%{{value:,.0f}} {value_suffix}<br>%{{percent:.1%}}<extra></extra>",
+    ))
+    fig.update_layout(
+        template="plotly_dark" if dark else "plotly", title=dict(text=title, font=dict(size=14)),
+        annotations=[dict(text=center_text, x=0.5, y=0.5, showarrow=False, font=dict(size=15))],
+        legend=dict(font=dict(size=11)), uniformtext=dict(minsize=10, mode="hide"),
+        margin=dict(t=60, b=20, l=20, r=20), separators=separators,
+    )
+    return fig
+
+
 def make_band_figure(series, years_axis, title, lang="fr", palette=None, invested_capital=None,
                       phase_boundary_years=None, dark: bool = False, backtest_series=None,
                       view_mode="prevision"):
