@@ -12,6 +12,8 @@ from pathlib import Path
 import pandas as pd
 import yfinance as yf
 
+import engine
+
 # ============================================================
 # CACHE (mémoire + disque)
 # ============================================================
@@ -143,33 +145,66 @@ def major_currency(code: str | None) -> str | None:
 
 
 @cached_ttl(3600)
+def _get_annual_eps(ticker: str) -> pd.Series:
+    """BPA dilué (repli : de base) de chaque exercice clos, par date de clôture, dans la devise des
+    comptes. Série vide si Yahoo ne le fournit pas."""
+    try:
+        income = yf.Ticker(ticker).income_stmt
+    except Exception:
+        return pd.Series(dtype=float)
+    if not isinstance(income, pd.DataFrame) or income.empty:
+        return pd.Series(dtype=float)
+    for row in ("Diluted EPS", "Basic EPS"):
+        if row in income.index:
+            eps = pd.to_numeric(income.loc[row], errors="coerce").dropna()
+            if not eps.empty:
+                eps.index = pd.to_datetime(eps.index)
+                return eps.sort_index()
+    return pd.Series(dtype=float)
+
+
+@cached_ttl(3600)
 def get_stock_pe_history(ticker: str) -> pd.Series:
-    """Série de P/E implicite sur 5 ans (prix historique / BPA actuel), corrigée d'un
-    éventuel décalage d'échelle prix/BPA. Approximatif : suppose le BPA à peu près
-    stable sur la période, ce qui n'est pas vrai pour une valeur très cyclique ou en
-    forte croissance des bénéfices, à prendre comme indication, pas comme vérité.
-    Série vide si le BPA n'est pas disponible.
+    """Série de P/E historique hebdomadaire, sur les 5 dernières années au plus : cours de chaque
+    semaine / BPA du dernier exercice PUBLIÉ à cette date (clôture + 3 mois, voir
+    engine.pe_from_annual_eps). Yahoo ne fournit qu'environ 4 exercices : la série commence donc ~3
+    mois après la clôture du plus ancien (3,5 ans environ), plutôt que d'être prolongée par une autre
+    méthode. Le BPA, publié dans la devise des comptes, est ramené dans l'unité du cours (change du
+    jour et sous-unité, voir _statement_to_price_units ; approximation : change actuel pour tout
+    l'historique, sans effet hors doubles cotations).
+
+    Sans BPA annuel, repli sur l'ancienne approximation (cours / BPA actuel constant), signalée par
+    series.attrs["method"] = "current_eps" ("annual_eps" sinon) : elle suppose le BPA stable, ce qui
+    est faux pour une valeur cyclique (BPA de TotalEnergies de 5,78 à 8,67 € entre 2022 et 2025).
+    Série vide sans aucun BPA positif.
 
     Cours BRUTS (auto_adjust=False) : par défaut, yfinance ajuste rétroactivement les cours passés
     des dividendes versés depuis, ce qui minore le P/E de l'époque. Vérifié sur TotalEnergies : le
-    cours ajusté d'il y a 5 ans ne vaut que 75 % du cours réellement coté (91 % pour Air Liquide),
-    si bien que le P/E moyen sur 5 ans sortait trop bas et le titre paraissait plus cher que son
-    historique. Les cours bruts restent ajustés des divisions, comme le BPA : le rapport garde un
-    sens d'un bout à l'autre de la période."""
+    cours ajusté d'il y a 5 ans ne vaut que 75 % du cours réellement coté (91 % pour Air Liquide).
+    Les cours bruts restent ajustés des divisions, comme le BPA."""
     info = _get_ticker_info(ticker)
-    trailing_pe = info.get("trailingPE")
-    trailing_eps = info.get("trailingEps")
-    current_price = info.get("currentPrice") or info.get("regularMarketPrice")
-    if not trailing_eps or trailing_eps <= 0:
-        return pd.Series(dtype=float)
-
-    price_scale = _price_scale_factor(trailing_pe, trailing_eps, current_price)
     try:
         hist = yf.Ticker(ticker).history(period="5y", interval="1wk", auto_adjust=False)["Close"].dropna()
     except Exception:
         return pd.Series(dtype=float)
+
+    annual_eps = _get_annual_eps(ticker)
+    if not annual_eps.empty:
+        eps_scale, _market_cap_scale = _statement_to_price_units(info)
+        pe = engine.pe_from_annual_eps(hist, annual_eps * eps_scale)
+        if not pe.empty:
+            pe.attrs["method"] = "annual_eps"
+            return pe
+
+    trailing_eps = info.get("trailingEps")
+    if not trailing_eps or trailing_eps <= 0:
+        return pd.Series(dtype=float)
+    price_scale = _price_scale_factor(info.get("trailingPE"), trailing_eps,
+                                      info.get("currentPrice") or info.get("regularMarketPrice"))
     implied_pe = (hist / price_scale) / trailing_eps
-    return implied_pe[implied_pe > 0]
+    implied_pe = implied_pe[implied_pe > 0]
+    implied_pe.attrs["method"] = "current_eps"
+    return implied_pe
 
 
 @cached_ttl(3600)

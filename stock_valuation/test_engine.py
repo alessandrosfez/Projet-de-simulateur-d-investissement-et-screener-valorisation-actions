@@ -4,6 +4,7 @@ ni dépendance Dash.
 Usage : pip install pytest && pytest test_engine.py -v
 """
 import numpy as np
+import pandas as pd
 import pytest
 
 import engine as m
@@ -317,3 +318,34 @@ def test_sharpe_ratio_none_when_return_missing():
 
 def test_sharpe_ratio_basic_computation():
     assert m.sharpe_ratio(0.10, 0.2, risk_free_rate=0.02) == pytest.approx((0.10 - 0.02) / 0.2)
+
+
+# ---------- P/E historique sur BPA annuels ----------
+
+def test_pe_from_annual_eps_uses_the_last_published_eps_with_a_lag():
+    """BPA 2022 = 4, BPA 2023 = 5, chacun connu 91 jours après la clôture du 31/12 : le 15/03/2024, le
+    BPA 2023 n'est pas encore publié (31/03/2024), le P/E utilise donc le BPA 2022."""
+    closes = pd.Series([40.0, 50.0, 60.0], index=pd.to_datetime(["2023-02-01", "2024-03-15", "2024-04-15"]))
+    eps = pd.Series([4.0, 5.0], index=pd.to_datetime(["2022-12-31", "2023-12-31"]))
+    pe = m.pe_from_annual_eps(closes, eps)
+    # 01/02/2023 : BPA 2022 publié le 01/04/2023 seulement -> aucun BPA connu, point écarté.
+    assert list(pe.index) == list(pd.to_datetime(["2024-03-15", "2024-04-15"]))
+    assert list(pe) == pytest.approx([50.0 / 4.0, 60.0 / 5.0])
+
+
+def test_pe_from_annual_eps_drops_loss_years_and_handles_timezones():
+    closes = pd.Series([30.0, 30.0], index=pd.to_datetime(["2023-06-01", "2024-06-03"]).tz_localize("Europe/Paris"))
+    eps = pd.Series([-2.0, 3.0], index=pd.to_datetime(["2022-12-31", "2023-12-31"]))
+    pe = m.pe_from_annual_eps(closes, eps)
+    assert len(pe) == 1 and pe.iloc[0] == pytest.approx(10.0)  # 2023 : perte 2022, P/E sans signification
+
+
+def test_pe_from_annual_eps_matches_the_old_method_with_constant_eps():
+    """Invariant : à BPA identique chaque année, on retrouve l'ancien calcul (cours / BPA actuel)."""
+    closes = pd.Series([90.0, 100.0, 110.0], index=pd.to_datetime(["2024-05-01", "2024-09-02", "2025-05-02"]))
+    eps = pd.Series([5.0, 5.0, 5.0], index=pd.to_datetime(["2022-12-31", "2023-12-31", "2024-12-31"]))
+    assert list(m.pe_from_annual_eps(closes, eps)) == pytest.approx(list(closes / 5.0))
+
+
+def test_pe_from_annual_eps_empty_without_eps():
+    assert m.pe_from_annual_eps(pd.Series([1.0], index=pd.to_datetime(["2024-01-02"])), pd.Series(dtype=float)).empty

@@ -186,6 +186,36 @@ def test_pe_history_last_point_returns_the_current_pe_even_in_pence(monkeypatch)
     assert pe.iloc[-1] == pytest.approx(info["trailingPE"])
 
 
+def test_pe_history_uses_annual_eps_converted_to_price_units(monkeypatch):
+    """Shell : cours en pence, BPA annuels en dollars. BPA 2024 de 3 USD x 0,75 GBP/USD x 100 = 225
+    pence, connu à partir du 31/03/2025 : un cours de 4 500 GBp donne un P/E de 20."""
+    info = {"currentPrice": 4500.0, "trailingPE": 15.0, "trailingEps": 3.0, "currency": "GBp",
+            "financialCurrency": "USD"}
+    income = pd.DataFrame({pd.Timestamp("2024-12-31"): [3.0]}, index=["Diluted EPS"])
+
+    def factory(symbol):
+        fake = MagicMock()
+        if symbol.endswith("=X"):
+            fake.history.return_value = pd.DataFrame({"Close": [0.75]})
+            return fake
+        fake.get_info.return_value = info
+        fake.income_stmt = income
+        fake.history.return_value = pd.DataFrame(
+            {"Close": [4000.0, 4500.0]}, index=pd.to_datetime(["2025-03-03", "2025-04-07"]))
+        return fake
+    monkeypatch.setattr(md.yf, "Ticker", factory)
+    pe = md.get_stock_pe_history("SHEL.L")
+    assert pe.attrs["method"] == "annual_eps"
+    assert list(pe) == pytest.approx([4500.0 / 225.0])  # mars 2025 : BPA 2024 pas encore publié
+
+
+def test_pe_history_falls_back_on_current_eps_flagged(monkeypatch):
+    info = {"currentPrice": 80.0, "trailingPE": 10.0, "trailingEps": 8.0, "currency": "EUR"}
+    monkeypatch.setattr(md.yf, "Ticker", _history_recorder([70.0, 80.0], info, []))
+    pe = md.get_stock_pe_history("NOEPS.PA")
+    assert pe.attrs["method"] == "current_eps" and list(pe) == pytest.approx([8.75, 10.0])
+
+
 def test_major_currency_of_a_minor_unit_quote():
     assert md.major_currency("GBp") == "GBP"
     assert md.major_currency("EUR") == "EUR"

@@ -50,12 +50,13 @@ TRANSLATIONS = {
                  "permettent une comparaison plus équitable qu'un classement brut tous secteurs "
                  "confondus.",
         "intro4": "Le tableau inclut aussi le P/B (prix / valeur comptable), le rendement du dividende, "
-                 "la devise de cotation, et un P/E moyen sur 5 ans propre à chaque action avec sa "
+                 "la devise de cotation, et un P/E moyen historique propre à chaque action avec sa "
                  "position (percentile) par rapport à cet historique (un signal souvent plus parlant "
-                 "que la comparaison sectorielle). Ce P/E historique est approximatif : calculé à BPA "
-                 "actuel constant appliqué au cours historique, donc moins fiable pour une valeur très "
-                 "cyclique ou en forte croissance des bénéfices. Sélectionne une ligne du tableau pour "
-                 "voir son évolution complète sur 5 ans.",
+                 "que la comparaison sectorielle). Ce P/E historique divise le cours de chaque semaine "
+                 "par le BPA du dernier exercice publié à cette date (3 mois après sa clôture) : Yahoo "
+                 "ne fournissant que 4 exercices, il couvre environ 3,5 ans. Sans BPA annuel, repli "
+                 "signalé sur le BPA actuel constant, moins fiable pour une valeur cyclique. "
+                 "Sélectionne une ligne du tableau pour voir son évolution.",
         "markets_label": "Marchés à inclure",
         "universe_cac40": "CAC 40 (France)",
         "universe_dax40": "DAX 40 (Allemagne)",
@@ -108,14 +109,17 @@ TRANSLATIONS = {
         "watchlist_only_label": "N'afficher que ma watchlist",
         "pe_ratio_by_stock_title": "P/E Ratio par valeur",
         "detail_title": "Détail",
-        "detail_hint": "Clique sur une ligne pour voir l'évolution de son P/E sur 5 ans ci-dessous.",
-        "history_title": "Évolution du P/E sur 5 ans",
+        "detail_hint": "Clique sur une ligne pour voir l'évolution de son P/E historique ci-dessous.",
+        "history_title": "Évolution du P/E historique",
         "history_hint_default": "Clique sur une ligne du tableau ci-dessus.",
         "history_unavailable": "Historique indisponible pour {name}.",
         "history_unavailable_full": "Historique de P/E indisponible pour {name} (BPA non fourni par "
                                     "Yahoo Finance).",
-        "history_chart_title": "P/E implicite sur 5 ans : {name}",
-        "history_mean_annotation": "Moyenne 5 ans",
+        "history_chart_title": "P/E historique : {name}",
+        "history_mean_annotation": "Moyenne historique",
+        "history_method_annual_eps": "Cours de chaque semaine / BPA du dernier exercice publié (clôture + 3 mois).",
+        "history_method_current_eps": "BPA annuels indisponibles : approximation au BPA actuel constant, peu fiable "
+                                      "pour une valeur cyclique.",
         "history_current_annotation": "P/E actuel",
         "quality_title": "Qualité de l'entreprise",
         "quality_hint_default": "Sélectionne une ligne du tableau ci-dessus.",
@@ -140,8 +144,8 @@ TRANSLATIONS = {
         "load_hint_placeholder": "Clique sur « Charger / actualiser les données » ci-dessus.",
         "cheapest_title": "5 P/E les plus bas (potentiellement les moins chères)",
         "priciest_title": "5 P/E les plus hauts (potentiellement les plus chères)",
-        "below_history_title": "5 les plus décotées vs leur propre historique 5 ans",
-        "above_history_title": "5 les plus tendues vs leur propre historique 5 ans",
+        "below_history_title": "5 les plus décotées vs leur propre historique",
+        "above_history_title": "5 les plus tendues vs leur propre historique",
         "axis_pe_avg": "P/E moyen",
         "sector_avg_pe_title": "P/E moyen par secteur",
         "sector_dist_pe_title": "Distribution du P/E par secteur",
@@ -162,8 +166,8 @@ TRANSLATIONS = {
         "col_ev_ebitda": "EV/EBITDA",
         "col_pb": "P/B",
         "col_div_yield": "Rendement dividende (%)",
-        "col_pe_5y_mean": "P/E moyen 5 ans (approx.)",
-        "col_pe_5y_pct": "Position vs historique 5 ans (percentile)",
+        "col_pe_5y_mean": "P/E moyen historique",
+        "col_pe_5y_pct": "Position vs historique (percentile)",
         "col_market_cap": "Capitalisation",
         "col_score_help": "Moyenne de 3 rangs percentiles (0-100, 100 = meilleur) calculés sur l'univers chargé : "
                           "valorisation (P/E et PEG, plus bas = meilleur), qualité (ROIC et marge nette, plus haut "
@@ -186,9 +190,10 @@ TRANSLATIONS = {
                       "Compare le prix payé à l'actif net de l'entreprise selon ses comptes.",
         "col_div_yield_help": "Dividende annuel versé / cours de l'action. Le revenu issu du dividende "
                               "seul, sans tenir compte d'une éventuelle plus-value ou moins-value.",
-        "col_pe_5y_mean_help": "Moyenne du P/E implicite sur les 5 dernières années (prix historique / "
-                               "BPA actuel, approximatif : voir le détail du calcul plus bas).",
-        "col_pe_5y_pct_help": "Position du P/E actuel dans la distribution de son propre P/E sur 5 ans : "
+        "col_pe_5y_mean_help": "Moyenne du P/E historique hebdomadaire : cours / BPA du dernier exercice "
+                               "publié à cette date (clôture + 3 mois), sur environ 3,5 ans. Repli signalé "
+                               "sur le BPA actuel constant si les BPA annuels manquent.",
+        "col_pe_5y_pct_help": "Position du P/E actuel dans la distribution de son propre P/E historique : "
                               "0 = jamais aussi bas sur la période, 100 = jamais aussi haut.",
         "dcf_title": "Estimation DCF (flux de trésorerie actualisés)",
         "dcf_intro": "Valorisation intrinsèque de l'action sélectionnée ci-dessus, à partir de son "
@@ -273,12 +278,13 @@ TRANSLATIONS = {
                  "The sector comparison below, and the single-sector filter, allow for a fairer "
                  "comparison than a raw ranking across all sectors.",
         "intro4": "The table also includes the P/B (price / book value), dividend yield, trading "
-                 "currency, and a 5-year average P/E specific to each stock along with its position "
-                 "(percentile) relative to that history (a signal that's often more meaningful than the "
-                 "sector comparison). This historical P/E is approximate: computed with the current EPS "
-                 "held constant and applied to the historical price, so it's less reliable for a highly "
-                 "cyclical stock or one with fast-growing earnings. Select a row in the table to see its "
-                 "full 5-year history.",
+                 "currency, and a historical average P/E specific to each stock along with its "
+                 "position (percentile) relative to that history (a signal that's often more meaningful "
+                 "than the sector comparison). This historical P/E divides each week's price by the EPS of "
+                 "the latest fiscal year published at that date (3 months after its close): Yahoo only "
+                 "provides 4 fiscal years, so it covers about 3.5 years. Without annual EPS, it falls back, "
+                 "flagged, on the current EPS held constant, less reliable for a cyclical stock. Select a "
+                 "row in the table to see its history.",
         "markets_label": "Markets to include",
         "universe_cac40": "CAC 40 (France)",
         "universe_dax40": "DAX 40 (Germany)",
@@ -330,14 +336,17 @@ TRANSLATIONS = {
         "watchlist_only_label": "Show only my watchlist",
         "pe_ratio_by_stock_title": "P/E Ratio by stock",
         "detail_title": "Detail",
-        "detail_hint": "Click a row to see its 5-year P/E history below.",
-        "history_title": "5-year P/E history",
+        "detail_hint": "Click a row to see its historical P/E below.",
+        "history_title": "Historical P/E",
         "history_hint_default": "Click a row in the table above.",
         "history_unavailable": "History unavailable for {name}.",
         "history_unavailable_full": "P/E history unavailable for {name} (EPS not provided by Yahoo "
                                     "Finance).",
-        "history_chart_title": "5-year implied P/E: {name}",
-        "history_mean_annotation": "5-year average",
+        "history_chart_title": "Historical P/E: {name}",
+        "history_mean_annotation": "Historical average",
+        "history_method_annual_eps": "Each week's price / EPS of the latest published fiscal year (close + 3 months).",
+        "history_method_current_eps": "Annual EPS unavailable: approximation with the current EPS held constant, "
+                                      "unreliable for a cyclical stock.",
         "history_current_annotation": "Current P/E",
         "quality_title": "Business quality",
         "quality_hint_default": "Select a row in the table above.",
@@ -362,8 +371,8 @@ TRANSLATIONS = {
         "load_hint_placeholder": "Click « Load / refresh data » above.",
         "cheapest_title": "5 lowest P/E (potentially cheapest)",
         "priciest_title": "5 highest P/E (potentially most expensive)",
-        "below_history_title": "5 most discounted vs their own 5-year history",
-        "above_history_title": "5 most stretched vs their own 5-year history",
+        "below_history_title": "5 most discounted vs their own history",
+        "above_history_title": "5 most stretched vs their own history",
         "axis_pe_avg": "Average P/E",
         "sector_avg_pe_title": "Average P/E by sector",
         "sector_dist_pe_title": "P/E distribution by sector",
@@ -384,8 +393,8 @@ TRANSLATIONS = {
         "col_ev_ebitda": "EV/EBITDA",
         "col_pb": "P/B",
         "col_div_yield": "Dividend yield (%)",
-        "col_pe_5y_mean": "5-year average P/E (approx.)",
-        "col_pe_5y_pct": "Position vs 5-year history (percentile)",
+        "col_pe_5y_mean": "Historical average P/E",
+        "col_pe_5y_pct": "Position vs history (percentile)",
         "col_market_cap": "Market cap",
         "col_score_help": "Average of 3 percentile ranks (0-100, 100 = best) computed across the loaded "
                           "universe: valuation (P/E and PEG, lower = better), quality (ROIC and net margin, "
@@ -407,9 +416,10 @@ TRANSLATIONS = {
                       "price paid to the company's net assets per its accounts.",
         "col_div_yield_help": "Annual dividend paid / share price. The income from the dividend "
                               "alone, not accounting for any capital gain or loss.",
-        "col_pe_5y_mean_help": "Average implied P/E over the trailing 5 years (historical price / "
-                               "current EPS, approximate: see the calculation detail below).",
-        "col_pe_5y_pct_help": "Where the current P/E sits within its own 5-year P/E distribution: "
+        "col_pe_5y_mean_help": "Average weekly historical P/E: price / EPS of the latest fiscal year "
+                               "published at that date (close + 3 months), over about 3.5 years. Flagged "
+                               "fallback on the current EPS held constant if annual EPS are missing.",
+        "col_pe_5y_pct_help": "Where the current P/E sits within its own historical P/E distribution: "
                               "0 = never as low over the period, 100 = never as high.",
         "dcf_title": "DCF estimate (discounted cash flow)",
         "dcf_intro": "Intrinsic valuation of the stock selected above, based on its recent free "

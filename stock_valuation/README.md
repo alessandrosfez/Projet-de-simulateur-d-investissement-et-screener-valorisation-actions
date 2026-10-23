@@ -88,6 +88,21 @@ garde au contraire les cours ajustés : il mesure le rendement total,
 dividendes réinvestis. Dans le tableau, la capitalisation porte
 désormais sa devise principale (GBP, et non le GBp du cours).
 
+**P/E historique sur le BPA de chaque exercice.** Diviser 5 ans de cours
+par le BPA d'aujourd'hui supposait des bénéfices stables, ce qui est faux
+pour une valeur cyclique : le BPA de TotalEnergies a varié de 5,78 à
+8,67 € entre 2022 et 2025. Le P/E de chaque semaine utilise désormais le
+BPA du dernier exercice publié à cette date, réputé connu 3 mois après
+la clôture pour n'utiliser aucune information que le marché n'avait pas
+encore (`engine.pe_from_annual_eps`). Le BPA, publié dans la devise des
+comptes, est converti dans l'unité du cours au change actuel. Yahoo ne
+fournissant que 4 exercices, l'historique couvre environ 3,5 ans au lieu
+de 5. Il n'est pas prolongé par l'ancienne méthode, pour ne pas mélanger
+deux calculs dans une même moyenne. Sans BPA annuel, repli signalé sur le
+BPA actuel constant. La lecture peut s'inverser : Sanofi passe d'un P/E
+moyen de 27,6 (BPA constant) à 18,3, et son P/E actuel de 22,8, qui
+semblait sous sa moyenne, est en fait au 88e centile de son historique.
+
 **Comparables toujours calculés au sein du même secteur.** Le panier de
 pairs est filtré sur le secteur du titre sélectionné, indépendamment du
 filtre sectoriel du tableau au-dessus — comparer un P/E tech à un P/E

@@ -4,6 +4,7 @@ d'une action. Aucune dépendance sur Dash/Plotly/yfinance : c'est ce que couvre
 test_engine.py.
 """
 import numpy as np
+import pandas as pd
 
 # ============================================================
 # DCF (flux de trésorerie actualisés) : valorisation intrinsèque d'une action
@@ -169,6 +170,31 @@ def compute_comparables_ev_ebitda_fair_value(enterprise_value: float, ev_to_ebit
 # une heuristique ; ces fonctions vérifient empiriquement si un P/E bas vs historique a
 # effectivement précédé un meilleur rendement qu'un P/E haut, sur le panier chargé.
 # ============================================================
+
+# Délai usuel de publication des comptes annuels : le BPA d'un exercice n'est réputé connu du marché
+# que 3 mois après sa clôture. Avant, le P/E d'une date passée utilise le BPA de l'exercice précédent :
+# aucune information « du futur » dans l'historique.
+EPS_PUBLICATION_LAG_DAYS = 91
+
+
+def pe_from_annual_eps(closes: pd.Series, annual_eps: pd.Series,
+                       lag_days: int = EPS_PUBLICATION_LAG_DAYS) -> pd.Series:
+    """P/E historique : cours de chaque date / BPA du dernier exercice publié à cette date (clôture +
+    lag_days). annual_eps : BPA par date de clôture d'exercice, déjà dans l'unité des cours. Les dates
+    antérieures au premier BPA publié sont écartées (pas de BPA connu), de même qu'un BPA négatif ou
+    nul (P/E sans signification) : jamais un P/E calculé sur un chiffre inventé."""
+    eps = annual_eps.dropna()
+    if closes.empty or eps.empty:
+        return pd.Series(dtype=float)
+    published = pd.Series(eps.to_numpy(dtype=float),
+                          index=pd.DatetimeIndex(eps.index).normalize() + pd.Timedelta(days=lag_days)).sort_index()
+    published = published[~published.index.duplicated(keep="last")]
+    dates = pd.DatetimeIndex(closes.index)
+    naive = (dates.tz_localize(None) if dates.tz is not None else dates).normalize()
+    eps_known = published.reindex(published.index.union(naive)).ffill().reindex(naive).to_numpy()
+    pe = pd.Series(closes.to_numpy(dtype=float) / eps_known, index=closes.index)
+    return pe[np.isfinite(pe) & (eps_known > 0)]
+
 
 def compute_pe_percentile_series(series: np.ndarray, min_history: int = 52) -> np.ndarray:
     """Percentile (0-100) de chaque point au sein de SA SEULE fenêtre passée (expanding window,

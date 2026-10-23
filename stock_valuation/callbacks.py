@@ -569,7 +569,8 @@ def update_pe_history_chart(selected_rows, lang, palette_code, dark_mode, virtua
         title=L(lang, "history_chart_title", name=name),
         xaxis_title="", yaxis_title="P/E", margin=dict(t=60),
     )
-    return fig, ""
+    method_key = "history_method_current_eps" if pe_series.attrs.get("method") == "current_eps" else "history_method_annual_eps"
+    return fig, L(lang, method_key)
 
 
 @app.callback(
