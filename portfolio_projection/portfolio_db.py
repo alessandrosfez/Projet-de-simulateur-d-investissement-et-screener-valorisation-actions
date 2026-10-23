@@ -30,6 +30,9 @@ _MIGRATIONS = [
     # v1 : réglages clé/valeur du portefeuille (date d'ouverture du PEA, ...) plutôt qu'une table
     # par réglage, pour ne pas devoir migrer à nouveau à chaque nouveau paramètre.
     "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);",
+    # v2 : indice suivi corrigé à la main pour une ligne (voir portfolio_engine.detect_underlying_index).
+    # Seules les corrections sont stockées : la détection automatique reste recalculée.
+    "CREATE TABLE IF NOT EXISTS index_overrides (ticker TEXT PRIMARY KEY, index_key TEXT NOT NULL);",
 ]
 
 
@@ -117,6 +120,32 @@ def get_pea_opening_date() -> str | None:
 
 def set_pea_opening_date(date: str | None):
     set_setting(PEA_OPENING_DATE_KEY, date)
+
+
+def get_index_overrides() -> dict[str, str]:
+    conn = _get_connection()
+    try:
+        rows = conn.execute("SELECT ticker, index_key FROM index_overrides").fetchall()
+    finally:
+        conn.close()
+    return dict(rows)
+
+
+def set_index_override(ticker: str, index_key: str | None):
+    """index_key=None supprime la correction : la ligne revient à l'indice détecté automatiquement."""
+    conn = _get_connection()
+    try:
+        if index_key is None:
+            conn.execute("DELETE FROM index_overrides WHERE ticker = ?", (ticker,))
+        else:
+            conn.execute(
+                "INSERT INTO index_overrides (ticker, index_key) VALUES (?, ?) "
+                "ON CONFLICT(ticker) DO UPDATE SET index_key = excluded.index_key",
+                (ticker, index_key),
+            )
+        conn.commit()
+    finally:
+        conn.close()
 
 
 def _now_iso() -> str:

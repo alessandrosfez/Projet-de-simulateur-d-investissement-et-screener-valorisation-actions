@@ -32,6 +32,17 @@ qu'une simulation aurait donné.
   pour qu'une ligne qui grossit ne change pas de couleur. Au-delà de six
   lignes, les plus petites sont regroupées en « Autres ». Une ligne sans
   cours est signalée sous le graphique plutôt que comptée pour 0.
+- **Exposition par indice suivi** : un second anneau regroupe les lignes
+  par indice, et une alerte signale deux lignes qui suivent le même
+  (deux ETF S&P 500 d'émetteurs différents ne se diversifient pas l'un
+  l'autre). L'indice est connu pour les ETF de l'univers de simulation,
+  sinon déduit du nom du fonds par mots-clés, du plus spécifique au plus
+  général (All-World avant World, Asie émergente avant émergents). Une
+  action individuelle forme sa propre catégorie. Le résultat se corrige
+  ligne à ligne, et seules les corrections sont stockées (table
+  `index_overrides`, migration v2) : revenir à l'indice détecté annule la
+  correction. Les recoupements entre indices (le MSCI World contient
+  environ 70 % d'actions américaines) ne sont pas décomposés.
 - **Performance réelle** : XIRR (rendement pondéré par les flux), TWR
   (rendement pondéré par le temps) et comparaison à un indice de référence
   choisi (mêmes versements investis dans ce ticker : valeur et XIRR côte à

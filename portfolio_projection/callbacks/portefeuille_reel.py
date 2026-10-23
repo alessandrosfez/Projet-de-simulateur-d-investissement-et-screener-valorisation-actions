@@ -18,13 +18,13 @@ import portfolio_db
 import portfolio_engine
 from app_instance import app
 from charts import make_allocation_donut, make_correlation_heatmap
-from constants import PEA_TAX_RATE
+from constants import PEA_TAX_RATE, STOCK_INDEX_KEY, UNDERLYING_INDICES, UNKNOWN_INDEX_KEY
 from engine import (
     simulate_portfolio_asset_returns,
 )
 from i18n import L, PALETTE
 from market_data import (
-    get_aligned_returns_for_tickers, get_current_price,
+    get_aligned_returns_for_tickers, get_current_price, get_instrument_profile,
     get_daily_price_history, get_daily_total_return_history, get_ticker_name, resolve_isin_to_ticker,
 )
 from results import (
@@ -100,6 +100,86 @@ def _allocation_view(current_values: pd.Series, total: float, unpriced: list, la
         L(lang, "allocation_center", total=total_text), "€", dark=dark, separators=L(lang, "plotly_separators"),
     )
     return fig, notes
+
+
+def _index_label(key: str, lang: str) -> str:
+    if key == STOCK_INDEX_KEY:
+        return L(lang, "index_stock")
+    if key == UNKNOWN_INDEX_KEY:
+        return L(lang, "index_unknown")
+    if key == portfolio_engine.OTHER_ALLOCATION_KEY:
+        return L(lang, "allocation_other")
+    return key
+
+
+def _index_view(current_values: pd.Series, held_tickers: list, lang: str, dark: bool):
+    """Exposition par indice suivi : anneau (lignes regroupées par indice), alerte pour chaque indice
+    suivi par plusieurs lignes (doublon sans diversification), et tableau de correction (une ligne
+    par ticker détenu, indice détecté automatiquement ou corrigé à la main)."""
+    empty_fig = go.Figure()
+    empty_fig.update_layout(template="plotly_dark" if dark else "plotly")
+    dropdown = {"index_key": {"options": [{"label": _index_label(key, lang), "value": key}
+                                          for key in (*UNDERLYING_INDICES, STOCK_INDEX_KEY, UNKNOWN_INDEX_KEY)]}}
+    if not held_tickers:
+        return empty_fig, [], [], dropdown
+    detected = {t: portfolio_engine.detect_underlying_index(t, **get_instrument_profile(t)) for t in held_tickers}
+    overrides = portfolio_db.get_index_overrides()
+    index_of = portfolio_engine.resolve_underlying_indices(detected, overrides)
+    rows = [{"ticker": t, "label": _ticker_display_label(t), "index_key": index_of[t], "detected": detected[t],
+             "source": L(lang, "index_source_override" if t in overrides else "index_source_auto")}
+            for t in held_tickers]
+
+    exposure = portfolio_engine.exposure_by_index(current_values, index_of)
+    if exposure.empty:
+        return empty_fig, [], rows, dropdown
+    slices = portfolio_engine.allocation_slices(exposure.set_index("key")["value"], max_slices=len(PALETTE))
+    tickers_of = dict(zip(exposure["key"], exposure["tickers"]))
+    special = (UNKNOWN_INDEX_KEY, portfolio_engine.OTHER_ALLOCATION_KEY)
+    shown = sorted(k for k in slices["key"] if k not in special)
+    color_of = {key: PALETTE[i] for i, key in enumerate(shown)}
+    labels = [_index_label(k, lang) for k in slices["key"]]
+    hover = [f"{_index_label(k, lang)} : {', '.join(tickers_of.get(k, []))}" if k in tickers_of else _index_label(k, lang)
+             for k in slices["key"]]
+    colors = [color_of.get(k, OTHER_SLICE_COLOR) for k in slices["key"]]
+    total_text = f"{float(exposure['value'].sum()):,.0f}".replace(",", " ")
+    fig = make_allocation_donut(labels, list(slices["value"]), hover, colors, L(lang, "index_chart_title"),
+                                L(lang, "allocation_center", total=total_text), "€", dark=dark,
+                                separators=L(lang, "plotly_separators"))
+    alerts = []
+    for _, dup in portfolio_engine.duplicate_index_exposures(exposure).iterrows():
+        share = f"{dup['share'] * 100:.0f}"
+        names = list(dup["tickers"])
+        tickers_text = f"{', '.join(names[:-1])} {L(lang, 'and_word')} {names[-1]}"
+        alerts.append(dbc.Alert(L(lang, "index_duplicate_alert", tickers=tickers_text,
+                                  index=_index_label(dup["key"], lang), share=share),
+                                color="warning", className="py-2 mb-2"))
+    if any(index_of[t] == UNKNOWN_INDEX_KEY for t in held_tickers):
+        alerts.append(html.Small(L(lang, "index_unknown_hint"), className="text-muted d-block mb-2"))
+    return fig, alerts, rows, dropdown
+
+
+@app.callback(
+    Output("tab3-refresh-trigger", "data", allow_duplicate=True),
+    Input("tab3-index-table", "data_timestamp"),
+    State("tab3-index-table", "data"),
+    prevent_initial_call=True,
+)
+def save_index_overrides(_timestamp, rows):
+    """Correction de l'indice d'une ligne : stockée seulement si elle diffère de la détection
+    automatique ; revenir à l'indice détecté supprime la correction."""
+    overrides = portfolio_db.get_index_overrides()
+    changed = False
+    for row in rows or []:
+        ticker, chosen, detected = row.get("ticker"), row.get("index_key"), row.get("detected")
+        if not ticker or not chosen:
+            continue
+        wanted = None if chosen == detected else chosen
+        if overrides.get(ticker) != wanted:
+            portfolio_db.set_index_override(ticker, wanted)
+            changed = True
+    if not changed:
+        raise dash.exceptions.PreventUpdate
+    return time.time()
 
 
 def _validated_ticker(ticker: str):
@@ -341,6 +421,13 @@ def delete_removed_weights(table_data):
     Output("tab3-totals-cards", "children"),
     Output("tab3-allocation-graph", "figure"),
     Output("tab3-allocation-note", "children"),
+    Output("tab3-index-graph", "figure"),
+    Output("tab3-index-alerts", "children"),
+    Output("tab3-index-table", "data"),
+    Output("tab3-index-table", "dropdown"),
+    Output("tab3-index-table", "style_header"),
+    Output("tab3-index-table", "style_cell"),
+    Output("tab3-index-table", "style_data"),
     Output("tab3-real-pace-display", "children"),
     Output("tab3-real-vs-sim-graph", "figure"),
     Output("tab3-projection-graph", "figure"),
@@ -408,6 +495,8 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
     totals_cards = build_portfolio_totals_cards(totals, lang)
     unpriced = [t for t in holdings["ticker"] if t not in current_values.index] if not holdings.empty else []
     allocation_fig, allocation_note = _allocation_view(current_values, current_value_total, unpriced, lang, dark)
+    held_tickers = sorted(holdings["ticker"]) if not holdings.empty else []
+    index_fig, index_alerts, index_rows, index_dropdown = _index_view(current_values, held_tickers, lang, dark)
 
     real_series = portfolio_engine.reconstruct_equity_curve(transactions, price_histories)
 
@@ -501,7 +590,9 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
     ]
 
     return (
-        totals_cards, allocation_fig, allocation_note, real_pace_display, real_vs_sim_fig, projection_fig, corr_fig,
+        totals_cards, allocation_fig, allocation_note,
+        index_fig, index_alerts, index_rows, index_dropdown, *table_styles,
+        real_pace_display, real_vs_sim_fig, projection_fig, corr_fig,
         rebalancing_data, rebalancing_columns, *table_styles, rebalancing_warning,
         weights_data, *table_styles,
         tx_data, *table_styles,

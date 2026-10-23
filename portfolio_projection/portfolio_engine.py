@@ -14,7 +14,8 @@ import numpy as np
 import pandas as pd
 
 from constants import (
-    PEA_CONTRIBUTION_CAP, PEA_EARLY_WITHDRAWAL_TAX_RATE, PEA_MATURITY_YEARS, PEA_TAX_RATE, TICKERS,
+    INDEX_NAME_KEYWORDS, PEA_CONTRIBUTION_CAP, PEA_EARLY_WITHDRAWAL_TAX_RATE, PEA_MATURITY_YEARS, PEA_TAX_RATE,
+    STOCK_INDEX_KEY, TICKERS, TICKERS_UNDERLYING, UNKNOWN_INDEX_KEY,
 )
 from engine import cap_schedule, overflow_schedule
 
@@ -144,6 +145,59 @@ def allocation_slices(current_values: pd.Series, max_slices: int) -> pd.DataFram
     total = float(values.sum())
     return pd.DataFrame({"key": [str(k) for k in values.index], "value": values.to_numpy(dtype=float),
                          "share": values.to_numpy(dtype=float) / total})
+
+
+_TICKER_TO_UNDERLYING: dict[str, str] = {
+    ticker: TICKERS_UNDERLYING[name] for name, tickers in TICKERS.items() for ticker in tickers.values()
+}
+
+
+def detect_underlying_index(ticker: str, name: str | None, quote_type: str | None) -> str:
+    """Indice suivi par une ligne : ETF de l'univers de simulation (constants.TICKERS) d'abord, puis
+    action individuelle (quoteType Yahoo « EQUITY »), puis mots-clés du nom du fonds
+    (constants.INDEX_NAME_KEYWORDS), sinon UNKNOWN_INDEX_KEY. Un résultat faux se corrige à la main
+    (voir resolve_underlying_indices) : c'est une aide, pas une vérité."""
+    if ticker in _TICKER_TO_UNDERLYING:
+        return _TICKER_TO_UNDERLYING[ticker]
+    if quote_type == "EQUITY":
+        return STOCK_INDEX_KEY
+    upper = f" {(name or '').upper()} "
+    for index_name, keywords in INDEX_NAME_KEYWORDS:
+        if any(keyword in upper for keyword in keywords):
+            return index_name
+    return UNKNOWN_INDEX_KEY
+
+
+def resolve_underlying_indices(detected: dict[str, str], overrides: dict[str, str]) -> dict[str, str]:
+    """Indice retenu par ticker : la correction manuelle l'emporte sur la détection."""
+    return {ticker: overrides.get(ticker, index_key) for ticker, index_key in detected.items()}
+
+
+def exposure_by_index(current_values: pd.Series, index_of: dict[str, str]) -> pd.DataFrame:
+    """Valeur et part du portefeuille par indice suivi (colonnes key, value, share, tickers), de la plus
+    grosse à la plus petite. Même règle que allocation_slices : une ligne sans valeur est écartée."""
+    values = current_values.dropna()
+    values = values[values > 0]
+    if values.empty:
+        return pd.DataFrame(columns=["key", "value", "share", "tickers"])
+    groups: dict[str, list[str]] = {}
+    for ticker in values.index:
+        groups.setdefault(index_of.get(str(ticker), UNKNOWN_INDEX_KEY), []).append(str(ticker))
+    total = float(values.sum())
+    rows = [{"key": key, "value": float(values[tickers].sum()), "tickers": sorted(tickers)}
+            for key, tickers in groups.items()]
+    frame = pd.DataFrame(rows).sort_values("value", ascending=False, ignore_index=True)
+    frame["share"] = frame["value"] / total
+    return frame[["key", "value", "share", "tickers"]]
+
+
+def duplicate_index_exposures(exposure: pd.DataFrame) -> pd.DataFrame:
+    """Indices suivis par au moins deux lignes : doublons sans diversification entre eux. Les actions
+    individuelles et les lignes non identifiées ne forment pas un indice et sont exclues."""
+    if exposure.empty:
+        return exposure
+    mask = exposure["tickers"].map(len).ge(2) & ~exposure["key"].isin([STOCK_INDEX_KEY, UNKNOWN_INDEX_KEY])
+    return exposure[mask].reset_index(drop=True)
 
 
 def compute_totals(transactions: pd.DataFrame, dividends: pd.DataFrame, current_value_eur: float) -> dict:

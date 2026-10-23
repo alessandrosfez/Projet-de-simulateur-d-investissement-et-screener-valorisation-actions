@@ -341,6 +341,16 @@ def get_daily_total_return_history(ticker: str, start_date: str) -> pd.Series:
         return pd.Series(dtype=float)
 
 
+def get_instrument_profile(ticker: str) -> dict:
+    """Nom long et type d'instrument Yahoo (« ETF », « EQUITY »...) d'un ticker, pour deviner l'indice
+    qu'il suit (voir portfolio_engine.detect_underlying_index). Valeurs None si indisponibles."""
+    try:
+        info = _get_ticker_info(ticker)
+    except Exception:
+        return {"name": None, "quote_type": None}
+    return {"name": info.get("longName") or info.get("shortName"), "quote_type": info.get("quoteType")}
+
+
 @cached_ttl(86400)
 def get_ticker_name(ticker: str) -> str | None:
     """Nom lisible d'un ticker quelconque (shortName, repli longName) -- sert à annoter dans

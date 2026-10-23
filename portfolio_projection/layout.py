@@ -803,8 +803,25 @@ def build_tab3(lang):
 
         html.H5(L(lang, "section_allocation"), className="section-title", id="anchor-tab3-allocation"),
         dbc.Card(dbc.CardBody([
-            dcc.Loading(type="circle", children=[dcc.Graph(id="tab3-allocation-graph", config=GRAPH_CONFIG)]),
+            dcc.Loading(type="circle", children=[dbc.Row([
+                dbc.Col(dcc.Graph(id="tab3-allocation-graph", config=GRAPH_CONFIG), lg=6),
+                dbc.Col(dcc.Graph(id="tab3-index-graph", config=GRAPH_CONFIG), lg=6),
+            ])]),
+            html.Div(id="tab3-index-alerts"),
             html.Div(id="tab3-allocation-note", className="text-muted", style={"fontSize": "0.8rem"}),
+            html.Details([
+                html.Summary(L(lang, "index_table_summary"), style={"cursor": "pointer", "fontSize": "0.85rem"}),
+                html.Small(L(lang, "index_table_hint"), className="text-muted d-block my-2"),
+                dash_table.DataTable(
+                    id="tab3-index-table", editable=True, style_cell=TABLE_BASE_CELL_STYLE,
+                    columns=[
+                        {"name": L(lang, "index_col_line"), "id": "label", "editable": False},
+                        {"name": L(lang, "index_col_index"), "id": "index_key", "presentation": "dropdown"},
+                        {"name": L(lang, "index_col_source"), "id": "source", "editable": False},
+                    ],
+                    css=[{"selector": ".Select-menu-outer", "rule": "display: block !important"}],
+                ),
+            ], className="mt-2"),
         ]), className="mb-4"),
 
         html.H5(L(lang, "section_pea_milestones"), className="section-title", id="anchor-tab3-milestones"),

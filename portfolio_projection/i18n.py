@@ -181,6 +181,25 @@ TRANSLATIONS = {
         "allocation_other": "Autres",
         "allocation_unpriced": "Sans cours disponible, donc absentes du graphique : {tickers}.",
         "allocation_no_data": "Aucune ligne valorisée pour l'instant : ajoute une transaction pour voir la répartition.",
+        "index_chart_title": "Exposition par indice suivi",
+        "and_word": "et",
+        "index_stock": "Actions individuelles",
+        "index_unknown": "Indice non identifié",
+        "index_duplicate_alert": "{tickers} suivent le même indice ({index}) : {share} % du portefeuille, sans "
+                                 "diversification entre ces lignes. Utile seulement si leurs frais ou leur "
+                                 "fiscalité diffèrent.",
+        "index_unknown_hint": "Certaines lignes n'ont pas d'indice identifié automatiquement : indique-le dans le "
+                              "tableau ci-dessous.",
+        "index_table_summary": "Indice suivi par chaque ligne (détection automatique, corrigeable)",
+        "index_table_hint": "Détecté d'après le nom du fonds, ou connu pour les ETF de l'univers de simulation. "
+                            "Choisis un autre indice pour corriger une ligne ; revenir à l'indice détecté annule "
+                            "la correction. Les recoupements entre indices ne sont pas décomposés (le MSCI World "
+                            "compte environ 70 % d'actions américaines, déjà présentes dans un S&P 500).",
+        "index_col_line": "Ligne",
+        "index_col_index": "Indice suivi",
+        "index_col_source": "Source",
+        "index_source_auto": "Détection automatique",
+        "index_source_override": "Corrigé à la main",
         # Séparateurs Plotly : décimal puis milliers.
         "plotly_separators": ", ",
         "real_portfolio_corr_hint": "Corrélation des rendements mensuels historiques entre les tickers réellement "
@@ -657,6 +676,24 @@ TRANSLATIONS = {
         "allocation_other": "Other",
         "allocation_unpriced": "No price available, so left out of the chart: {tickers}.",
         "allocation_no_data": "No priced holding yet: add a transaction to see the allocation.",
+        "index_chart_title": "Exposure by tracked index",
+        "and_word": "and",
+        "index_stock": "Individual stocks",
+        "index_unknown": "Unidentified index",
+        "index_duplicate_alert": "{tickers} track the same index ({index}): {share}% of the portfolio, with no "
+                                 "diversification between these holdings. Only useful if their fees or tax "
+                                 "treatment differ.",
+        "index_unknown_hint": "Some holdings have no automatically identified index: set it in the table below.",
+        "index_table_summary": "Index tracked by each holding (automatic detection, editable)",
+        "index_table_hint": "Detected from the fund name, or known for the ETFs of the simulation universe. Pick "
+                            "another index to correct a holding; going back to the detected index cancels the "
+                            "correction. Overlaps between indices are not broken down (the MSCI World is about "
+                            "70% US stocks, already present in an S&P 500).",
+        "index_col_line": "Holding",
+        "index_col_index": "Tracked index",
+        "index_col_source": "Source",
+        "index_source_auto": "Automatic detection",
+        "index_source_override": "Corrected by hand",
         "plotly_separators": ". ",
         "real_portfolio_corr_hint": "Correlation of historical monthly returns across the tickers you actually "
                                      "hold (same reading as the Weighted portfolio tab) — close to 1: the holdings "

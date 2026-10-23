@@ -32,6 +32,42 @@ ETF_NAMES = {
 
 TICKER_KEYS = list(TICKERS.keys())
 
+# ---------- Indice suivi par chaque ligne du portefeuille réel (exposition par indice) ----------
+# Deux lignes qui suivent le même indice (deux ETF S&P 500 d'émetteurs différents) n'apportent aucune
+# diversification l'une à l'autre : regrouper par indice suivi le fait voir. Catégories hors indice :
+STOCK_INDEX_KEY = "__stock__"      # action individuelle
+UNKNOWN_INDEX_KEY = "__unknown__"  # indice non identifié
+# Indices proposés (détection automatique et correction manuelle), noms usuels.
+UNDERLYING_INDICES = (
+    "S&P 500", "Nasdaq-100", "MSCI World", "FTSE All-World", "MSCI ACWI", "Stoxx Europe 600", "Euro Stoxx 50",
+    "MSCI Europe", "CAC 40", "MSCI Emerging Markets", "MSCI EM Asie", "TOPIX", "MSCI Japan",
+)
+# Univers de simulation (TICKERS) -> indice suivi. « Euro Stoxx 600 » est le libellé historique de
+# l'onglet de simulation ; l'indice répliqué par ETZ.PA est le Stoxx Europe 600.
+TICKERS_UNDERLYING = {
+    "S&P 500": "S&P 500", "Euro Stoxx 600": "Stoxx Europe 600", "Japon (TOPIX)": "TOPIX",
+    "MSCI Emerging Markets": "MSCI Emerging Markets", "CAC 40": "CAC 40", "MSCI World": "MSCI World",
+    "Nasdaq 100": "Nasdaq-100",
+}
+# Mots-clés du nom du fonds (en majuscules), du plus spécifique au plus général : « All-World » avant
+# « World », « Asie émergente » avant « Emerging ». Première règle trouvée retenue ; une variante
+# (S&P 500 Equal Weight, ESG...) tombe dans l'indice de base, corrigeable à la main.
+INDEX_NAME_KEYWORDS = (
+    ("Nasdaq-100", ("NASDAQ",)),
+    ("S&P 500", ("S&P 500", "S&P500", "SP500", "S&P 500")),
+    ("FTSE All-World", ("ALL-WORLD", "ALL WORLD")),
+    ("MSCI ACWI", ("ACWI",)),
+    ("MSCI EM Asie", ("EMERGING ASIA", "EM ASIA", "ASIE EMERGENTE", "ASIA EMERGING", "EMERGENTE ASIE")),
+    ("MSCI Emerging Markets", ("EMERGING", "EMERGENT", "MSCI EM ")),
+    ("MSCI World", ("WORLD", "MONDE")),
+    ("Stoxx Europe 600", ("STOXX EUROPE 600", "STOXX 600", "EUROPE 600")),
+    ("Euro Stoxx 50", ("EURO STOXX 50", "EUROSTOXX 50", "STOXX 50")),
+    ("CAC 40", ("CAC 40", "CAC40")),
+    ("MSCI Europe", ("MSCI EUROPE",)),
+    ("TOPIX", ("TOPIX",)),
+    ("MSCI Japan", ("JAPAN", "JAPON")),
+)
+
 N_PORTFOLIOS_MAX = 4
 
 # Fiscalité française. PEA : prélèvements sociaux uniquement après 5 ans. CTO (flat) : PFU

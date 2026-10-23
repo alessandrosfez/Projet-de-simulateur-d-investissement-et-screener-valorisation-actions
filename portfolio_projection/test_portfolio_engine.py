@@ -79,6 +79,43 @@ def test_allocation_slices_drop_unpriced_lines_instead_of_counting_zero():
     assert m.allocation_slices(pd.Series(dtype=float), max_slices=6).empty
 
 
+@pytest.mark.parametrize("ticker,name,quote_type,expected", [
+    ("PSP5.PA", None, "ETF", "S&P 500"),  # univers de simulation, sans regarder le nom
+    ("ETZ.PA", None, "ETF", "Stoxx Europe 600"),
+    ("ESE.PA", "BNP Paribas Easy S&P 500 UCITS ETF", "ETF", "S&P 500"),
+    ("DCAM.PA", "AMUNDI PEA MONDE MSCI World UCITS ETF", "ETF", "MSCI World"),
+    ("PAASI.PA", "Amundi PEA Asie Emergente (MSCI EM Asia) UCITS ETF", "ETF", "MSCI EM Asie"),
+    ("VWCE.DE", "Vanguard FTSE All-World UCITS ETF USD Accumulation", "ETF", "FTSE All-World"),
+    ("APC.DE", "Apple Inc.", "EQUITY", m.STOCK_INDEX_KEY),
+    ("XYZ.PA", "Fonds mystère", "ETF", m.UNKNOWN_INDEX_KEY),
+    ("NOPE.PA", None, None, m.UNKNOWN_INDEX_KEY),
+])
+def test_detect_underlying_index(ticker, name, quote_type, expected):
+    assert m.detect_underlying_index(ticker, name, quote_type) == expected
+
+
+def test_exposure_by_index_groups_duplicates_and_flags_them():
+    values = pd.Series({"PSP5.PA": 420.0, "ESE.PA": 312.0, "ETZ.PA": 209.0, "APC.DE": 59.0})
+    index_of = m.resolve_underlying_indices(
+        {"PSP5.PA": "S&P 500", "ESE.PA": "S&P 500", "ETZ.PA": "Stoxx Europe 600", "APC.DE": m.STOCK_INDEX_KEY},
+        overrides={},
+    )
+    exposure = m.exposure_by_index(values, index_of)
+    assert list(exposure["key"]) == ["S&P 500", "Stoxx Europe 600", m.STOCK_INDEX_KEY]
+    assert exposure["share"].iloc[0] == pytest.approx(732.0 / 1000.0)
+    assert exposure["tickers"].iloc[0] == ["ESE.PA", "PSP5.PA"]
+    duplicates = m.duplicate_index_exposures(exposure)
+    assert list(duplicates["key"]) == ["S&P 500"]
+
+
+def test_manual_override_wins_and_stocks_never_count_as_duplicates():
+    index_of = m.resolve_underlying_indices({"A": "S&P 500", "B": m.STOCK_INDEX_KEY, "C": m.STOCK_INDEX_KEY},
+                                            overrides={"A": "Nasdaq-100"})
+    assert index_of["A"] == "Nasdaq-100"
+    exposure = m.exposure_by_index(pd.Series({"A": 1.0, "B": 1.0, "C": 1.0}), index_of)
+    assert m.duplicate_index_exposures(exposure).empty
+
+
 def test_reconstruct_equity_curve_sums_across_tickers():
     transactions = pd.DataFrame([
         _tx("AAA", "2024-01-01", 100.0, 10.0),  # 10 parts

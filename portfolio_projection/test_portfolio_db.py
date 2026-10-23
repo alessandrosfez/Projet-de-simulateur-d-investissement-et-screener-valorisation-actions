@@ -129,4 +129,14 @@ def test_migration_upgrades_existing_database_without_losing_data(tmp_path):
     assert conn.execute("PRAGMA user_version").fetchone()[0] == len(db._MIGRATIONS)
     assert conn.execute("SELECT ticker, amount_eur FROM transactions").fetchall() == [("AAA", 1000.0)]
     conn.execute("INSERT INTO settings (key, value) VALUES ('pea_opening_date', '2022-01-10')")
+    conn.execute("INSERT INTO index_overrides (ticker, index_key) VALUES ('AAA', 'S&P 500')")  # v2 présente
     conn.close()
+
+
+def test_index_override_roundtrip_and_clear():
+    assert db.get_index_overrides() == {}
+    db.set_index_override("ESE.PA", "S&P 500")
+    db.set_index_override("ESE.PA", "Nasdaq-100")  # mise à jour, pas de doublon
+    assert db.get_index_overrides() == {"ESE.PA": "Nasdaq-100"}
+    db.set_index_override("ESE.PA", None)
+    assert db.get_index_overrides() == {}
