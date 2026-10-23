@@ -60,6 +60,56 @@ def test_monthly_returns_eur_unchanged_for_a_euro_listing(monkeypatch):
     assert list(md.get_monthly_returns_eur("CW8.PA", 5)) == pytest.approx([0.05])
 
 
+def test_rank_euro_listing_candidates_prefers_xetra_then_paris():
+    candidates = [{"symbol": "VWCE.MI", "exchange": "MIL"}, {"symbol": "VWCE.F", "exchange": "FRA"},
+                  {"symbol": "VWCE.DE", "exchange": "GER"}, {"symbol": "VWCE.AS", "exchange": "AMS"},
+                  {"symbol": "VWCE.DE", "exchange": "GER"}, {"symbol": None, "exchange": "PAR"}]
+    assert md.rank_euro_listing_candidates(candidates) == ["VWCE.DE", "VWCE.AS", "VWCE.MI", "VWCE.F"]
+
+
+class _SearchResult:
+    def __init__(self, quotes):
+        self.quotes = quotes
+
+
+def _isin_universe(monkeypatch, infos: dict, search_quotes: list):
+    class Ticker:
+        def __init__(self, symbol):
+            self.symbol = symbol
+
+        def get_info(self):
+            return infos[self.symbol]
+    monkeypatch.setattr(md.yf, "Ticker", Ticker)
+    monkeypatch.setattr(md.yf, "Search", lambda name, max_results=None: _SearchResult(search_quotes))
+
+
+def test_isin_resolved_in_dollars_prefers_the_same_fund_in_euros(monkeypatch):
+    """IWDA.L (USD) -> EUNL.DE : même nom long exact, en euros, sur Xetra. Le fonds voisin au nom
+    différent (autre classe de parts) est écarté même s'il est mieux classé."""
+    name = "iShares Core MSCI World UCITS ETF USD (Acc)"
+    infos = {"IE00B4L5Y983": {"symbol": "IWDA.L", "currency": "USD", "longName": name},
+             "IWDA.L": {"currency": "USD", "longName": name},
+             "SWDA.DE": {"currency": "EUR", "longName": "iShares Core MSCI World UCITS ETF USD (Dist)"},
+             "EUNL.DE": {"currency": "EUR", "longName": name},
+             "IWDA.AS": {"currency": "EUR", "longName": name}}
+    quotes = [{"symbol": "IWDA.AS", "exchange": "AMS"}, {"symbol": "SWDA.DE", "exchange": "GER"},
+              {"symbol": "EUNL.DE", "exchange": "GER"}, {"symbol": "IWDA.L", "exchange": "LSE"}]
+    _isin_universe(monkeypatch, infos, quotes)
+    assert md.resolve_isin_to_ticker("IE00B4L5Y983") == "EUNL.DE"
+
+
+def test_isin_without_euro_listing_keeps_yahoo_symbol(monkeypatch):
+    infos = {"US0000000001": {"symbol": "XYZ", "currency": "USD", "longName": "Xyz Corp"}}
+    _isin_universe(monkeypatch, infos, [])
+    assert md.resolve_isin_to_ticker("US0000000001") == "XYZ"
+
+
+def test_isin_already_in_euros_is_unchanged(monkeypatch):
+    infos = {"FR0011550193": {"symbol": "ETZ.PA", "currency": "EUR", "longName": "BNP Paribas Easy Stoxx Europe 600"}}
+    _isin_universe(monkeypatch, infos, [{"symbol": "OTHER.DE", "exchange": "GER"}])
+    assert md.resolve_isin_to_ticker("FR0011550193") == "ETZ.PA"
+
+
 # ---------- cache (TTL, roundtrip mémoire/disque) ----------
 
 def test_cached_ttl_reuses_value_within_ttl_window(monkeypatch):

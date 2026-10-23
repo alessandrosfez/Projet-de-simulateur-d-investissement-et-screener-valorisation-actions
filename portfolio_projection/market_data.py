@@ -353,15 +353,68 @@ def get_ticker_name(ticker: str) -> str | None:
     return info.get("shortName") or info.get("longName")
 
 
-@cached_ttl(3600)
+# Places préférées pour une cotation en euros, dans l'ordre : Xetra d'abord, base des cours de Trade
+# Republic (historique le plus proche des prix d'achat de l'export), puis Paris, Amsterdam, Milan.
+# Codes « exchange » des résultats de recherche Yahoo.
+EURO_EXCHANGE_PREFERENCE = ("GER", "PAR", "AMS", "MIL")
+
+
+def rank_euro_listing_candidates(candidates: list[dict]) -> list[str]:
+    """Ordre dans lequel essayer les résultats de recherche ({"symbol", "exchange"}) : places de
+    EURO_EXCHANGE_PREFERENCE d'abord, dans cet ordre, puis les autres (dont la devise sera vérifiée).
+    Les doublons de symbole sont écartés."""
+    def rank(candidate: dict) -> int:
+        exchange = candidate.get("exchange")
+        return EURO_EXCHANGE_PREFERENCE.index(exchange) if exchange in EURO_EXCHANGE_PREFERENCE else len(
+            EURO_EXCHANGE_PREFERENCE)
+    ordered = sorted((c for c in candidates if c.get("symbol")), key=rank)
+    return list(dict.fromkeys(c["symbol"] for c in ordered))
+
+
+def _find_euro_listing(symbol: str, name: str | None) -> str | None:
+    """Cotation en euros du même instrument que symbol : recherche Yahoo par nom, puis premier
+    candidat (voir rank_euro_listing_candidates) coté en EUR et portant EXACTEMENT le même nom long.
+    La recherche par ISIN ne renvoie qu'une cotation (souvent la londonienne, en dollars) ; l'égalité
+    stricte des noms écarte les fonds voisins (même indice, autre émetteur ou autre classe de parts)."""
+    if not name:
+        return None
+    try:
+        quotes = yf.Search(name, max_results=25).quotes
+    except Exception:
+        return None
+    for candidate in rank_euro_listing_candidates([q for q in quotes if q.get("symbol") != symbol]):
+        try:
+            info = _get_ticker_info(candidate)
+        except Exception:
+            continue
+        if info.get("currency") == PORTFOLIO_CURRENCY and info.get("longName") == name:
+            return candidate
+    return None
+
+
+@cached_ttl(86400)
+def _resolve_isin_euro_listing(isin: str) -> str | None:
+    try:
+        info = yf.Ticker(isin).get_info()
+    except Exception:
+        return None
+    symbol = info.get("symbol")
+    if symbol is None or info.get("currency") == PORTFOLIO_CURRENCY:
+        return symbol
+    return _find_euro_listing(symbol, info.get("longName")) or symbol
+
+
 def resolve_isin_to_ticker(isin: str) -> str | None:
     """Résout un code ISIN (ex: FR0011550193) en ticker Yahoo Finance (ex: ETZ.PA). Les exports de
     courtiers européens (ex: Trade Republic) identifient les instruments par ISIN, pas par ticker
     boursier -- yfinance résout un ISIN directement via Ticker(isin).get_info()["symbol"] (vérifié
     empiriquement sur plusieurs ISIN d'ETF PEA réels, dont certains correspondant exactement aux
-    tickers déjà vérifiés à la main dans constants.py). None si l'ISIN est invalide ou inconnu."""
-    try:
-        info = yf.Ticker(isin).get_info()
-    except Exception:
-        return None
-    return info.get("symbol")
+    tickers déjà vérifiés à la main dans constants.py). None si l'ISIN est invalide ou inconnu.
+
+    Quand Yahoo renvoie une cotation hors euros (iShares Core MSCI World -> IWDA.L en dollars, Apple
+    -> AAPL), on lui préfère la cotation en euros du même instrument (EUNL.DE, APC.DE, voir
+    _find_euro_listing) : Trade Republic exécute en euros, c'est donc l'historique le plus proche des
+    prix d'achat de l'export, sans dépendre du change. Sans cotation en euros trouvée, on garde
+    celle de Yahoo, valorisée en euros par conversion (voir _to_portfolio_currency). Cache sous un
+    nouveau nom : les résolutions faites avant ce choix (en dollars) ne sont jamais resservies."""
+    return _resolve_isin_euro_listing(isin)

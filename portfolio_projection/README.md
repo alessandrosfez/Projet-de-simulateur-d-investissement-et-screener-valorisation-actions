@@ -154,6 +154,16 @@ qu'une simulation aurait donné.
   annuelle passe ainsi de 13,5 % en dollars à 12,0 % en euros, le dollar
   ayant tendance à monter quand les actions baissent. Les onglets de
   simulation par indice gardent les indices bruts dans leur devise.
+- **ISIN résolus en euros** : à l'import Trade Republic, quand Yahoo
+  résout un ISIN vers une cotation hors euros, on lui préfère la cotation
+  en euros du même instrument. Vanguard FTSE All-World devient VWCE.DE
+  plutôt que VWRA.L, iShares Core MSCI World EUNL.DE plutôt que IWDA.L,
+  Apple APC.DE plutôt que AAPL. La recherche se fait par nom, puis
+  n'accepte qu'un candidat coté en euros et portant exactement le même nom
+  long, ce qui écarte une autre classe de parts du même fonds. Les places
+  sont essayées dans l'ordre Xetra (base des cours de Trade Republic), Paris,
+  Amsterdam, Milan. Sans cotation en euros trouvée, on garde celle de Yahoo,
+  convertie en euros. Les lignes déjà importées ne changent pas de ticker.
 - **Cours bruts pour le réel, ajustés pour la référence** : yfinance ajuste
   par défaut les cours passés des dividendes (CAC.PA début 2024 : ~70 €
   ajusté contre ~74 € réel). Pour valoriser les positions réelles, on prend
