@@ -240,7 +240,12 @@ Yahoo Finance sans retraitement par un analyste.
     l'écran.
   - **Mêmes chiffres que l'écran** : la vision Transaction Services est
     recalculée à partir des saisies de la session par la même fonction que
-    l'écran (`callbacks._transaction_figures`).
+    l'écran (`callbacks._transaction_figures`). C'est aussi le cas de la
+    comparaison aux pairs (`callbacks.peer_comparison`), dans un onglet
+    « Pairs » : statistiques en cellules numériques et liste des pairs
+    retenus, avec leur secteur et leur exercice. Elle est recalculée à
+    l'export : le cache la rend immédiate si elle a déjà été lancée à
+    l'écran, sinon le premier export télécharge les comptes du CAC 40.
 - **Banques et assureurs** : la conversion en cash et les accruals y sont
   aussi non applicables, leur CFO étant dominé par les flux de dépôts et de
   crédits (des dizaines de milliards d'une année sur l'autre).

@@ -7,6 +7,7 @@ Usage : pip install -r requirements-dev.txt && pytest -v
 """
 import io
 
+import pandas as pd
 import pytest
 from openpyxl import load_workbook
 
@@ -47,6 +48,18 @@ market_cap;1500;1300;1100
 """
 
 
+PEERS = {f"T{i}.PA": {"name": f"Pair {i}", "sector": "Industrials", "regime": "general",
+                      "metrics": {"year": pd.Timestamp("2018-12-31"), "indicative": i == 0,
+                                  "values": {metric: float(i) for metric in m.PEER_METRICS}}}
+         for i in range(5)}
+
+
+@pytest.fixture(autouse=True)
+def fake_peer_universe(monkeypatch):
+    """Pas de téléchargement du CAC 40 pendant les tests : univers de 5 pairs Industrials."""
+    monkeypatch.setattr(callbacks, "_peer_universe", lambda: PEERS)
+
+
 def _context(regime: str | None = None):
     text = CSV if regime is None else CSV.replace("# secteur", f"# regime = {regime}\n# secteur")
     dataset = m.parse_statements_csv(text)["dataset"]
@@ -71,7 +84,22 @@ def test_databook_has_one_sheet_per_section(lang):
     wb = _workbook(_context(), lang=lang)
     assert wb.sheetnames == [L(lang, f"sheet_{key}") for key in
                              ("summary", "statements", "provenance", "earnings_quality", "working_capital", "scores",
-                              "transaction")]
+                              "peers", "transaction")]
+
+
+def test_peers_sheet_has_the_screen_statistics():
+    ws = _workbook(_context())[L("fr", "sheet_peers")]
+    row = _row(ws, L("fr", "ratio_cfo_to_net_income"))
+    # Société : 130 / 90 = 1,44 ; pairs 0 à 4 : médiane 2, quartiles 1 et 3, rang centile 40 (2 pairs sur 5 en dessous).
+    assert row[1] == pytest.approx(130 / 90)
+    assert row[2:5] == [pytest.approx(2.0), pytest.approx(1.0), pytest.approx(3.0)]
+    assert row[5] == pytest.approx(40.0) and row[6] == 5
+    assert _row(ws, "T0.PA")[1] == "Pair 0"
+
+
+def test_peers_sheet_not_applicable_for_a_bank():
+    ws = _workbook(_context(regime="bank"))[L("fr", "sheet_peers")]
+    assert ws["A3"].value == L("fr", "databook_not_applicable", regime=L("fr", "regime_bank"))
 
 
 def test_amounts_are_numbers_and_missing_data_is_never_zero():

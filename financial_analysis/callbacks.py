@@ -280,10 +280,28 @@ def compare_to_peers(n_clicks, store, lang, dark_mode):
     ctx = _load_context(store) if n_clicks else None
     if ctx is None or not ctx.normalized.years:
         raise dash.exceptions.PreventUpdate
+    comparison = peer_comparison(ctx, lang)
+    if comparison is None or not comparison["peers"]:
+        return dbc.Alert(L(lang, "peers_none"), color="secondary", className="py-2")
+    return html.Div([
+        dbc.Alert(comparison["scope_text"], color="light" if comparison["scope"] == "sector" else "warning",
+                  className="py-2"),
+        layout.peers_table(comparison["target"], comparison["stats"], comparison["ranks"], comparison["indicative"],
+                           lang, bool(dark_mode)),
+        html.Div([html.Div(note) for note in comparison["notes"]], className="text-muted mt-2",
+                 style={"fontSize": "0.8rem"}),
+    ])
+
+
+def peer_comparison(ctx: AnalysisContext, lang: str) -> dict | None:
+    """Comparaison aux pairs du CAC 40, partagée par l'écran et le databook : périmètre retenu,
+    indicateurs de la société, statistiques et rang centile par indicateur, notes de lecture. None
+    pour une banque ou un assureur (indicateurs sans objet) ; peers vide si aucun pair n'est
+    disponible."""
+    if ctx.regime["regime"] != "general":
+        return None
     universe = _peer_universe()
     peers, scope = select_peers(ctx.ticker, ctx.profile["sector"], universe)
-    if not peers:
-        return dbc.Alert(L(lang, "peers_none"), color="secondary", className="py-2")
     target = peer_metrics(ctx.normalized, ctx.regime)
     stats, ranks = {}, {}
     for metric in PEER_METRICS:
@@ -303,11 +321,14 @@ def compare_to_peers(n_clicks, store, lang, dark_mode):
             notes.insert(0, L(lang, "peers_year_gap", target=target["year"].year, peers=median_year))
     if target["indicative"]:
         notes.append(L(lang, "peers_target_indicative"))
-    return html.Div([
-        dbc.Alert(scope_text, color="light" if scope == "sector" else "warning", className="py-2"),
-        layout.peers_table(target, stats, ranks, indicative, lang, bool(dark_mode)),
-        html.Div([html.Div(note) for note in notes], className="text-muted mt-2", style={"fontSize": "0.8rem"}),
-    ])
+    if indicative:
+        notes.append(L(lang, "peers_beneish_note", n=len(indicative)))
+    return {
+        "scope": scope, "scope_text": scope_text, "target": target, "stats": stats, "ranks": ranks,
+        "indicative": indicative, "notes": notes,
+        "peers": [{"ticker": t, "name": universe[t]["name"], "sector": universe[t]["sector"],
+                   "year": universe[t]["metrics"]["year"]} for t in peers],
+    }
 
 
 def _market_values_at_year_end(ticker: str, normalized: NormalizedStatements, profile: dict) -> dict:
@@ -750,6 +771,9 @@ def databook_inputs(ctx: AnalysisContext, saved: dict | None, lang: str) -> dict
         "beneish": [beneish_m_score(normalized, year, prior) for year, prior in pairs] if applicable["beneish"] else None,
         "altman": altman, "altman_default_model": altman_default_model(ctx.profile["sector"]),
         "piotroski": piotroski, "transaction": transaction,
+        # Comparaison aux pairs recalculée à l'export : le cache (24 h) la rend quasi instantanée si elle a
+        # déjà été lancée à l'écran, sinon le premier export télécharge les comptes du CAC 40.
+        "peers": peer_comparison(ctx, lang),
     }
 
 

@@ -18,14 +18,17 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 import layout
-from engine import ALTMAN_MODELS, BENEISH_INDICES, BENEISH_REFERENCE_MEANS, FIELD_SCHEMA, PIOTROSKI_CRITERIA, STATEMENTS
+from engine import (
+    ALTMAN_MODELS, BENEISH_INDICES, BENEISH_REFERENCE_MEANS, FIELD_SCHEMA, PEER_METRICS, PIOTROSKI_CRITERIA, STATEMENTS,
+)
 from i18n import L
 
 # Formats Excel : montants entiers dans la devise des comptes, ratios selon leur nature.
 AMOUNT = "#,##0;-#,##0"
 FORMATS = {"amount": AMOUNT, "multiple": '0.00"x"', "percent": "0.0%", "days": "0", "index": "0.000",
            "score": "0.00", "rate": "0.0%"}
-SHEETS = ("summary", "statements", "provenance", "earnings_quality", "working_capital", "scores", "transaction")
+SHEETS = ("summary", "statements", "provenance", "earnings_quality", "working_capital", "scores", "peers",
+          "transaction")
 
 _TITLE = Font(bold=True, size=14)
 _BOLD = Font(bold=True)
@@ -316,6 +319,42 @@ def _scores(wb: Workbook, inputs: dict, lang: str):
     s.widths(widest, width=24)
 
 
+def _peers(wb: Workbook, inputs: dict, lang: str):
+    """Comparaison aux pairs du CAC 40 : mêmes chiffres que l'écran (callbacks.peer_comparison), en
+    cellules numériques, puis la liste des pairs retenus avec leur secteur et leur exercice."""
+    s = _Sheet(wb, L(lang, "sheet_peers"), lang)
+    s.title(L(lang, "section_peers"))
+    comparison = inputs.get("peers")
+    if comparison is None:
+        s.line([L(lang, "databook_not_applicable", regime=L(lang, f"regime_{inputs['regime']['regime']}"))])
+        return
+    if not comparison["peers"]:
+        s.line([L(lang, "peers_none")])
+        return
+    s.note(comparison["scope_text"])
+    s.blank()
+    s.header([L(lang, "col_metric"), L(lang, "col_company"), L(lang, "col_peer_median"), "Q1", "Q3",
+              L(lang, "col_peer_rank"), L(lang, "col_peer_n")])
+    for metric in PEER_METRICS:
+        kind = layout.RATIO_KINDS.get(metric, "score")
+        stat = comparison["stats"][metric]
+        label = L(lang, layout.PEER_METRIC_LABELS.get(metric, f"ratio_{metric}"))
+        s.line([label, (comparison["target"]["values"][metric], kind), (stat["median"], kind), (stat["q1"], kind),
+                (stat["q3"], kind), (comparison["ranks"][metric], "0"), stat["n"]])
+    s.blank()
+    s.heading(L(lang, "databook_peers_list"))
+    s.header([L(lang, "databook_col_ticker"), L(lang, "col_company"), L(lang, "label_sector"), L(lang, "databook_col_period")])
+    for peer in comparison["peers"]:
+        year = layout.format_year(peer["year"], lang) if peer["year"] is not None else None
+        s.line([peer["ticker"], peer["name"], peer["sector"] or L(lang, "na"), year])
+    s.blank()
+    for note in comparison["notes"]:
+        s.note(note)
+    s.ws.column_dimensions["B"].width = 26
+    for column in "CDEFG":
+        s.ws.column_dimensions[column].width = 16
+
+
 def _transaction(wb: Workbook, inputs: dict, lang: str):
     s = _Sheet(wb, L(lang, "sheet_transaction"), lang)
     s.title(L(lang, "section_transaction"))
@@ -376,6 +415,7 @@ def build_databook(inputs: dict, lang: str) -> bytes:
                  ("cfo_to_net_income", "fcf_to_net_income", "sloan_accruals"))
     _ratio_sheet(wb, inputs, lang, "working_capital", inputs["wc_days"], ("dso", "dio", "dpo", "ccc"))
     _scores(wb, inputs, lang)
+    _peers(wb, inputs, lang)
     _transaction(wb, inputs, lang)
     buffer = io.BytesIO()
     wb.save(buffer)
