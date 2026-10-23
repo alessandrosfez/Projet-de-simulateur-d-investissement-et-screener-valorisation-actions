@@ -183,6 +183,10 @@ TRANSLATIONS = {
         "allocation_no_data": "Aucune ligne valorisée pour l'instant : ajoute une transaction pour voir la répartition.",
         "index_chart_title": "Exposition par indice suivi",
         "and_word": "et",
+        "target_chart_title": "Répartition actuelle et cible",
+        "target_ring_actual": "Actuelle",
+        "target_ring_target": "Cible",
+        "target_center": "extérieur : actuelle<br>intérieur : cible",
         "index_stock": "Actions individuelles",
         "index_unknown": "Indice non identifié",
         "index_duplicate_alert": "{tickers} suivent le même indice ({index}) : {share} % du portefeuille, sans "
@@ -678,6 +682,10 @@ TRANSLATIONS = {
         "allocation_no_data": "No priced holding yet: add a transaction to see the allocation.",
         "index_chart_title": "Exposure by tracked index",
         "and_word": "and",
+        "target_chart_title": "Current and target allocation",
+        "target_ring_actual": "Current",
+        "target_ring_target": "Target",
+        "target_center": "outer: current<br>inner: target",
         "index_stock": "Individual stocks",
         "index_unknown": "Unidentified index",
         "index_duplicate_alert": "{tickers} track the same index ({index}): {share}% of the portfolio, with no "

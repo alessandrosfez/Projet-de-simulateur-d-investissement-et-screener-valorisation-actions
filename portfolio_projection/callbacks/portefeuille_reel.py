@@ -17,7 +17,7 @@ import layout
 import portfolio_db
 import portfolio_engine
 from app_instance import app
-from charts import make_allocation_donut, make_correlation_heatmap
+from charts import make_allocation_donut, make_correlation_heatmap, make_target_vs_actual_rings
 from constants import PEA_TAX_RATE, STOCK_INDEX_KEY, UNDERLYING_INDICES, UNKNOWN_INDEX_KEY
 from engine import (
     simulate_portfolio_asset_returns,
@@ -100,6 +100,33 @@ def _allocation_view(current_values: pd.Series, total: float, unpriced: list, la
         L(lang, "allocation_center", total=total_text), "€", dark=dark, separators=L(lang, "plotly_separators"),
     )
     return fig, notes
+
+
+def _target_vs_actual_view(current_values: pd.Series, target_weights: pd.DataFrame, lang: str, dark: bool):
+    """Anneaux cible (intérieur) / actuel (extérieur), seulement s'il y a des pondérations cibles et des
+    lignes valorisées : sinon rien, le tableau de rééquilibrage affiche déjà la consigne."""
+    shares = portfolio_engine.target_vs_actual_shares(current_values, target_weights, max_slices=len(PALETTE))
+    if shares.empty:
+        return None
+    shown = sorted(k for k in shares["key"] if k != portfolio_engine.OTHER_ALLOCATION_KEY)
+    color_of = {ticker: PALETTE[i] for i, ticker in enumerate(shown)}
+    labels, hover_names, colors = [], [], []
+    for key in shares["key"]:
+        if key == portfolio_engine.OTHER_ALLOCATION_KEY:
+            labels.append(L(lang, "allocation_other"))
+            hover_names.append(L(lang, "allocation_other"))
+            colors.append(OTHER_SLICE_COLOR)
+        else:
+            full_name = _ticker_display_label(key)
+            labels.append(full_name if len(full_name) <= LEGEND_LABEL_MAX else full_name[:LEGEND_LABEL_MAX - 1] + "…")
+            hover_names.append(full_name)
+            colors.append(color_of[key])
+    fig = make_target_vs_actual_rings(
+        labels, list(shares["actual"]), list(shares["target"]), hover_names, colors, L(lang, "target_chart_title"),
+        L(lang, "target_ring_actual"), L(lang, "target_ring_target"), L(lang, "target_center"), dark=dark,
+        separators=L(lang, "plotly_separators"),
+    )
+    return dcc.Graph(figure=fig, config=layout.GRAPH_CONFIG, className="mb-2")
 
 
 def _index_label(key: str, lang: str) -> str:
@@ -438,6 +465,7 @@ def delete_removed_weights(table_data):
     Output("tab3-rebalancing-table", "style_cell"),
     Output("tab3-rebalancing-table", "style_data"),
     Output("tab3-rebalancing-warning", "children"),
+    Output("tab3-target-container", "children"),
     Output("tab3-weights-table", "data"),
     Output("tab3-weights-table", "style_header"),
     Output("tab3-weights-table", "style_cell"),
@@ -594,6 +622,7 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
         index_fig, index_alerts, index_rows, index_dropdown, *table_styles,
         real_pace_display, real_vs_sim_fig, projection_fig, corr_fig,
         rebalancing_data, rebalancing_columns, *table_styles, rebalancing_warning,
+        _target_vs_actual_view(current_values, target_weights, lang, dark),
         weights_data, *table_styles,
         tx_data, *table_styles,
         div_data, *table_styles,

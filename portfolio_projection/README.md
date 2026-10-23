@@ -43,6 +43,11 @@ qu'une simulation aurait donné.
   `index_overrides`, migration v2) : revenir à l'indice détecté annule la
   correction. Les recoupements entre indices (le MSCI World contient
   environ 70 % d'actions américaines) ne sont pas décomposés.
+- **Répartition cible et actuelle** : avec des pondérations cibles, deux
+  anneaux concentriques aux mêmes couleurs (cible à l'intérieur, actuelle
+  à l'extérieur) montrent les écarts d'un coup d'œil, au-dessus du plan de
+  rééquilibrage. Les cibles sont ramenées à 100 % ; l'avertissement
+  existant signale quand leur somme s'en écarte.
 - **Performance réelle** : XIRR (rendement pondéré par les flux), TWR
   (rendement pondéré par le temps) et comparaison à un indice de référence
   choisi (mêmes versements investis dans ce ticker : valeur et XIRR côte à

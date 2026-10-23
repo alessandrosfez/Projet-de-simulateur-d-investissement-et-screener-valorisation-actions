@@ -116,6 +116,25 @@ def test_manual_override_wins_and_stocks_never_count_as_duplicates():
     assert m.duplicate_index_exposures(exposure).empty
 
 
+def test_target_vs_actual_shares_normalizes_targets_and_keeps_both_sides():
+    values = pd.Series({"AAA": 600.0, "BBB": 400.0})
+    targets = pd.DataFrame({"ticker": ["AAA", "CCC"], "weight_pct": [40.0, 40.0]})  # total 80 % : ramené à 100
+    shares = m.target_vs_actual_shares(values, targets, max_slices=6).set_index("key")
+    assert shares.loc["AAA", "actual"] == pytest.approx(0.6) and shares.loc["AAA", "target"] == pytest.approx(0.5)
+    assert shares.loc["BBB", "target"] == 0.0  # détenue sans cible
+    assert shares.loc["CCC", "actual"] == 0.0  # ciblée sans être détenue
+    assert shares["actual"].sum() == pytest.approx(1.0) and shares["target"].sum() == pytest.approx(1.0)
+
+
+def test_target_vs_actual_shares_folds_small_lines_and_needs_both_sides():
+    values = pd.Series({f"T{i}": float(10 - i) for i in range(8)})
+    targets = pd.DataFrame({"ticker": [f"T{i}" for i in range(8)], "weight_pct": [12.5] * 8})
+    shares = m.target_vs_actual_shares(values, targets, max_slices=6)
+    assert len(shares) == 6 and shares["key"].iloc[-1] == m.OTHER_ALLOCATION_KEY
+    assert shares["target"].sum() == pytest.approx(1.0)
+    assert m.target_vs_actual_shares(values, pd.DataFrame(columns=["ticker", "weight_pct"]), 6).empty
+
+
 def test_reconstruct_equity_curve_sums_across_tickers():
     transactions = pd.DataFrame([
         _tx("AAA", "2024-01-01", 100.0, 10.0),  # 10 parts

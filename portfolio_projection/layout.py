@@ -882,6 +882,7 @@ def build_tab3(lang):
         dbc.Card(dbc.CardBody([
             html.Small(L(lang, "rebalancing_hint"), className="text-muted d-block mb-2"),
             html.Div(id="tab3-rebalancing-warning"),
+            html.Div(id="tab3-target-container"),
             dash_table.DataTable(id="tab3-rebalancing-table", style_cell=TABLE_BASE_CELL_STYLE),
         ]), className="mb-4"),
 

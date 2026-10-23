@@ -147,6 +147,35 @@ def allocation_slices(current_values: pd.Series, max_slices: int) -> pd.DataFram
                          "share": values.to_numpy(dtype=float) / total})
 
 
+def target_vs_actual_shares(current_values: pd.Series, target_weights: pd.DataFrame, max_slices: int) -> pd.DataFrame:
+    """Part actuelle et part cible de chaque ticker (colonnes key, actual, target), pour comparer les deux
+    répartitions. Parts cibles ramenées à un total de 100 % (l'avertissement « pondérations ≠ 100 % »
+    est affiché à part), une ligne détenue sans cible ou ciblée sans être détenue a une part nulle de
+    l'autre côté. Tri par la plus grande des deux parts ; au-delà de max_slices tickers, les plus
+    petits sont regroupés dans OTHER_ALLOCATION_KEY."""
+    values = current_values.dropna()
+    values = values[values > 0]
+    targets = (target_weights.set_index("ticker")["weight_pct"].astype(float) if not target_weights.empty
+               else pd.Series(dtype=float))
+    targets = targets[targets > 0]
+    if values.empty or targets.empty:
+        return pd.DataFrame(columns=["key", "actual", "target"])
+    keys = sorted(set(values.index) | set(targets.index))
+    frame = pd.DataFrame({
+        "key": [str(k) for k in keys],
+        "actual": [float(values.get(k, 0.0)) / float(values.sum()) for k in keys],
+        "target": [float(targets.get(k, 0.0)) / float(targets.sum()) for k in keys],
+    })
+    frame = frame.assign(_size=frame[["actual", "target"]].max(axis=1)).sort_values("_size", ascending=False)
+    frame = frame.drop(columns="_size").reset_index(drop=True)
+    if len(frame) > max_slices:
+        head, tail = frame.iloc[:max_slices - 1], frame.iloc[max_slices - 1:]
+        other = pd.DataFrame([{"key": OTHER_ALLOCATION_KEY, "actual": float(tail["actual"].sum()),
+                               "target": float(tail["target"].sum())}])
+        frame = pd.concat([head, other], ignore_index=True)
+    return frame
+
+
 _TICKER_TO_UNDERLYING: dict[str, str] = {
     ticker: TICKERS_UNDERLYING[name] for name, tickers in TICKERS.items() for ticker in tickers.values()
 }

@@ -50,6 +50,32 @@ def make_allocation_donut(labels: list, values: list, hover_names: list, colors:
     return fig
 
 
+def make_target_vs_actual_rings(labels: list, actual: list, target: list, hover_names: list, colors: list,
+                                title: str, actual_name: str, target_name: str, center_text: str,
+                                dark: bool = False, separators: str | None = None):
+    """Deux anneaux concentriques aux mêmes couleurs : extérieur = répartition actuelle, intérieur =
+    répartition cible. Un écart se lit comme un décalage entre les deux anneaux d'une même couleur.
+    La légende, partagée par libellé, n'apparaît qu'une fois."""
+    surface = "#111111" if dark else "#FFFFFF"
+    common = dict(labels=labels, customdata=hover_names, sort=False, direction="clockwise",
+                  marker=dict(colors=colors, line=dict(color=surface, width=2)),
+                  texttemplate="%{percent:.0%}", textposition="inside", insidetextorientation="horizontal")
+    fig = go.Figure([
+        go.Pie(values=actual, name=actual_name, hole=0.72, domain=dict(x=[0, 1], y=[0, 1]),
+               hovertemplate=f"%{{customdata}}<br>{actual_name} : %{{percent:.1%}}<extra></extra>", **common),
+        go.Pie(values=target, name=target_name, hole=0.62, domain=dict(x=[0.19, 0.81], y=[0.19, 0.81]),
+               hovertemplate=f"%{{customdata}}<br>{target_name} : %{{percent:.1%}}<extra></extra>",
+               showlegend=False, **common),
+    ])
+    fig.update_layout(
+        template="plotly_dark" if dark else "plotly", title=dict(text=title, font=dict(size=14)),
+        annotations=[dict(text=center_text, x=0.5, y=0.5, showarrow=False, font=dict(size=12))],
+        legend=dict(font=dict(size=11)), uniformtext=dict(minsize=9, mode="hide"),
+        margin=dict(t=60, b=20, l=20, r=20), separators=separators,
+    )
+    return fig
+
+
 def make_band_figure(series, years_axis, title, lang="fr", palette=None, invested_capital=None,
                       phase_boundary_years=None, dark: bool = False, backtest_series=None,
                       view_mode="prevision"):
