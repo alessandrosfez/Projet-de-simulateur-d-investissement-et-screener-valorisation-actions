@@ -147,9 +147,13 @@ qu'une simulation aurait donné.
   jour (XXXEUR=X, dernier taux connu un jour sans cotation). Sans taux de
   change, le cours est n.d. plutôt que laissé en dollars. Un test vérifie
   l'invariant qui aurait détecté le problème : achetée au cours du jour,
-  une ligne vaut exactement le montant investi ce jour-là. La calibration
-  Monte Carlo des tickers du portefeuille réel reste, elle, sur les
-  rendements dans la devise de cotation (sans effet de change).
+  une ligne vaut exactement le montant investi ce jour-là. La projection
+  et les corrélations du portefeuille réel sont, elles aussi, calibrées sur
+  des rendements en euros, change compris : c'est le risque réellement
+  porté par qui détient un ETF non couvert. Sur VWRA.L, la volatilité
+  annuelle passe ainsi de 13,5 % en dollars à 12,0 % en euros, le dollar
+  ayant tendance à monter quand les actions baissent. Les onglets de
+  simulation par indice gardent les indices bruts dans leur devise.
 - **Cours bruts pour le réel, ajustés pour la référence** : yfinance ajuste
   par défaut les cours passés des dividendes (CAC.PA début 2024 : ~70 €
   ajusté contre ~74 € réel). Pour valoriser les positions réelles, on prend

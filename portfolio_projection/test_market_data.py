@@ -41,6 +41,25 @@ def test_get_monthly_returns_raises_on_empty_data(monkeypatch):
         md.get_monthly_returns("FAKE", 5)
 
 
+def test_monthly_returns_eur_include_the_exchange_rate(monkeypatch):
+    """Ligne cotée en dollars : rendement mensuel en euros = variation du cours x variation du change.
+    Un cours stable en dollars avec un dollar qui gagne 10 % donne +10 % en euros."""
+    dates = pd.to_datetime(["2024-01-02", "2024-02-01", "2024-03-01"])
+    monkeypatch.setattr(md.yf, "download", lambda *a, **k: pd.DataFrame({"Close": [100.0, 100.0, 110.0]}, index=dates))
+    monkeypatch.setattr(md, "_get_ticker_info", lambda ticker: {"currency": "USD"})
+    fx = pd.Series([0.90, 0.99, 0.99], index=dates)
+    monkeypatch.setattr(md, "_fetch_fx_history", lambda currency, start: fx)
+    returns = md.get_monthly_returns_eur("VWRA.L", 5)
+    assert list(returns) == pytest.approx([0.99 / 0.90 - 1, 110.0 / 100.0 - 1])
+
+
+def test_monthly_returns_eur_unchanged_for_a_euro_listing(monkeypatch):
+    dates = pd.to_datetime(["2024-01-02", "2024-02-01"])
+    monkeypatch.setattr(md.yf, "download", lambda *a, **k: pd.DataFrame({"Close": [100.0, 105.0]}, index=dates))
+    monkeypatch.setattr(md, "_get_ticker_info", lambda ticker: {"currency": "EUR"})
+    assert list(md.get_monthly_returns_eur("CW8.PA", 5)) == pytest.approx([0.05])
+
+
 # ---------- cache (TTL, roundtrip mémoire/disque) ----------
 
 def test_cached_ttl_reuses_value_within_ttl_window(monkeypatch):

@@ -144,11 +144,34 @@ def get_aligned_returns(names: list, lookback_years: int, source_key: str) -> pd
     return pd.concat(series, axis=1).dropna()
 
 
+@cached_ttl(3600)
+def get_monthly_returns_eur(ticker: str, lookback_years: int) -> pd.Series:
+    """Rendements mensuels d'un ticker quelconque vus par un investisseur en euros : les clôtures
+    quotidiennes (dividendes réinvestis) sont converties au change de chaque jour (voir
+    _fx_rate_on_dates) avant le passage au mensuel. Pour une ligne cotée en dollars, le rendement
+    simulé inclut donc l'effet de change, un risque réellement porté par qui détient un ETF non
+    couvert : il s'ajoute à la volatilité et aux corrélations de la projection. Lève une exception
+    sans données ou sans taux de change, plutôt que de simuler des rendements dans la mauvaise
+    devise."""
+    start = (datetime.today() - timedelta(days=365 * lookback_years)).strftime("%Y-%m-%d")
+    data = yf.download(ticker, start=start, progress=False, auto_adjust=True)
+    if data.empty:
+        raise ValueError(f"Pas de données pour {ticker}")
+    closes = data["Close"].squeeze().dropna()
+    major, _divisor = _quote_currency(_get_ticker_info(ticker))
+    if major is not None and major != PORTFOLIO_CURRENCY:
+        closes = (closes * _fx_rate_on_dates(major, closes.index, start).to_numpy()).dropna()
+    monthly_prices = closes.resample("MS").first().dropna()
+    return monthly_prices.pct_change().dropna()
+
+
 def get_aligned_returns_for_tickers(tickers: list, lookback_years: int) -> pd.DataFrame:
     """Équivalent de get_aligned_returns, mais pour des tickers Yahoo bruts plutôt que les noms
     d'indices de TICKERS : le portefeuille réel (voir portfolio_db.py) accepte n'importe quel
-    ticker, pas seulement les 4 indices/ETF simulés par les onglets 1 et 2."""
-    series = {ticker: get_monthly_returns(ticker, lookback_years) for ticker in tickers}
+    ticker, pas seulement les 4 indices/ETF simulés par les onglets 1 et 2. Rendements en euros,
+    change compris (voir get_monthly_returns_eur) : les onglets 1 et 2 gardent au contraire les
+    indices bruts dans leur devise (get_monthly_returns)."""
+    series = {ticker: get_monthly_returns_eur(ticker, lookback_years) for ticker in tickers}
     return pd.concat(series, axis=1).dropna()
 
 
