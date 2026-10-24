@@ -28,7 +28,8 @@ Yahoo Finance sans retraitement par un analyste.
   facultative de capitalisation à chaque clôture.
 - **Qualité des résultats** : conversion du résultat en cash (CFO / résultat
   net, FCF / résultat net) et ratio d'accruals de Sloan, par exercice, avec
-  le détail de chaque calcul en infobulle.
+  le détail de chaque calcul en infobulle, et un graphique en barres
+  groupées résultat net / CFO par exercice.
 - **Pont du résultat net au CFO** : cascade par exercice (dotations,
   variation du BFR, autres éléments), qui retombe exactement sur le CFO
   publié.
@@ -39,6 +40,10 @@ Yahoo Finance sans retraitement par un analyste.
   les industriels, Z'' pour les autres, choix automatique et bascule
   manuelle, zones sûre / grise / détresse) et Piotroski F-score (9 critères
   détaillés). Chaque indice, ratio ou critère affiche le calcul complet.
+  Beneish et Altman ont aussi un graphique de zones : une ligne par
+  exercice, le score posé sur des bandes nommées (couleurs d'état
+  distinctes des couleurs de séries), un M-score seulement indicatif en
+  point creux.
 - **Vision Transaction Services** : pont de dette nette de la dette
   financière brute à la dette nette ajustée (chaque ligne marquée
   « donnée » ou « hypothèse »), tableaux éditables d'éléments assimilables

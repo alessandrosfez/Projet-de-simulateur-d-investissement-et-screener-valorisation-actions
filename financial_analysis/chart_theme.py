@@ -31,6 +31,9 @@ CHROME = {
     "dark": {"ink": "#e6e8ef", "muted": "#9aa1b2", "grid": "#262b38", "axis": "#3a4052",
              "hover_bg": "#1f2330", "hover_border": "#2a2f3d", "surface": "#171a23"},
 }
+# Couleurs d'état de la palette de référence, distinctes des couleurs de séries : une zone « sûre »
+# ou « détresse » ne se confond jamais avec une série. Toujours accompagnées d'un libellé.
+STATUS = {"good": "#0ca30c", "warning": "#fab219", "critical": "#d03b3b"}
 FONT_FAMILY = "Inter, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif"
 
 

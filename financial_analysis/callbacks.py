@@ -16,13 +16,16 @@ from dash import Input, Output, State, dcc, html
 import layout
 from app_instance import app
 from databook import build_databook
-from charts import empty_figure_with_message, make_bridge_waterfall, make_working_capital_days_chart
+from charts import (
+    empty_figure_with_message, make_bridge_waterfall, make_income_vs_cfo_chart, make_score_zone_chart,
+    make_working_capital_days_chart,
+)
 from constants import CAC40_TICKERS, TYPICAL_YFINANCE_YEARS
 from engine import (
-    DEFAULT_BENFORD_MIN_AMOUNT, FIELD_KEYS, IMPORT_MARKET_CAP_KEY, MIN_SECTOR_PEERS, PEER_METRICS, NormalizedStatements,
+    ALTMAN_MODELS, BENEISH_THRESHOLD, DEFAULT_BENFORD_MIN_AMOUNT, FIELD_KEYS, IMPORT_MARKET_CAP_KEY, MIN_SECTOR_PEERS, PEER_METRICS, NormalizedStatements,
     adjusted_ebitda, peer_distribution, peer_metrics, percentile_rank, select_peers,
     benford_first_digit_test, financial_statement_amounts, guess_amount_column, read_ledger_csv,
-    select_benford_amounts, altman_default_model, altman_z_score, beneish_m_score, cash_conversion,
+    select_benford_amounts, altman_default_model, altman_z_score, beneish_m_score, beneish_verdict, cash_conversion,
     consecutive_pairs, detect_sector_regime, imported_market_caps, imported_statement_amounts, market_value_of_equity,
     market_values_in_reporting_currency, metric_trend, minor_unit_consistency, net_debt_bridge,
     net_income_to_cfo_bridge, normalize_imported, normalize_statements, parse_statements_csv, parse_user_items,
@@ -169,14 +172,35 @@ def _not_applicable(regime: dict, lang: str):
                      color="secondary", className="py-2")
 
 
-def _earnings_quality_section(normalized: NormalizedStatements, regime: dict, lang: str, dark: bool) -> list:
+def _income_vs_cfo_figure(normalized: NormalizedStatements, conversion: dict, lang: str, dark: bool, palette):
+    """Barres groupées résultat net / CFO, avec les montants déjà retenus pour le ratio CFO / résultat
+    net (résultat y compris minoritaires, ou part du groupe en repli). None si rien à montrer."""
+    chronological = sorted(normalized.years)
+    components = [conversion[year]["cfo_to_net_income"]["components"] for year in chronological]
+    net_income = [c["net_income"] for c in components]
+    cfo = [c["cfo"] for c in components]
+    if all(v is None for v in net_income + cfo):
+        return None
+    fallback = any("group_share_fallback" in conversion[y]["cfo_to_net_income"]["flags"] for y in chronological)
+    labels = (L(lang, "field_net_income" if fallback else "field_net_income_incl_minorities"), L(lang, "field_cfo"))
+    return make_income_vs_cfo_chart(
+        [layout.format_year(year, lang) for year in chronological], net_income, cfo, labels,
+        L(lang, "income_vs_cfo_title"), lambda value: layout.format_amount(value, lang),
+        (L(lang, "unit_billion"), L(lang, "unit_million")), dark=dark, palette=palette,
+        separators=L(lang, "plotly_separators"),
+    )
+
+
+def _earnings_quality_section(normalized: NormalizedStatements, regime: dict, lang: str, dark: bool, palette) -> list:
     section = [html.H5(L(lang, "section_earnings_quality"), className="section-title")]
     if not regime["applicable"]["earnings_quality"]:
         return section + [_not_applicable(regime, lang)]
     conversion, accruals = cash_conversion(normalized), sloan_accruals(normalized)
     merged = {year: {**conversion[year], "sloan_accruals": accruals[year]} for year in normalized.years}
+    figure = _income_vs_cfo_figure(normalized, conversion, lang, dark, palette)
     return section + [
         layout.ratio_table(merged, EARNINGS_QUALITY_METRICS, normalized.years, lang, dark, "table-earnings-quality"),
+        *([dcc.Graph(figure=figure, config=layout.GRAPH_CONFIG)] if figure is not None else []),
         html.H5(L(lang, "section_bridge"), className="section-title"),
         layout.bridge_controls(normalized.years, lang),
     ]
@@ -207,6 +231,56 @@ def _score_heading(text_key: str, help_key: str, lang: str):
     return html.H6([L(lang, text_key)] + layout.info_tooltip(f"{text_key}-info", L(lang, help_key)), className="mt-3")
 
 
+def _beneish_zone_figure(results: list[dict], lang: str, dark: bool):
+    """M-score de chaque couple sur ses deux zones. Un M-score officiel n.d. mais calculable en variante
+    indicative apparaît en point creux, pour ne pas le lire comme un score officiel."""
+    points = []
+    for result in results:
+        official, indicative = result["m_score"]["value"], result["m_score_indicative"]
+        value = official if official is not None else (indicative["value"] if indicative else None)
+        if value is None:
+            continue
+        verdict = beneish_verdict(value)
+        hover = (f"<b>{layout.pair_label(result['pair'], lang)}</b><br>M = {layout.format_number(value, '.2f', lang)}"
+                 f" · {L(lang, f'beneish_zone_{verdict}')}")
+        if official is None:
+            hover += f"<br>{L(lang, 'beneish_point_indicative')}"
+        points.append({"label": layout.pair_label(result["pair"], lang), "value": value,
+                       "hollow": official is None, "hover": hover})
+    if not points:
+        return None
+    zones = [
+        {"start": None, "end": BENEISH_THRESHOLD, "status": "good", "label": L(lang, "beneish_zone_no_signal")},
+        {"start": BENEISH_THRESHOLD, "end": None, "status": "critical",
+         "label": L(lang, "beneish_zone_manipulation_risk")},
+    ]
+    note = f"○ {L(lang, 'beneish_point_indicative')}" if any(point["hollow"] for point in points) else None
+    return make_score_zone_chart(points, zones, L(lang, "beneish_chart_title"),
+                                 lambda value: layout.format_number(value, ".2f", lang), dark=dark,
+                                 separators=L(lang, "plotly_separators"), note=note)
+
+
+def _altman_zone_figure(results: list[dict], model: str, lang: str, dark: bool):
+    """Z-score de chaque exercice sur les trois zones du modèle retenu (seuils de engine.ALTMAN_MODELS)."""
+    points = [
+        {"label": layout.format_year(r["year"], lang), "value": r["value"], "hollow": False,
+         "hover": (f"<b>{layout.format_year(r['year'], lang)}</b><br>Z = {layout.format_number(r['value'], '.2f', lang)}"
+                   f" · {L(lang, 'altman_zone')} {L(lang, 'zone_' + r['zone'])}")}
+        for r in results if r["value"] is not None
+    ]
+    if not points:
+        return None
+    distress, safe = ALTMAN_MODELS[model]["zones"]
+    zones = [
+        {"start": None, "end": distress, "status": "critical", "label": L(lang, "zone_distress")},
+        {"start": distress, "end": safe, "status": "warning", "label": L(lang, "zone_grey")},
+        {"start": safe, "end": None, "status": "good", "label": L(lang, "zone_safe")},
+    ]
+    return make_score_zone_chart(points, zones, L(lang, "altman_chart_title"),
+                                 lambda value: layout.format_number(value, ".2f", lang), dark=dark,
+                                 separators=L(lang, "plotly_separators"))
+
+
 def _scores_section(normalized: NormalizedStatements, regime: dict, lang: str, dark: bool) -> list:
     section = [
         html.H5(L(lang, "section_scores"), className="section-title"),
@@ -220,6 +294,9 @@ def _scores_section(normalized: NormalizedStatements, regime: dict, lang: str, d
     elif pairs:
         results = [beneish_m_score(normalized, year, prior) for year, prior in pairs]
         section += [layout.beneish_table(results, lang, dark), layout.beneish_summary(results[0], lang)]
+        figure = _beneish_zone_figure(results, lang, dark)
+        if figure is not None:
+            section.append(dcc.Graph(figure=figure, config=layout.GRAPH_CONFIG))
 
     section.append(_score_heading("section_altman", "altman_help", lang))
     section.append(layout.altman_controls(lang) if applicable["altman"] else _not_applicable(regime, lang))
@@ -378,6 +455,9 @@ def update_altman(model_choice, lang, dark_mode, store):
                          else _market_values_at_year_end(ctx.ticker, normalized, profile))
     results = [altman_z_score(normalized, year, model, market_values.get(year)) for year in normalized.years]
     children.append(layout.altman_table(results, lang, bool(dark_mode), imported=ctx.imported))
+    figure = _altman_zone_figure(results, model, lang, bool(dark_mode))
+    if figure is not None:
+        children.append(dcc.Graph(figure=figure, config=layout.GRAPH_CONFIG))
     return children
 
 
@@ -545,7 +625,7 @@ def render_analysis(store, lang, dark_mode, palette_code, saved_store):
                  + layout.info_tooltip("databook-info", L(lang, "databook_help")), className="mb-3"),
         *layout.analysis_alerts(profile, regime, market, consistency, lang),
         dbc.Alert(coverage, color="light", className="py-2"),
-        *_earnings_quality_section(normalized, regime, lang, dark),
+        *_earnings_quality_section(normalized, regime, lang, dark, palette),
         *_working_capital_section(normalized, regime, lang, dark, palette),
         *_scores_section(normalized, regime, lang, dark),
         *_peers_section(regime, lang),
