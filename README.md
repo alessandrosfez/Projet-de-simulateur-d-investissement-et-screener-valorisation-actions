@@ -43,6 +43,8 @@ Ils partagent aussi un thème visuel, recopié dans chaque dossier
   échouait au contrôle de luminance dans les deux modes.
 - **couleurs d'état** (zone sûre, grise, détresse) distinctes des couleurs
   de séries, toujours accompagnées d'un libellé ;
+- **en-tête commun** : barre de navigation vers l'accueil et les deux autres
+  outils, vignette illustrée de l'outil, réglages regroupés dans une carte ;
 - **icônes Bootstrap** sur les actions principales, **squelettes de
   chargement** à la place des spinners, et une mise en page qui tient sur
   un téléphone (réglages repliés sous le titre, sans défilement
@@ -62,8 +64,9 @@ python run_all.py
 ```
 
 Lance les trois outils en parallèle (http://localhost:8050,
-http://localhost:8051 et http://localhost:8052) et ouvre `index.html`, une
-page d'accueil statique avec un lien vers chacun, un aperçu dessiné de
+http://localhost:8051 et http://localhost:8052) et ouvre la page d'accueil
+`index.html`, servie sur http://localhost:8049 (le serveur ne sert que ce
+fichier, jamais le reste du dossier) : une page statique avec un lien vers chacun, un aperçu dessiné de
 son écran principal et leur statut de démarrage en direct (thème clair ou
 sombre selon le système) ; Ctrl+C pour tout arrêter. `python run_all.py
 --no-browser` lance les outils sans ouvrir la page d'accueil (serveur sans

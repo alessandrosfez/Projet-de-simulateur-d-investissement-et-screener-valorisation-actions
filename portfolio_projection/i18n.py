@@ -22,6 +22,11 @@ PALETTE = PALETTES["default"]  # palette par défaut, utilisée si aucune n'est 
 
 TRANSLATIONS = {
     "fr": {
+        "nav_label": "Navigation entre les outils",
+        "nav_home": "Accueil",
+        "nav_projection": "Projection",
+        "nav_valuation": "Valorisation",
+        "nav_analysis": "Analyse financière",
         "app_title": "Projection PEA & Compte-Titres",
         "app_subtitle": "Simulation Monte Carlo de tes versements (PEA ou compte-titres, par indice ou "
                         "portefeuille pondéré). Les projections ne sont pas des prédictions : chaque "
@@ -537,6 +542,11 @@ TRANSLATIONS = {
         "apply_btn": "Appliquer à Portefeuille 1",
     },
     "en": {
+        "nav_label": "Navigation between the tools",
+        "nav_home": "Home",
+        "nav_projection": "Projection",
+        "nav_valuation": "Valuation",
+        "nav_analysis": "Financial analysis",
         "app_title": "PEA & Brokerage Account Projection",
         "app_subtitle": "Monte Carlo simulation of your contributions (PEA or brokerage account, per "
                         "index or weighted portfolio). Projections are not predictions: every chart "

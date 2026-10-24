@@ -21,6 +21,11 @@ PALETTE = PALETTES["default"]  # palette par défaut, utilisée si aucune n'est 
 
 TRANSLATIONS = {
     "fr": {
+        "nav_label": "Navigation entre les outils",
+        "nav_home": "Accueil",
+        "nav_projection": "Projection",
+        "nav_valuation": "Valorisation",
+        "nav_analysis": "Analyse financière",
         "app_title": "Valorisation d'actions : P/E, DCF & comparables",
         "app_subtitle": "Comparaison de valorisation (P/E sectoriel, DCF, comparables) sur des actions "
                         "françaises, allemandes, britanniques et américaines. Ce ne sont pas des "
@@ -262,6 +267,11 @@ TRANSLATIONS = {
         "dcf_sensitivity_summary": "Voir la grille de sensibilité (croissance × taux d'actualisation)",
     },
     "en": {
+        "nav_label": "Navigation between the tools",
+        "nav_home": "Home",
+        "nav_projection": "Projection",
+        "nav_valuation": "Valuation",
+        "nav_analysis": "Financial analysis",
         "app_title": "Stock Valuation: P/E, DCF & Comparables",
         "app_subtitle": "Valuation comparison (sector P/E, DCF, comparables) on French, German, British "
                         "and American stocks. These are not predictions: every estimate depends heavily "

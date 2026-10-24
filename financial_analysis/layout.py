@@ -1039,10 +1039,36 @@ def build_main(lang, v=None):
     ], className="pt-3 px-3")
 
 
+# Navigation entre les outils du dépôt (en-tête) : la page d'accueil est servie par run_all.py ; un
+# outil lancé seul (Docker, app.py) garde ces liens, qui ne répondent alors que si les autres tournent.
+HOME_URL = "http://localhost:8049"
+TOOL_URLS = {"projection": "http://localhost:8050", "valuation": "http://localhost:8051",
+             "analysis": "http://localhost:8052"}
+CURRENT_TOOL = "analysis"
+
+
 def build_header_text(lang):
+    """En-tête de l'outil : barre de navigation vers l'accueil et les deux autres outils, vignette
+    illustrée (version claire ou sombre selon le thème, voir assets/theme.css), titre et sous-titre.
+    Reconstruit à chaque changement de langue (callback de reconstruction)."""
+    nav = [html.A([html.I(className="bi bi-house-door me-1", **{"aria-hidden": "true"}), L(lang, "nav_home")],
+                  href=HOME_URL, className="app-nav-link")]
+    for key, url in TOOL_URLS.items():
+        current = key == CURRENT_TOOL
+        nav.append(html.A(L(lang, f"nav_{key}"), href=url, className="app-nav-link" + (" active" if current else ""),
+                          **({"aria-current": "page"} if current else {})))
     return [
-        html.H2(L(lang, "app_title")),
-        html.P(L(lang, "app_subtitle"), className="text-muted"),
+        html.Nav(nav, className="app-nav", **{"aria-label": L(lang, "nav_label")}),
+        html.Div([
+            html.Div([
+                html.Img(src="/assets/header_art_light.svg", alt="", className="header-art header-art-light"),
+                html.Img(src="/assets/header_art_dark.svg", alt="", className="header-art header-art-dark"),
+            ], className="header-art-box"),
+            html.Div([
+                html.H1(L(lang, "app_title"), className="app-title"),
+                html.P(L(lang, "app_subtitle"), className="app-subtitle"),
+            ]),
+        ], className="header-main"),
     ]
 
 

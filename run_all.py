@@ -1,10 +1,11 @@
 """
 Lance les trois outils du dépôt en parallèle (portfolio_projection, stock_valuation et
 financial_analysis : trois processus indépendants, même interpréteur Python) pour les démarrer
-d'une seule commande, sans Docker. Ouvre index.html (page d'accueil statique, pas de serveur
-dédié) en guise de point d'entrée unique : les outils restent des apps Dash totalement
-indépendantes (voir README.md), index.html n'est qu'un aiguillage avec un lien par outil, pas une
-fusion.
+d'une seule commande, sans Docker. Sert index.html sur http://localhost:8049 en guise de point
+d'entrée unique : les outils restent des apps Dash totalement indépendantes (voir README.md),
+index.html n'est qu'un aiguillage avec un lien par outil, pas une fusion. Servie en HTTP plutôt
+qu'ouverte comme fichier : le lien « Accueil » de chaque outil (une page http://localhost) ne
+pourrait pas ouvrir une adresse file://, que les navigateurs bloquent depuis une page web.
 
 Usage : python run_all.py [--no-browser]
   --no-browser : n'ouvre pas la page d'accueil (lancement sur un serveur sans écran, ou
@@ -16,10 +17,12 @@ import argparse
 import socket
 import subprocess
 import sys
+import threading
 import time
 import urllib.request
 import webbrowser
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -30,7 +33,38 @@ APPS = [
     ("financial_analysis", "http://localhost:8052"),
 ]
 LANDING_PAGE = ROOT / "index.html"
+HOME_PORT = 8049
+HOME_URL = f"http://localhost:{HOME_PORT}"
 STARTUP_TIMEOUT = 30.0
+
+
+class _HomeHandler(BaseHTTPRequestHandler):
+    """Ne sert QUE index.html, jamais le reste du dossier : un serveur de fichiers générique
+    exposerait aussi la base du portefeuille réel et les caches. Le fichier est relu à chaque
+    requête, pour qu'une modification se voie sans relancer."""
+
+    def do_GET(self):
+        if self.path.split("?")[0] not in ("/", "/index.html"):
+            self.send_error(404)
+            return
+        body = LANDING_PAGE.read_bytes()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, format, *args):
+        # Silencieux : les logs des trois outils suffisent dans le terminal.
+        pass
+
+
+def _start_home_server() -> ThreadingHTTPServer:
+    """Page d'accueil servie en tâche de fond, sur la boucle locale uniquement."""
+    server = ThreadingHTTPServer(("127.0.0.1", HOME_PORT), _HomeHandler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server
 
 
 def _kill_tree(proc: subprocess.Popen):
@@ -88,13 +122,15 @@ def main():
                         help="ne pas ouvrir la page d'accueil (serveur sans écran, vérification automatique)")
     args = parser.parse_args()
 
-    ports = [urlparse(url).port for _, url in APPS]
+    ports = [HOME_PORT] + [urlparse(url).port for _, url in APPS]
     busy_ports = [port for port in ports if not _port_free(port)]
     if busy_ports:
         print(f"Port(s) déjà occupé(s) : {', '.join(map(str, busy_ports))}. "
               "Une instance tourne-t-elle déjà ? Arrête-la avant de relancer.")
         sys.exit(1)
 
+    home_server = _start_home_server()
+    print(f"Page d'accueil -> {HOME_URL}")
     procs = []
     for folder, url in APPS:
         print(f"Lancement de {folder} -> {url}")
@@ -104,7 +140,7 @@ def main():
     # son propre JS sonde chaque app toutes les 2s et affiche "Prêt"/"Indisponible" par outil,
     # donc l'utilisateur voit l'état réel sans avoir à lire les logs du terminal.
     if not args.no_browser:
-        webbrowser.open(LANDING_PAGE.resolve().as_uri())
+        webbrowser.open(HOME_URL)
 
     # Attente en parallèle (pas l'un après l'autre) : sinon, dans le pire cas où le premier met
     # tout son budget à répondre, le diagnostic des suivants n'arriverait qu'après plusieurs
@@ -131,10 +167,11 @@ def main():
         print("\nArrêt des autres outils suite à cet échec...")
         for proc in procs:
             _kill_tree(proc)
+        home_server.shutdown()
         sys.exit(1)
 
     print(f"\nLes {len(APPS)} outils tournent (logs entremêlés ci-dessous). Clique sur une carte dans la "
-          "page d'accueil (index.html) pour accéder à l'un d'eux. Ctrl+C pour tout arrêter.\n")
+          f"page d'accueil ({HOME_URL}) pour accéder à l'un d'eux. Ctrl+C pour tout arrêter.\n")
     exit_code = 0
     try:
         while True:
@@ -150,6 +187,7 @@ def main():
     finally:
         for proc in procs:
             _kill_tree(proc)
+        home_server.shutdown()
     sys.exit(exit_code)
 
 

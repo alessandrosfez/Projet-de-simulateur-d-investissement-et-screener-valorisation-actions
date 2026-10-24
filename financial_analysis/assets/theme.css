@@ -40,12 +40,13 @@ html { scroll-behavior: smooth; }
 }
 
 body {
-    font-family: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    /* !important : le thème Bootstrap, chargé après ce fichier, impose sinon sa propre police. */
+    font-family: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif !important;
     background-color: var(--page-bg) !important;
     transition: background-color .2s ease;
 }
 
-h1, h2, h3, h4, h5, h6 { font-family: "Inter", sans-serif; font-weight: 600; letter-spacing: -0.01em; }
+h1, h2, h3, h4, h5, h6 { font-family: "Inter", sans-serif !important; font-weight: 600; letter-spacing: -0.01em; }
 
 /* -------- En-têtes de section (H5 ⟶ className="section-title") -------- */
 .section-title {
@@ -153,4 +154,33 @@ a { color: var(--accent); }
     .header-controls .dash-dropdown, .header-controls #palette-dropdown { min-width: 160px; }
     .js-plotly-plot .modebar-container { display: none; }
     h1 { font-size: 1.6rem; }
+}
+
+/* -------- En-tête : navigation entre outils, vignette, titre, réglages -------- */
+.app-nav { display: flex; flex-wrap: wrap; gap: 0.25rem; margin-bottom: 0.9rem; font-size: 0.82rem; }
+.app-nav-link { padding: 0.25rem 0.75rem; border-radius: 999px; border: 1px solid transparent; text-decoration: none;
+                color: var(--Dash-Text-Weak, #6c757d); transition: background-color .15s ease, color .15s ease; }
+.app-nav-link:hover, .app-nav-link:focus-visible { color: var(--accent); background: var(--surface-2); }
+.app-nav-link.active { color: var(--accent); font-weight: 600;
+                       background: color-mix(in srgb, var(--accent) 12%, transparent);
+                       border-color: color-mix(in srgb, var(--accent) 30%, transparent); }
+.header-main { display: flex; gap: 1.1rem; align-items: center; }
+.header-art-box { flex: 0 0 auto; }
+.header-art { width: 128px; height: auto; display: block; border-radius: 12px; border: 1px solid var(--border-soft); }
+/* Vignette claire ou sombre selon le thème de la page (attribut data-bs-theme posé par le switch). */
+.header-art-dark { display: none; }
+[data-bs-theme="dark"] .header-art-light { display: none; }
+[data-bs-theme="dark"] .header-art-dark { display: block; }
+.app-title { font-size: 1.65rem; font-weight: 700; letter-spacing: -0.02em; margin: 0 0 0.3rem; }
+.app-subtitle { color: var(--Dash-Text-Weak, #6c757d); margin: 0; font-size: 0.92rem; line-height: 1.5; max-width: 780px; }
+@media (min-width: 768px) {
+    .header-controls { background: var(--surface); border: 1px solid var(--border-soft); border-radius: 14px;
+                       padding: 0.75rem 1rem; box-shadow: var(--shadow-card); }
+}
+@media (max-width: 767.98px) {
+    .header-main { align-items: flex-start; gap: 0.8rem; }
+    .header-art { width: 64px; border-radius: 9px; margin-top: 0.2rem; }
+    .app-nav-link { padding: 0.2rem 0.6rem; }
+    .app-title { font-size: 1.3rem; }
+    .app-subtitle { font-size: 0.85rem; }
 }

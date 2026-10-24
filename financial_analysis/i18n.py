@@ -20,6 +20,11 @@ PALETTE = PALETTES["default"]
 
 TRANSLATIONS = {
     "fr": {
+        "nav_label": "Navigation entre les outils",
+        "nav_home": "Accueil",
+        "nav_projection": "Projection",
+        "nav_valuation": "Valorisation",
+        "nav_analysis": "Analyse financière",
         "app_title": "Analyse financière : qualité et solidité des comptes (en travaux)",
         "app_subtitle": "Lecture des états financiers d'une société dans l'esprit d'une due diligence "
                         "(audit, Transaction Services) : les comptes sont-ils fiables et solides ? Ce "
@@ -789,6 +794,11 @@ TRANSLATIONS = {
                                    "{model}.",
     },
     "en": {
+        "nav_label": "Navigation between the tools",
+        "nav_home": "Home",
+        "nav_projection": "Projection",
+        "nav_valuation": "Valuation",
+        "nav_analysis": "Financial analysis",
         "app_title": "Financial analysis: quality and soundness of the accounts (work in progress)",
         "app_subtitle": "Reading a company's financial statements in the spirit of due diligence (audit, "
                         "Transaction Services): are the accounts reliable and sound? These are signals "
