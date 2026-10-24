@@ -16,12 +16,13 @@ from dash import Input, Output, State, dcc, html
 
 import layout
 from app_instance import app
-from charts import empty_figure_with_message
+from charts import empty_figure_with_message, make_football_field
 from constants import UNIVERSE_TICKERS
 from engine import (
-    annualized_return, annualized_volatility, compute_comparables_ev_ebitda_fair_value,
+    FOOTBALL_FIELD_METHODS, annualized_return, annualized_volatility, compute_comparables_ev_ebitda_fair_value,
     compute_comparables_fair_value, compute_dcf_sensitivity_grid, compute_scenario_dcf_fair_values,
-    max_drawdown, pe_signal_forward_returns, sharpe_ratio, summarize_pe_signal_backtest,
+    football_field_ranges, max_drawdown, pe_signal_forward_returns, peer_quartile_multiples, sharpe_ratio,
+    summarize_pe_signal_backtest,
 )
 import chart_theme
 from i18n import L, PALETTE_CODES, PALETTE_NAMES
@@ -966,40 +967,34 @@ def update_dcf(selected_rows, growth_pct, discount_pct, terminal_growth_pct, hor
         ]))
     card = dbc.Card(dbc.CardBody(card_children))
 
-    bar_labels, bar_values, bar_colors = [], [], []
+    # « Football field » : une fourchette par méthode, comparée au cours. Les comparables prennent les
+    # multiples du 1er et du 3e quartile des pairs, la médiane en valeur centrale.
+    estimates = {}
     if fair_value is not None:
-        bar_labels.append(L(lang, "dcf_fair_value_label"))
-        bar_values.append(fair_value)
-        bar_colors.append(palette[0])
-    if bear_fv is not None:
-        bar_labels.append(L(lang, "dcf_bear_fair_value_label"))
-        bar_values.append(bear_fv)
-        bar_colors.append(palette[3 % len(palette)])
-    if bull_fv is not None:
-        bar_labels.append(L(lang, "dcf_bull_fair_value_label"))
-        bar_values.append(bull_fv)
-        bar_colors.append(palette[4 % len(palette)])
-    if weighted_fv is not None:
-        bar_labels.append(L(lang, "dcf_weighted_fair_value_label"))
-        bar_values.append(weighted_fv)
-        bar_colors.append(palette[5 % len(palette)])
-    if comp_fair_value is not None:
-        bar_labels.append(L(lang, "comp_fair_value_label"))
-        bar_values.append(comp_fair_value)
-        bar_colors.append(palette[2 % len(palette)])
-    if comp_ev_fair_value is not None:
-        bar_labels.append(L(lang, "comp_ev_fair_value_label"))
-        bar_values.append(comp_ev_fair_value)
-        bar_colors.append(palette[6 % len(palette)])
-    bar_labels.append(L(lang, "dcf_current_price_label"))
-    bar_values.append(price or 0)
-    bar_colors.append(palette[1 % len(palette)])
-
-    fig = go.Figure()
-    fig.add_trace(go.Bar(x=bar_labels, y=bar_values, marker_color=bar_colors))
-    fig.update_layout(
-        template=chart_theme.template(dark),
-        title=L(lang, "dcf_chart_title", name=name), yaxis_title=currency, margin=dict(t=60),
+        estimates["dcf_scenarios"] = ([bear_fv, bull_fv], fair_value)
+        estimates["dcf_sensitivity"] = ([value for grid_row in grid for value in grid_row], fair_value)
+    pe_quartiles = peer_quartile_multiples(peer_pes)
+    if pe_quartiles:
+        q1, median, q3 = (compute_comparables_fair_value(price, own_pe, m) for m in pe_quartiles)
+        estimates["comparables_pe"] = ([q1, q3], median)
+    ev_quartiles = peer_quartile_multiples(peer_ev_ebitdas)
+    if ev_quartiles:
+        q1, median, q3 = (compute_comparables_ev_ebitda_fair_value(
+            inputs.get("enterprise_value"), inputs.get("ev_to_ebitda"), m, inputs["total_debt"],
+            inputs["total_cash"], inputs["shares_outstanding"]) for m in ev_quartiles)
+        estimates["comparables_ev_ebitda"] = ([q1, q3], median)
+    ranges = football_field_ranges(estimates)
+    if not ranges:
+        return card, empty_figure_with_message(L(lang, "football_empty", name=name), dark=dark)
+    surface = chart_theme.surface_color(dark)
+    colors = {"dcf_scenarios": palette[0], "dcf_sensitivity": chart_theme.blend(palette[0], surface, 0.45),
+              "comparables_pe": palette[1 % len(palette)], "comparables_ev_ebitda": palette[2 % len(palette)]}
+    fig = make_football_field(
+        ranges, {method: L(lang, f"football_{method}") for method in FOOTBALL_FIELD_METHODS}, colors, price,
+        L(lang, "dcf_current_price_label"), L(lang, "dcf_chart_title", name=name),
+        lambda value: f"{value:,.2f} {currency}".replace(",", " "),
+        (L(lang, "football_low"), L(lang, "football_mid"), L(lang, "football_high")), dark=dark,
+        separators=L(lang, "plotly_separators"),
     )
     return card, fig
 

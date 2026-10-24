@@ -349,3 +349,27 @@ def test_pe_from_annual_eps_matches_the_old_method_with_constant_eps():
 
 def test_pe_from_annual_eps_empty_without_eps():
     assert m.pe_from_annual_eps(pd.Series([1.0], index=pd.to_datetime(["2024-01-02"])), pd.Series(dtype=float)).empty
+
+
+# ---------- Football field ----------
+
+def test_peer_quartile_multiples_needs_three_peers():
+    assert m.peer_quartile_multiples([10.0, 20.0]) is None
+    assert m.peer_quartile_multiples([10.0, 12.0, 14.0, 16.0, 30.0]) == pytest.approx((12.0, 14.0, 16.0))
+
+
+def test_football_field_ranges_ignore_missing_values_and_keep_method_order():
+    rows = m.football_field_ranges({
+        "comparables_pe": ([90.0, 130.0], 110.0),
+        "dcf_scenarios": ([80.0, None, 140.0], 100.0),  # valeur manquante : écartée, pas prise pour 0
+        "dcf_sensitivity": ([None, None], None),         # rien à tracer : méthode absente
+        "comparables_ev_ebitda": ([120.0, 95.0], None),   # bornes dans le désordre, centre absent
+    })
+    assert [r["method"] for r in rows] == ["dcf_scenarios", "comparables_pe", "comparables_ev_ebitda"]
+    assert rows[0] == {"method": "dcf_scenarios", "low": 80.0, "mid": 100.0, "high": 140.0}
+    assert rows[2] == {"method": "comparables_ev_ebitda", "low": 95.0, "mid": pytest.approx(107.5), "high": 120.0}
+
+
+def test_football_field_central_value_widens_a_too_narrow_range():
+    rows = m.football_field_ranges({"dcf_scenarios": ([100.0, 110.0], 130.0)})
+    assert rows[0]["low"] == 100.0 and rows[0]["high"] == 130.0 and rows[0]["mid"] == 130.0

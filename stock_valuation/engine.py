@@ -165,6 +165,43 @@ def compute_comparables_ev_ebitda_fair_value(enterprise_value: float, ev_to_ebit
 
 
 # ============================================================
+# « Football field » : fourchette de valeur par méthode, à comparer au cours
+# ============================================================
+
+FOOTBALL_FIELD_METHODS = ("dcf_scenarios", "dcf_sensitivity", "comparables_pe", "comparables_ev_ebitda")
+
+
+def peer_quartile_multiples(multiples: list[float]) -> tuple[float, float, float] | None:
+    """Premier quartile, médiane et troisième quartile des multiples des pairs (interpolation
+    linéaire). None sous 3 pairs : même seuil que la valeur par comparables elle-même."""
+    if len(multiples) < 3:
+        return None
+    q1, median, q3 = np.percentile(np.asarray(multiples, dtype=float), [25, 50, 75])
+    return float(q1), float(median), float(q3)
+
+
+def football_field_ranges(estimates: dict[str, tuple[list, float | None]]) -> list[dict]:
+    """Fourchettes du football field, dans l'ordre de FOOTBALL_FIELD_METHODS : pour chaque méthode,
+    (valeurs qui bornent la fourchette, valeur centrale). Bas = la plus petite valeur disponible, haut
+    = la plus grande ; une valeur manquante est écartée, jamais prise pour 0, et une méthode sans
+    aucune valeur disparaît du graphique. Une valeur centrale absente prend le milieu de la fourchette."""
+    rows = []
+    for method in FOOTBALL_FIELD_METHODS:
+        if method not in estimates:
+            continue
+        bounds, central = estimates[method]
+        values = [float(v) for v in bounds if v is not None and np.isfinite(v)]
+        if central is not None and np.isfinite(central):
+            values.append(float(central))
+        if not values:
+            continue
+        low, high = min(values), max(values)
+        mid = float(central) if central is not None and np.isfinite(central) else (low + high) / 2
+        rows.append({"method": method, "low": low, "mid": mid, "high": high})
+    return rows
+
+
+# ============================================================
 # Backtest du signal "P/E décoté/tendu vs son propre historique 5 ans" : ce signal est déjà
 # affiché dans l'UI (cartes "5 les plus décotées/tendues vs leur propre historique 5 ans") comme
 # une heuristique ; ces fonctions vérifient empiriquement si un P/E bas vs historique a

@@ -46,6 +46,14 @@ def surface_color(dark: bool) -> str:
     return CHROME["dark" if dark else "light"]["surface"]
 
 
+def blend(color: str, other: str, weight: float) -> str:
+    """Mélange de deux couleurs hexadécimales : weight = part de other (0 = color inchangée). Sert aux
+    nuances d'une même teinte, par exemple les lignes d'un même indice dans le graphique soleil."""
+    a = [int(color.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
+    b = [int(other.lstrip("#")[i:i + 2], 16) for i in (0, 2, 4)]
+    return "#" + "".join(f"{round(x + (y - x) * weight):02x}" for x, y in zip(a, b))
+
+
 def _build(mode: str) -> go.layout.Template:
     c = CHROME[mode]
     base = pio.templates["plotly_dark" if mode == "dark" else "plotly_white"]

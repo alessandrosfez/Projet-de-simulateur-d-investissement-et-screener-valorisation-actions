@@ -24,6 +24,11 @@ d'un plan d'épargne), indépendant de celui-ci.
   du même secteur, affiché en cross-check du DCF — les deux méthodes ne
   dépendent pas des mêmes données, un large écart entre elles est en
   lui-même un signal à creuser.
+- **« Football field »** : une barre horizontale par méthode (DCF selon les
+  scénarios bas/haut, DCF selon la grille de sensibilité, comparables P/E et
+  VE/EBITDA du 1er au 3e quartile des pairs, médiane en valeur centrale),
+  avec le cours actuel en trait vertical. On voit d'un coup d'oeil si les
+  méthodes s'accordent et où se situe le cours dans leurs fourchettes.
 - **Détail du calcul dépliable** : projection du FCF année par année,
   historique FCF/capex/flux d'exploitation des exercices utilisés, valeur
   terminale, dette nette, et formule des comparables — pour que "pourquoi
