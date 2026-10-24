@@ -145,7 +145,23 @@ TRANSLATIONS = {
                            "montants, mêmes frais) investis dans ce ticker au cours de clôture du jour, "
                            "dividendes réinvestis. Répond à « aurais-je fait mieux en mettant tout "
                            "sur cet ETF ? ». N'importe quel ticker Yahoo peut être saisi.",
-        "metric_xirr": "XIRR (rendement réel)",
+        "perf_group_own": "Ton portefeuille",
+        "perf_group_benchmark": "Référence : {label}, mêmes achats aux mêmes dates",
+        "pct_period_unit": "sur la période",
+        "annualized_short_sub": "{name} annualisé : {rate}, peu fiable sous 1 an",
+        "metric_own_return": "Rendement de ton portefeuille",
+        "own_return_help": "Gain de la période rapporté au montant investi, frais compris : (valeur "
+                            "actuelle + dividendes perçus − montant investi) ÷ montant investi. Affiché "
+                            "tant que ton historique fait moins d'un an : annualiser une période aussi "
+                            "courte gonfle les écarts (quelques pourcents sur deux mois deviennent des "
+                            "dizaines de pourcents par an). Le XIRR prend le relais après un an.",
+        "metric_benchmark_return": "Rendement de la référence",
+        "benchmark_return_help": "Même calcul que le rendement de ton portefeuille, appliqué au portefeuille "
+                                  "fictif investi dans la référence (mêmes montants, mêmes dates, mêmes "
+                                  "frais ; dividendes déjà réinvestis dans ses cours). L'écart en points "
+                                  "montre ce que tes choix t'ont fait gagner ou perdre sur la période.",
+        "benchmark_return_sub": "toi − référence : {diff} pt",
+        "metric_xirr": "XIRR de ton portefeuille",
         "xirr_help": "Rendement annuel pondéré par les flux (money-weighted) : le taux qui égalise "
                       "tes versements (frais compris) avec les dividendes perçus et la valeur "
                       "actuelle. Il dépend du moment où tu as investi : c'est le rendement que TU as "
@@ -157,7 +173,7 @@ TRANSLATIONS = {
                      "eux-mêmes, comme la performance publiée d'un fonds.",
         "twr_cumulative_sub": "cumulé {pct} sur {years} ans",
         "metric_benchmark_value": "Valeur de la référence",
-        "benchmark_value_sub": "{label} -- réel : {real} (écart {diff})",
+        "benchmark_value_sub": "ton portefeuille : {real} (écart {diff})",
         "metric_benchmark_xirr": "XIRR de la référence",
         "benchmark_xirr_help": "XIRR du portefeuille fictif investi dans la référence, avec les mêmes "
                                 "flux que le tien : la comparaison directe avec ton XIRR montre ce "
@@ -658,7 +674,23 @@ TRANSLATIONS = {
                            "amounts, same fees) invested in this ticker at that day's close, dividends "
                            "reinvested. Answers \"would I have done better putting everything in this "
                            "ETF?\". Any Yahoo ticker can be typed in.",
-        "metric_xirr": "XIRR (your return)",
+        "perf_group_own": "Your portfolio",
+        "perf_group_benchmark": "Benchmark: {label}, same purchases on the same dates",
+        "pct_period_unit": "over the period",
+        "annualized_short_sub": "{name} annualized: {rate}, unreliable under 1 year",
+        "metric_own_return": "Your portfolio's return",
+        "own_return_help": "Gain over the period relative to the amount invested, fees included: (current "
+                            "value + dividends received − amount invested) ÷ amount invested. Shown while "
+                            "your history is shorter than a year: annualizing such a short period inflates "
+                            "differences (a few percent over two months becomes tens of percent per year). "
+                            "XIRR takes over after one year.",
+        "metric_benchmark_return": "Benchmark return",
+        "benchmark_return_help": "Same calculation as your portfolio's return, applied to the hypothetical "
+                                  "portfolio invested in the benchmark (same amounts, dates and fees; "
+                                  "dividends already reinvested in its prices). The gap in points shows what "
+                                  "your choices gained or cost you over the period.",
+        "benchmark_return_sub": "you − benchmark: {diff} pt",
+        "metric_xirr": "Your portfolio's XIRR",
         "xirr_help": "Money-weighted annual return: the rate that equates your contributions (fees "
                       "included) with the dividends received and the current value. It depends on when "
                       "you invested: it's the return YOU actually earned on your money.",
@@ -669,7 +701,7 @@ TRANSLATIONS = {
                      "published performance.",
         "twr_cumulative_sub": "cumulative {pct} over {years} years",
         "metric_benchmark_value": "Benchmark value",
-        "benchmark_value_sub": "{label} -- actual: {real} (gap {diff})",
+        "benchmark_value_sub": "your portfolio: {real} (gap {diff})",
         "metric_benchmark_xirr": "Benchmark XIRR",
         "benchmark_xirr_help": "XIRR of the hypothetical portfolio invested in the benchmark with the "
                                 "same flows as yours: comparing it directly with your XIRR shows what "

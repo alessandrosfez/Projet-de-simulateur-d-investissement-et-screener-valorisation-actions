@@ -747,6 +747,9 @@ def refresh_performance(_trigger, benchmark_ticker, lang):
             price_histories[row["ticker"]] = history
 
     today = pd.Timestamp.today().normalize()
+    cost = portfolio_engine.invested_cost(transactions)
+    dividends_total = float(dividends["amount_eur"].sum()) if not dividends.empty else 0.0
+    years = portfolio_engine.history_years(transactions, today)
     perf = {
         "xirr": portfolio_engine.xirr(
             portfolio_engine.portfolio_cash_flows(transactions, dividends, current_value_total, today)
@@ -755,6 +758,10 @@ def refresh_performance(_trigger, benchmark_ticker, lang):
             portfolio_engine.reconstruct_equity_curve(transactions, price_histories), transactions, dividends,
         ),
         "real_value": current_value_total,
+        # Moins d'un an d'historique : gain de la période en valeur principale (voir
+        # portfolio_engine.SHORT_HISTORY_YEARS), les taux annualisés passent en mention secondaire.
+        "short_history": years is not None and years < portfolio_engine.SHORT_HISTORY_YEARS,
+        "gain": portfolio_engine.period_gain(current_value_total, dividends_total, cost),
     }
 
     warning = None
@@ -773,5 +780,6 @@ def refresh_performance(_trigger, benchmark_ticker, lang):
             perf["benchmark_xirr"] = portfolio_engine.xirr(portfolio_engine.benchmark_cash_flows(
                 transactions, benchmark_value, benchmark_curve.index[-1],
             ))
+            perf["benchmark_gain"] = portfolio_engine.period_gain(benchmark_value, 0.0, cost)
 
     return html.Div([warning, build_performance_cards(perf, lang)] if warning else [build_performance_cards(perf, lang)])

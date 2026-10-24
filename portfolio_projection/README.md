@@ -57,7 +57,11 @@ qu'une simulation aurait donné.
 - **Performance réelle** : XIRR (rendement pondéré par les flux), TWR
   (rendement pondéré par le temps) et comparaison à un indice de référence
   choisi (mêmes versements investis dans ce ticker : valeur et XIRR côte à
-  côte avec le réel).
+  côte avec le réel), en deux groupes nommés « ton portefeuille » et
+  « référence ». Tant que l'historique fait moins d'un an, la valeur
+  principale est le gain de la période sur le montant investi (frais
+  compris), et les taux annualisés ne sont plus qu'une mention « peu fiable
+  sous 1 an » : annualiser quelques semaines gonfle les écarts.
 - **Jalons PEA** : date d'ouverture enregistrée, date des 5 ans et compte à
   rebours, part du plafond de 150 000 € consommée (avec la date estimée où
   il serait atteint au rythme actuel), impôt dû en cas de retrait

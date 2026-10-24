@@ -252,3 +252,13 @@ a { color: var(--accent); }
     .app-title { font-size: 1.3rem; }
     .app-subtitle { font-size: 0.85rem; }
 }
+
+/* -------- Performance réelle : groupes « ton portefeuille » / « référence » -------- */
+/* Deux cadres nommés côte à côte (empilés sur petit écran) : on ne confond plus ton XIRR avec
+   celui de la référence. Le cadre de la référence est en pointillés, comme un portefeuille fictif. */
+.perf-group { border: 1px solid var(--border-soft); border-radius: 14px; padding: 0.85rem 0.85rem 0; }
+.perf-group-title { font-size: 0.85rem; font-weight: 600; margin-bottom: 0.7rem; display: flex; align-items: center; }
+.perf-group-title .bi { color: var(--accent); }
+.perf-group .kpi-tile { box-shadow: none; }
+.row > .col-xl-6:nth-child(2) > .perf-group { border-style: dashed; }
+.kpi-unit { font-size: 0.8rem; font-weight: 500; letter-spacing: 0; color: var(--Dash-Text-Weak, #6c757d); }

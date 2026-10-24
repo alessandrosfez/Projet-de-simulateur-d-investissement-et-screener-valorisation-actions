@@ -571,6 +571,31 @@ def test_benchmark_no_transaction_is_empty():
     assert m.benchmark_cash_flows(empty_tx, 0.0, "2024-01-01") == []
 
 
+# ---------- gain de la période (historique de moins d'un an) ----------
+
+def test_invested_cost_includes_fees_and_tolerates_missing_fee():
+    transactions = pd.DataFrame([
+        _tx("AAA", "2026-08-17", 100.0, 10.0, fee_eur=1.0),
+        _tx("BBB", "2026-09-01", 200.0, 20.0, fee_eur=None),
+    ])
+    assert m.invested_cost(transactions) == pytest.approx(301.0)
+
+
+def test_period_gain_counts_dividends_and_is_not_annualized():
+    # 301 € versés, valeur 290 € + 20 € de dividendes : +9 €, soit +2,99 % sur la période.
+    assert m.period_gain(290.0, 20.0, 301.0) == pytest.approx(9.0 / 301.0)
+    assert m.period_gain(250.0, 0.0, 301.0) == pytest.approx(-51.0 / 301.0)
+    assert m.period_gain(0.0, 0.0, 0.0) is None
+
+
+def test_history_years_from_first_purchase():
+    transactions = pd.DataFrame([_tx("AAA", "2026-10-02", 100.0, 10.0), _tx("AAA", "2026-08-17", 100.0, 10.0)])
+    assert m.history_years(transactions, "2026-10-24") == pytest.approx(68 / 365)
+    assert m.history_years(transactions, "2026-10-24") < m.SHORT_HISTORY_YEARS
+    empty_tx = pd.DataFrame(columns=["ticker", "date", "amount_eur", "price", "fee_eur"])
+    assert m.history_years(empty_tx, "2026-10-24") is None
+
+
 # ---------- jalons PEA ----------
 
 def test_pea_milestones_before_five_years():

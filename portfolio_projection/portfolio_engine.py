@@ -300,6 +300,37 @@ def _purchase_cost(row: pd.Series) -> float:
     return float(row["amount_eur"]) + (0.0 if fee is None or pd.isna(fee) else float(fee))
 
 
+# En dessous d'un an d'historique, un rendement annualisé (XIRR, TWR) extrapole quelques semaines à
+# une année entière : quelques pourcents sur deux mois deviennent des dizaines de pourcents par an.
+# L'écran affiche alors le gain de la période (period_gain) en valeur principale.
+SHORT_HISTORY_YEARS = 1.0
+
+
+def invested_cost(transactions: pd.DataFrame) -> float:
+    """Montant investi, frais compris : somme des amount_eur + fee_eur des achats."""
+    return float(sum(_purchase_cost(row) for _, row in transactions.iterrows()))
+
+
+def history_years(transactions: pd.DataFrame, valuation_date: DateLike) -> float | None:
+    """Durée en années entre le premier achat et valuation_date (même base exact/365 que xirr).
+    None sans transaction."""
+    if transactions.empty:
+        return None
+    first = pd.to_datetime(transactions["date"]).min()
+    return _year_fraction(first, pd.Timestamp(valuation_date))
+
+
+def period_gain(final_value: float, dividends_total: float, cost: float) -> float | None:
+    """Gain de la période rapporté au montant investi : (valeur finale + dividendes perçus - coût)
+    / coût, en fraction. Non annualisé, et sans biais pour des achats échelonnés : c'est ce que
+    l'argent versé a rapporté jusqu'ici. Le même calcul s'applique au portefeuille fictif de la
+    référence (dividendes à 0, déjà réinvestis dans ses cours ajustés), pour comparer les deux.
+    None si rien n'a été investi."""
+    if cost <= 0:
+        return None
+    return (final_value + dividends_total - cost) / cost
+
+
 def xirr(cash_flows: Sequence[tuple[DateLike, float]]) -> float | None:
     """Taux de rendement annuel r (base exact/365) qui annule la valeur actuelle des flux datés
     [(date, montant), ...] -- négatif = sortie de cash (achat), positif = entrée (dividende,

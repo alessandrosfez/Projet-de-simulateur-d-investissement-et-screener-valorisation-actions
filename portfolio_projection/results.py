@@ -482,51 +482,89 @@ def _info_card(lang, label_key, info_key, main_text, sub_text=None, color=None, 
                    className="mb-3 d-flex")
 
 
+def _pct_period(rate, lang):
+    """Pourcentage en grand, « sur la période » en petit à côté : l'unité en pleine taille faisait
+    passer la valeur sur deux lignes dans une tuile."""
+    if rate is None:
+        return "N/A"
+    return [f"{_num(rate * 100, '+.1f', lang)} %", html.Span(f" {L(lang, 'pct_period_unit')}", className="kpi-unit")]
+
+
 def build_performance_cards(perf: dict, lang: str):
     """perf : {"xirr", "twr" (voir portfolio_engine.time_weighted_return), "real_value",
-    "benchmark_label", "benchmark_value", "benchmark_xirr"} -- toutes les valeurs déjà calculées
-    par les moteurs purs, cette fonction ne fait que les mettre en forme. Chaque concept nouveau
-    (XIRR, TWR, référence) porte son infobulle ⓘ, comme le reste de l'appli : ce sont trois
-    lectures différentes de "combien ça a rapporté", faciles à confondre."""
+    "short_history", "gain", "benchmark_label", "benchmark_value", "benchmark_xirr",
+    "benchmark_gain"} -- toutes les valeurs déjà calculées par les moteurs purs, cette fonction ne
+    fait que les mettre en forme. Deux groupes nommés, ton portefeuille puis la référence, pour
+    qu'on ne confonde plus ton XIRR avec celui de la référence. Avec moins d'un an d'historique
+    (short_history), la valeur principale est le gain de la période et les taux annualisés passent
+    en mention secondaire : sur quelques semaines, l'annualisation gonfle les écarts. Chaque
+    concept porte son infobulle ⓘ, comme le reste de l'appli."""
     def card(label_key, info_key, main_text, sub_text=None, color=None):
-        return _info_card(lang, label_key, info_key, main_text, sub_text, color)
+        return _info_card(lang, label_key, info_key, main_text, sub_text, color, width=6)
 
     def sign_color(rate):
         if rate is None:
             return None
         return "success" if rate >= 0 else "danger"
 
-    xirr_real = perf.get("xirr")
-    twr = perf.get("twr")
-    cards = [card("metric_xirr", "xirr_help", _pct_per_year(xirr_real, lang), color=sign_color(xirr_real))]
+    def annualized_note(name, rate):
+        return L(lang, "annualized_short_sub", name=name, rate=_pct_per_year(rate, lang))
 
-    if twr is not None:
-        cards.append(card(
-            "metric_twr", "twr_help", _pct_per_year(twr["twr_annualized"], lang),
-            L(lang, "twr_cumulative_sub", pct=f"{_num(twr['twr'] * 100, '+.1f', lang)} %", years=_num(twr['n_years'], '.1f', lang)),
-            color=sign_color(twr["twr_annualized"]),
-        ))
+    def group(icon, title, cards):
+        return dbc.Col(html.Div([
+            html.Div([html.I(className=f"bi bi-{icon} me-2", **{"aria-hidden": "true"}), title],
+                     className="perf-group-title"),
+            dbc.Row(cards, className="g-3"),
+        ], className="perf-group h-100"), xs=12, xl=6, className="mb-3")
+
+    short = perf.get("short_history", False)
+    xirr_real, twr, gain = perf.get("xirr"), perf.get("twr"), perf.get("gain")
+
+    if short:
+        own = [card("metric_own_return", "own_return_help", _pct_period(gain, lang),
+                    annualized_note("XIRR", xirr_real), color=sign_color(gain))]
+        if twr is not None:
+            own.append(card("metric_twr", "twr_help", _pct_period(twr["twr"], lang),
+                            annualized_note("TWR", twr["twr_annualized"]), color=sign_color(twr["twr"])))
+        else:
+            own.append(card("metric_twr", "twr_help", "N/A"))
     else:
-        cards.append(card("metric_twr", "twr_help", "N/A"))
+        own = [card("metric_xirr", "xirr_help", _pct_per_year(xirr_real, lang), color=sign_color(xirr_real))]
+        if twr is not None:
+            own.append(card(
+                "metric_twr", "twr_help", _pct_per_year(twr["twr_annualized"], lang),
+                L(lang, "twr_cumulative_sub", pct=f"{_num(twr['twr'] * 100, '+.1f', lang)} %",
+                  years=_num(twr['n_years'], '.1f', lang)),
+                color=sign_color(twr["twr_annualized"]),
+            ))
+        else:
+            own.append(card("metric_twr", "twr_help", "N/A"))
+    groups = [group("wallet2", L(lang, "perf_group_own"), own)]
 
     bench_value = perf.get("benchmark_value")
-    bench_xirr = perf.get("benchmark_xirr")
     if bench_value is not None:
         real_value = perf.get("real_value", 0.0)
-        cards.append(card(
+        reference = [card(
             "metric_benchmark_value", "benchmark_help", _money(bench_value),
-            L(lang, "benchmark_value_sub", label=perf.get("benchmark_label", ""),
-              real=_money(real_value), diff=_money(real_value - bench_value, signed=True)),
-        ))
-        diff_text = (
-            L(lang, "benchmark_xirr_sub", diff=_num((xirr_real - bench_xirr) * 100, "+.2f", lang))
-            if xirr_real is not None and bench_xirr is not None else None
-        )
-        cards.append(card(
-            "metric_benchmark_xirr", "benchmark_xirr_help", _pct_per_year(bench_xirr, lang), diff_text,
-            color=sign_color(bench_xirr),
-        ))
-    return dbc.Row(cards)
+            L(lang, "benchmark_value_sub", real=_money(real_value), diff=_money(real_value - bench_value, signed=True)),
+        )]
+        bench_xirr, bench_gain = perf.get("benchmark_xirr"), perf.get("benchmark_gain")
+        if short:
+            diff = (L(lang, "benchmark_return_sub", diff=_num((gain - bench_gain) * 100, "+.1f", lang))
+                    if gain is not None and bench_gain is not None else None)
+            sub = " · ".join(text for text in (diff, annualized_note("XIRR", bench_xirr)) if text)
+            reference.append(card("metric_benchmark_return", "benchmark_return_help", _pct_period(bench_gain, lang),
+                                  sub, color=sign_color(bench_gain)))
+        else:
+            diff_text = (
+                L(lang, "benchmark_xirr_sub", diff=_num((xirr_real - bench_xirr) * 100, "+.2f", lang))
+                if xirr_real is not None and bench_xirr is not None else None
+            )
+            reference.append(card("metric_benchmark_xirr", "benchmark_xirr_help", _pct_per_year(bench_xirr, lang),
+                                  diff_text, color=sign_color(bench_xirr)))
+        groups.append(group("bullseye", L(lang, "perf_group_benchmark", label=perf.get("benchmark_label", "")),
+                            reference))
+    return dbc.Row(groups)
 
 
 def build_pea_milestone_cards(milestones: dict, cap: dict, tax: dict, opening_is_estimated: bool, lang: str):
