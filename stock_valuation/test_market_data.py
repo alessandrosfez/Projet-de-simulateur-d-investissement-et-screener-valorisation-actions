@@ -216,6 +216,18 @@ def test_pe_history_falls_back_on_current_eps_flagged(monkeypatch):
     assert pe.attrs["method"] == "current_eps" and list(pe) == pytest.approx([8.75, 10.0])
 
 
+def test_empty_yahoo_info_is_not_cached(monkeypatch):
+    """Une fiche vide passagère ne remplace pas la dernière fiche connue et n'est pas mise en cache."""
+    responses = [{}]
+    fake = MagicMock()
+    fake.get_info.side_effect = lambda: responses[0]
+    monkeypatch.setattr(md.yf, "Ticker", lambda symbol: fake)
+    assert md._get_ticker_info("ABC.PA") == {}
+    assert not any(key[0] == "_fetch_ticker_info" for key in md._cache)
+    responses[0] = {"currency": "EUR", "shortName": "ABC"}
+    assert md._get_ticker_info("ABC.PA")["shortName"] == "ABC"
+
+
 def test_major_currency_of_a_minor_unit_quote():
     assert md.major_currency("GBp") == "GBP"
     assert md.major_currency("EUR") == "EUR"

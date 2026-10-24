@@ -181,7 +181,14 @@ def get_aligned_returns_for_tickers(tickers: list, lookback_years: int) -> pd.Da
 
 @cached_ttl(3600)
 def _get_ticker_info(ticker: str) -> dict:
-    return yf.Ticker(ticker).get_info()
+    """Fiche Yahoo d'un ticker. Lève une exception si Yahoo renvoie une fiche vide (constaté sur
+    un ETF : réponse sans aucun champ, de façon passagère) : mise en cache, elle aurait fait
+    disparaître la ligne de la valorisation pendant une heure, avec une fausse perte affichée dans
+    les totaux. L'exception laisse cached_ttl servir la dernière fiche connue."""
+    info = yf.Ticker(ticker).get_info()
+    if not info or not any(info.get(k) for k in ("shortName", "longName", "quoteType", "currency")):
+        raise ValueError(f"Fiche Yahoo vide pour {ticker}")
+    return info
 
 
 def _price_scale_factor(trailing_pe, trailing_eps, current_price) -> float:
@@ -258,18 +265,26 @@ def _to_portfolio_currency(prices: pd.Series, info: dict, start_date: str) -> pd
 
 
 @cached_ttl(3600)
-def _fetch_current_price_eur(ticker: str) -> float | None:
+def _fetch_current_price_eur(ticker: str) -> float:
+    """Lève une exception plutôt que de renvoyer None : un « pas de prix » passager ne doit jamais
+    être mis en cache à la place du dernier prix connu (voir _get_ticker_info)."""
     info = _get_ticker_info(ticker)
     price = (
         info.get("currentPrice") or info.get("regularMarketPrice")
         or info.get("previousClose") or info.get("regularMarketPreviousClose")
     )
     if price is None:
-        return None
+        # Fiche sans cours (fréquent pour les ETF hors séance) : dernière clôture brute connue.
+        closes = yf.Ticker(ticker).history(period="10d", interval="1d", auto_adjust=False)["Close"].dropna()
+        if closes.empty:
+            raise ValueError(f"Pas de cours pour {ticker}")
+        price = float(closes.iloc[-1])
     today = pd.Timestamp.today().normalize()
     start = (today - pd.Timedelta(days=10)).strftime("%Y-%m-%d")
     converted = _to_portfolio_currency(pd.Series([float(price)], index=pd.DatetimeIndex([today])), info, start)
-    return float(converted.iloc[0]) if not converted.empty else None
+    if converted.empty:
+        raise ValueError(f"Pas de taux de change pour {ticker}")
+    return float(converted.iloc[0])
 
 
 def get_current_price(ticker: str) -> float | None:
@@ -352,15 +367,25 @@ def get_instrument_profile(ticker: str) -> dict:
 
 
 @cached_ttl(86400)
+def _fetch_ticker_name(ticker: str) -> str:
+    name = _get_ticker_info(ticker).get("shortName") or _get_ticker_info(ticker).get("longName")
+    if not name:
+        raise ValueError(f"Pas de nom pour {ticker}")
+    return name
+
+
 def get_ticker_name(ticker: str) -> str | None:
     """Nom lisible d'un ticker quelconque (shortName, repli longName) -- sert à annoter dans
     l'UI les tickers du portefeuille réel qui ne font pas partie de l'univers simulé
     (constants.TICKERS), pour qu'un ticker peu parlant (ex: "PAASI.PA") reste identifiable sans
     recherche externe (voir callbacks/portefeuille_reel.py, _ticker_display_label). Cache TTL plus long que
     get_current_price : le nom d'un instrument change rarement, contrairement à son prix. None
-    si indisponible (ticker invalide/délisté)."""
-    info = _get_ticker_info(ticker)
-    return info.get("shortName") or info.get("longName")
+    si indisponible (ticker invalide/délisté), sans être mis en cache : une réponse Yahoo vide
+    passagère ne doit pas effacer le nom pour 24 h."""
+    try:
+        return _fetch_ticker_name(ticker)
+    except Exception:
+        return None
 
 
 # Places préférées pour une cotation en euros, dans l'ordre : Xetra d'abord, base des cours de Trade

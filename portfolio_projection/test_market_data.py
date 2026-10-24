@@ -239,7 +239,7 @@ class _FakeTicker:
         self.ticker = ticker
 
     def get_info(self):
-        return {"currentPrice": 10.0}
+        return {"currentPrice": 10.0, "currency": "EUR"}
 
     def history(self, start=None, interval=None, auto_adjust=None):
         return pd.DataFrame({"Close": self.history_by_ticker.get(self.ticker, pd.Series(dtype=float))})
@@ -315,6 +315,58 @@ def test_missing_exchange_rate_never_returns_unconverted_prices(monkeypatch):
     monkeypatch.setattr(md.yf, "Ticker", _MarketTicker)
     assert md.get_daily_price_history("AAPL", "2024-03-01").empty
     assert md.get_current_price("AAPL") is None
+
+
+def test_empty_yahoo_info_is_never_cached_as_a_missing_price(monkeypatch):
+    """Régression : Yahoo a renvoyé une fiche vide pour un ETF ; mise en cache, elle faisait disparaître
+    la ligne de la valorisation pendant une heure (fausse perte de 38 % dans les totaux). Une fiche
+    vide ne doit être ni mise en cache, ni remplacer la dernière connue."""
+    clock = [1000.0]
+    monkeypatch.setattr(md.time, "time", lambda: clock[0])
+    responses = [{"currency": "EUR", "currentPrice": 34.7, "shortName": "ABC"}, {}]
+
+    class Ticker:
+        def __init__(self, symbol):
+            pass
+
+        def get_info(self):
+            return responses[0]
+    monkeypatch.setattr(md.yf, "Ticker", Ticker)
+    assert md.get_current_price("ABC.PA") == pytest.approx(34.7)
+
+    clock[0] += 2 * 3600  # TTL dépassé, Yahoo renvoie désormais une fiche vide
+    responses[0] = {}
+    assert md.get_current_price("ABC.PA") == pytest.approx(34.7)  # dernière valeur connue
+    assert md.get_ticker_name("ABC.PA") == "ABC"
+
+
+def test_price_missing_from_info_falls_back_on_last_close(monkeypatch):
+    class Ticker:
+        def __init__(self, symbol):
+            pass
+
+        def get_info(self):
+            return {"currency": "EUR", "shortName": "ETF sans cours", "quoteType": "ETF"}
+
+        def history(self, **_kwargs):
+            return pd.DataFrame({"Close": [33.9, 34.1]}, index=pd.to_datetime(["2026-10-22", "2026-10-23"]))
+    monkeypatch.setattr(md.yf, "Ticker", Ticker)
+    assert md.get_current_price("ABC.PA") == pytest.approx(34.1)
+
+
+def test_no_price_at_all_returns_none_without_caching_it(monkeypatch):
+    class Ticker:
+        def __init__(self, symbol):
+            pass
+
+        def get_info(self):
+            return {"currency": "EUR", "shortName": "Délisté"}
+
+        def history(self, **_kwargs):
+            return pd.DataFrame({"Close": []})
+    monkeypatch.setattr(md.yf, "Ticker", Ticker)
+    assert md.get_current_price("GONE.PA") is None
+    assert not any(key[0] == "_fetch_current_price_eur" for key in md._cache)
 
 
 def test_euro_listing_is_unchanged(monkeypatch):

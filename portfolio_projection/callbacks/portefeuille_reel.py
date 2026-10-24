@@ -522,6 +522,14 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
     totals = portfolio_engine.compute_totals(transactions, dividends, current_value_total)
     totals_cards = build_portfolio_totals_cards(totals, lang)
     unpriced = [t for t in holdings["ticker"] if t not in current_values.index] if not holdings.empty else []
+    if unpriced:
+        # Sans cours, une ligne manque à la valeur actuelle mais pas au capital investi : la plus-value
+        # affichée serait une fausse perte. Avertissement AU-DESSUS des totaux, pas en note de bas de graphique.
+        totals_cards = html.Div([
+            dbc.Alert(L(lang, "totals_partial_warning", tickers=", ".join(unpriced)), color="warning",
+                      className="py-2 mb-2"),
+            totals_cards,
+        ])
     allocation_fig, allocation_note = _allocation_view(current_values, current_value_total, unpriced, lang, dark)
     held_tickers = sorted(holdings["ticker"]) if not holdings.empty else []
     index_fig, index_alerts, index_rows, index_dropdown = _index_view(current_values, held_tickers, lang, dark)

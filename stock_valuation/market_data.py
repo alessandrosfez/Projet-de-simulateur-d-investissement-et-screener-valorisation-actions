@@ -67,8 +67,21 @@ def cached_ttl(ttl_seconds: int):
 
 
 @cached_ttl(3600)
+def _fetch_ticker_info(ticker: str) -> dict:
+    info = yf.Ticker(ticker).get_info()
+    if not info or not any(info.get(k) for k in ("shortName", "longName", "quoteType", "currency")):
+        raise ValueError(f"Fiche Yahoo vide pour {ticker}")
+    return info
+
+
 def _get_ticker_info(ticker: str) -> dict:
-    return yf.Ticker(ticker).get_info()
+    """Fiche Yahoo d'un ticker, {} si indisponible. Une fiche vide (réponse passagère de Yahoo,
+    constatée sur un ETF) n'est jamais mise en cache : elle aurait affiché une ligne entière de N/A
+    pendant une heure, au lieu de la dernière fiche connue que cached_ttl sert en cas d'échec."""
+    try:
+        return _fetch_ticker_info(ticker)
+    except Exception:
+        return {}
 
 
 def _price_scale_factor(trailing_pe, trailing_eps, current_price) -> float:

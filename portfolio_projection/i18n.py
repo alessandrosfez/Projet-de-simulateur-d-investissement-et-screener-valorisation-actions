@@ -180,6 +180,9 @@ TRANSLATIONS = {
         "allocation_center": "{total} €",
         "allocation_other": "Autres",
         "allocation_unpriced": "Sans cours disponible, donc absentes du graphique : {tickers}.",
+        "totals_partial_warning": "Valeur partielle : pas de cours disponible pour {tickers} (Yahoo Finance "
+                                  "indisponible pour l'instant ?). Ces lignes manquent à la valeur actuelle mais pas "
+                                  "au capital investi : la plus-value et la performance ci-dessous sont faussées.",
         "allocation_no_data": "Aucune ligne valorisée pour l'instant : ajoute une transaction pour voir la répartition.",
         "index_chart_title": "Exposition par indice suivi",
         "and_word": "et",
@@ -679,6 +682,9 @@ TRANSLATIONS = {
         "allocation_center": "€{total}",
         "allocation_other": "Other",
         "allocation_unpriced": "No price available, so left out of the chart: {tickers}.",
+        "totals_partial_warning": "Partial value: no price available for {tickers} (Yahoo Finance unavailable for "
+                                  "now?). These holdings are missing from the current value but not from the "
+                                  "invested capital: the gain and performance below are distorted.",
         "allocation_no_data": "No priced holding yet: add a transaction to see the allocation.",
         "index_chart_title": "Exposure by tracked index",
         "and_word": "and",
