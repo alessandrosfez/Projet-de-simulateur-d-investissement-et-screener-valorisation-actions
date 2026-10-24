@@ -80,6 +80,27 @@ def reconstruct_equity_curve(transactions: pd.DataFrame, price_history: dict[str
     return value_by_date.sort_index().rename("value")
 
 
+def purchase_points(transactions: pd.DataFrame, equity_curve: pd.Series) -> list[tuple[pd.Timestamp, float, float]]:
+    """Points d'achat à poser sur la courbe de valeur : (date, valeur de la courbe ce jour-là, montant
+    acheté), un point par jour d'achat (achats du même jour additionnés). Un achat un jour sans cotation
+    prend le premier jour coté suivant, comme dans reconstruct_equity_curve ; un achat après le dernier
+    point de la courbe est écarté (rien où le poser)."""
+    if transactions.empty or equity_curve.empty:
+        return []
+    curve = equity_curve.copy()
+    curve.index = pd.to_datetime(curve.index)
+    if curve.index.tz is not None:
+        curve.index = curve.index.tz_localize(None)
+    curve = curve.sort_index()
+    by_day = transactions.assign(day=pd.to_datetime(transactions["date"]).dt.normalize()).groupby("day")["amount_eur"].sum()
+    points = []
+    for day, amount in by_day.items():
+        pos = int(curve.index.searchsorted(pd.Timestamp(cast(str, day))))
+        if pos < len(curve):
+            points.append((cast(pd.Timestamp, curve.index[pos]), float(curve.iloc[pos]), float(amount)))
+    return points
+
+
 def monthly_contribution_schedule(transactions: pd.DataFrame) -> pd.Series:
     """Apports réels mensuels (somme de amount_eur par mois civil), du mois de la 1ère
     transaction au mois courant, mois sans achat inclus (valeur 0) -- le "vrai" calendrier

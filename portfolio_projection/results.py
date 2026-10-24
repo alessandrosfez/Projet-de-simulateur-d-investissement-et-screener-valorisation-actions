@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import dash_bootstrap_components as dbc
-from dash import html
+from dash import dcc, html
 
 from constants import PEA_TAX_RATE
 from engine import (
@@ -15,7 +15,7 @@ from engine import (
     overflow_schedule, progressive_schedule, returns_to_dca, rolling_backtest_final_values, summarize,
     summarize_historique, to_display_values, withdrawal_schedule,
 )
-from charts import make_actual_vs_simulated_figure, make_band_figure
+from charts import make_actual_vs_simulated_figure, make_band_figure, make_sparkline
 import chart_theme
 from i18n import L, PALETTE
 
@@ -403,31 +403,47 @@ def render_rolling_backtest_result(backtest_items, schedule, years_axis, annual_
 # fonctions) -- même convention que le reste de ce module.
 # ============================================================
 
-def build_portfolio_totals_cards(totals: dict, lang: str):
-    """totals : voir portfolio_engine.compute_totals(). Même style de carte que build_metric_cards
-    (H6 libellé, H5 valeur), P&L coloré vert/rouge selon le signe."""
-    def money_card(label_key, value):
-        text = f"{value:,.0f} €".replace(",", " ")
-        return dbc.Col(dbc.Card(dbc.CardBody([
-            html.H6(L(lang, label_key), className="card-subtitle text-muted mb-1"),
-            html.H5(text, className="mb-1"),
-        ]), className="h-100"), width=3, className="mb-2")
+SPARKLINE_DAYS = 365
 
-    pnl_color = "success" if totals["pnl_eur"] >= 0 else "danger"
-    pnl_pct_text = f" ({totals['pnl_pct']:+.1f} %)" if totals["pnl_pct"] is not None else ""
-    pnl_card = dbc.Col(dbc.Card(dbc.CardBody([
-        html.H6(L(lang, "metric_pnl"), className="card-subtitle text-muted mb-1"),
-        html.H5(f"{totals['pnl_eur']:+,.0f} €".replace(",", " ") + pnl_pct_text, className=f"text-{pnl_color} mb-1"),
-    ]), className="h-100"), width=3, className="mb-2")
 
-    cards = [
-        money_card("metric_total_invested", totals["total_invested"]),
-        money_card("metric_current_value", totals["current_value"]),
-        pnl_card,
-        money_card("metric_total_fees", totals["total_fees"]),
-        money_card("metric_total_dividends", totals["total_dividends"]),
+def build_portfolio_totals_cards(totals: dict, lang: str, real_series=None, dark: bool = False, palette=None):
+    """Tuiles de chiffres clés du portefeuille réel (totals : voir portfolio_engine.compute_totals) :
+    valeur actuelle en grand avec la mini-courbe des 12 derniers mois, plus-value avec une pastille
+    ▲/▼ (couleur ET flèche ET signe : jamais la couleur seule), capital investi, dividendes et frais."""
+    palette = palette or PALETTE
+
+    def money(value, signed=False):
+        return (f"{value:+,.0f} €" if signed else f"{value:,.0f} €").replace(",", " ")
+
+    def tile(label_key, value_text, sub=None, extra=None):
+        body = [html.Div(L(lang, label_key), className="kpi-label"), html.Div(value_text, className="kpi-value")]
+        if extra is not None:
+            body.append(extra)
+        if sub:
+            body.append(html.Div(sub, className="kpi-sub"))
+        return dbc.Col(dbc.Card(dbc.CardBody(body), className="kpi-tile w-100"), xs=12, sm=6, xl=3, className="mb-3 d-flex")
+
+    sparkline = None
+    if real_series is not None and len(real_series) > 1:
+        recent = real_series[real_series.index >= real_series.index.max() - pd.Timedelta(days=SPARKLINE_DAYS)]
+        sparkline = dcc.Graph(figure=make_sparkline(recent.index, list(recent.values), palette[0], dark=dark),
+                              config={"displayModeBar": False, "staticPlot": True}, className="mt-1")
+
+    pnl = totals["pnl_eur"]
+    direction = "up" if pnl >= 0 else "down"
+    pct_text = f"{totals['pnl_pct']:+.1f} %".replace(".", ",") if totals["pnl_pct"] is not None else ""
+    if lang != "fr":
+        pct_text = pct_text.replace(",", ".")
+    delta = html.Span([html.Span("▲" if pnl >= 0 else "▼"), html.Span(pct_text)], className=f"kpi-delta {direction}")
+    tiles = [
+        tile("metric_current_value", money(totals["current_value"]), extra=sparkline),
+        tile("metric_pnl", money(pnl, signed=True), L(lang, "kpi_pnl_sub", invested=money(totals["total_invested"])),
+             extra=delta),
+        tile("metric_total_invested", money(totals["total_invested"]),
+             L(lang, "kpi_fees_sub", fees=money(totals["total_fees"]))),
+        tile("metric_total_dividends", money(totals["total_dividends"]), L(lang, "kpi_dividends_sub")),
     ]
-    return dbc.Row(cards)
+    return dbc.Row(tiles, className="g-3")
 
 
 def _pct_per_year(rate, lang):
@@ -443,19 +459,21 @@ def _info_card(lang, label_key, info_key, main_text, sub_text=None, color=None, 
     même style que build_portfolio_totals_cards, plus une infobulle par concept. extra : composant
     optionnel inséré entre la valeur et le sous-texte (ex: barre de progression)."""
     info_id = f"card-{label_key}-info"
+    # Même gabarit que les tuiles de chiffres clés (kpi-tile, assets/theme.css), en un cran plus petit.
     body = [
-        html.H6([
+        html.Div([
             L(lang, label_key),
             html.Span(" ⓘ", id=info_id, style={"cursor": "help"}),
-        ], className="card-subtitle text-muted mb-1"),
+        ], className="kpi-label"),
         dbc.Tooltip(L(lang, info_key), target=info_id, placement="top"),
-        html.H5(main_text, className=f"mb-1 text-{color}" if color else "mb-1"),
+        html.Div(main_text, className=f"kpi-value kpi-value-sm text-{color}" if color else "kpi-value kpi-value-sm"),
     ]
     if extra is not None:
         body.append(extra)
     if sub_text:
-        body.append(html.Small(sub_text, className="text-muted"))
-    return dbc.Col(dbc.Card(dbc.CardBody(body), className="h-100"), width=width, className="mb-2")
+        body.append(html.Div(sub_text, className="kpi-sub"))
+    return dbc.Col(dbc.Card(dbc.CardBody(body), className="kpi-tile w-100"), xs=12, sm=6, xl=width,
+                   className="mb-3 d-flex")
 
 
 def build_performance_cards(perf: dict, lang: str):
@@ -576,7 +594,8 @@ def build_rebalancing_table_data(rebalancing_df: pd.DataFrame, lang: str):
 
 
 def build_real_vs_simulated_figure(portfolio_returns, monthly_amounts, monthly_dates, real_series,
-                                    annual_fee_pct, lower_pct, upper_pct, lang="fr", palette=None, dark=False):
+                                    annual_fee_pct, lower_pct, upper_pct, lang="fr", palette=None, dark=False,
+                                    purchases=None):
     """portfolio_returns : (n_sims, n_months), rendements simulés du portefeuille réel à sa
     composition/pondération ACTUELLE (voir callbacks/portefeuille_reel.py : simulate_portfolio_asset_returns @
     weights_vec, même combinaison que l'onglet 2). Mêmes étapes que chaque item de compute_results
@@ -593,7 +612,7 @@ def build_real_vs_simulated_figure(portfolio_returns, monthly_amounts, monthly_d
     return make_actual_vs_simulated_figure(
         real_dates=real_series.index, real_values=real_series.values,
         sim_dates=monthly_dates, sim_median=median, sim_p_low=p_low, sim_p_high=p_high,
-        invested_capital=invested_capital, lang=lang, palette=palette, dark=dark,
+        invested_capital=invested_capital, lang=lang, palette=palette, dark=dark, purchases=purchases,
     )
 
 

@@ -17,7 +17,7 @@ import layout
 import portfolio_db
 import portfolio_engine
 from app_instance import app
-from charts import make_allocation_donut, make_correlation_heatmap, make_target_vs_actual_rings
+from charts import make_allocation_sunburst, make_correlation_heatmap, make_target_vs_actual_rings
 from constants import PEA_TAX_RATE, STOCK_INDEX_KEY, UNDERLYING_INDICES, UNKNOWN_INDEX_KEY
 from engine import (
     simulate_portfolio_asset_returns,
@@ -69,40 +69,69 @@ MAX_DONUT_SLICES = 6
 LEGEND_LABEL_MAX = 42
 
 
-def _allocation_view(current_values: pd.Series, total: float, unpriced: list, lang: str, dark: bool):
-    """Anneau de la répartition actuelle (valeurs de marché en euros). Couleur attribuée dans l'ordre
-    alphabétique des tickers affichés, pas selon leur rang : une ligne qui grossit ou maigrit ne
-    change pas de couleur. Six couleurs dans la palette : au-delà de six lignes, les plus petites
-    sont regroupées en « Autres » (gris)."""
+def _allocation_view(current_values: pd.Series, total: float, unpriced: list, index_of: dict, lang: str,
+                     dark: bool):
+    """Répartition actuelle : graphique soleil (indices au centre, lignes autour) et, à côté, le
+    classement des lignes avec leur part en barre. Couleur par indice attribuée dans l'ordre
+    alphabétique des indices affichés, pas selon leur rang : un indice qui grossit ne change pas de
+    couleur ; ses lignes en prennent des nuances. Une ligne sans cours est signalée, jamais comptée 0."""
     empty_fig = go.Figure()
     empty_fig.update_layout(template=chart_theme.template(dark))
     notes = []
     if unpriced:
         notes.append(html.Div(L(lang, "allocation_unpriced", tickers=", ".join(unpriced))))
-    slices = portfolio_engine.allocation_slices(current_values, max_slices=MAX_DONUT_SLICES)
-    if slices.empty:
-        return empty_fig, notes or L(lang, "allocation_no_data")
-    # Ordre alphabétique des seules parts affichées : jamais deux parts visibles de même couleur.
-    shown = sorted(k for k in slices["key"] if k != portfolio_engine.OTHER_ALLOCATION_KEY)
-    color_of = {ticker: chart_theme.palette_for(None, dark)[i] for i, ticker in enumerate(shown)}
-    labels, hover_names, colors = [], [], []
-    for key in slices["key"]:
-        if key == portfolio_engine.OTHER_ALLOCATION_KEY:
-            labels.append(L(lang, "allocation_other"))
-            hover_names.append(L(lang, "allocation_other"))
-            colors.append(OTHER_SLICE_COLOR)
-        else:
-            # Nom du fonds dans la légende : un ticker seul (« PAASI.PA ») ne dit pas ce qu'est la ligne.
-            full_name = _ticker_display_label(key)
-            labels.append(full_name if len(full_name) <= LEGEND_LABEL_MAX else full_name[:LEGEND_LABEL_MAX - 1] + "…")
-            hover_names.append(full_name)
-            colors.append(color_of[key])
+    exposure = portfolio_engine.exposure_by_index(current_values, index_of)
+    if exposure.empty:
+        return empty_fig, [], notes or L(lang, "allocation_no_data")
+    palette = chart_theme.palette_for(None, dark)
+    surface = chart_theme.surface_color(dark)
+    shown = sorted(k for k in exposure["key"] if k != UNKNOWN_INDEX_KEY)
+    index_color = {key: palette[i % len(palette)] for i, key in enumerate(shown)}
+    index_color[UNKNOWN_INDEX_KEY] = OTHER_SLICE_COLOR
     total_text = f"{total:,.0f}".replace(",", " ")
-    fig = make_allocation_donut(
-        labels, list(slices["value"]), hover_names, colors, L(lang, "allocation_chart_title"),
-        L(lang, "allocation_center", total=total_text), "€", dark=dark, separators=L(lang, "plotly_separators"),
-    )
-    return fig, notes
+    ids, labels, parents, values, colors, hover = (["root"], [L(lang, "allocation_center", total=total_text)], [""],
+                                                   [float(exposure["value"].sum())], [surface], [L(lang, "allocation_total")])
+    line_color = {}
+    for _, group in exposure.iterrows():
+        key, base = group["key"], index_color[group["key"]]
+        ids.append(f"index:{key}"), labels.append(_index_label(key, lang)), parents.append("root")
+        values.append(float(group["value"])), colors.append(base), hover.append(_index_label(key, lang))
+        members = sorted(group["tickers"], key=lambda t: -float(current_values[t]))
+        for rank, ticker in enumerate(members):
+            # Nuances de la teinte de l'indice, de plus en plus proches du fond : lignes distinctes mais
+            # visiblement de la même famille.
+            shade = chart_theme.blend(base, surface, 0.18 + 0.22 * rank / max(len(members), 1))
+            line_color[ticker] = shade
+            ids.append(f"line:{ticker}"), labels.append(ticker.split(".")[0]), parents.append(f"index:{key}")
+            values.append(float(current_values[ticker])), colors.append(shade), hover.append(_ticker_display_label(ticker))
+    fig = make_allocation_sunburst(ids, labels, parents, values, colors, hover, L(lang, "allocation_chart_title"), "€",
+                                   dark=dark, separators=L(lang, "plotly_separators"))
+    return fig, _allocation_ranking(current_values, total, index_of, line_color, lang), notes
+
+
+def _allocation_ranking(current_values: pd.Series, total: float, index_of: dict, line_color: dict, lang: str):
+    """Classement des lignes, de la plus grosse à la plus petite : pastille de couleur (celle du
+    graphique soleil), nom du fonds, indice suivi, part en barre et en %, montant. Remplace la légende,
+    illisible dès que les noms de fonds sont longs."""
+    values = current_values.dropna()
+    values = values[values > 0].sort_values(ascending=False)
+    largest = float(values.iloc[0]) if not values.empty else 1.0
+    rows = []
+    for ticker, value in values.items():
+        share = float(value) / total if total else 0.0
+        rows.append(html.Div([
+            html.Div([
+                html.Span(className="alloc-dot", style={"backgroundColor": line_color.get(ticker, OTHER_SLICE_COLOR)}),
+                html.Span(_ticker_display_label(ticker), className="alloc-name"),
+                html.Span(f"{share * 100:.1f} %".replace(".", "," if lang == "fr" else "."), className="alloc-share"),
+            ], className="alloc-head"),
+            html.Div(html.Div(className="alloc-bar-fill", style={"width": f"{float(value) / largest * 100:.1f}%",
+                                                                  "backgroundColor": line_color.get(ticker, OTHER_SLICE_COLOR)}),
+                     className="alloc-bar"),
+            html.Small(f"{_index_label(index_of.get(ticker, UNKNOWN_INDEX_KEY), lang)} · "
+                       f"{float(value):,.0f} €".replace(",", " "), className="alloc-sub"),
+        ], className="alloc-row"))
+    return html.Div(rows, className="alloc-ranking")
 
 
 def _target_vs_actual_view(current_values: pd.Series, target_weights: pd.DataFrame, lang: str, dark: bool):
@@ -142,39 +171,21 @@ def _index_label(key: str, lang: str) -> str:
     return key
 
 
-def _index_view(current_values: pd.Series, held_tickers: list, lang: str, dark: bool):
-    """Exposition par indice suivi : anneau (lignes regroupées par indice), alerte pour chaque indice
-    suivi par plusieurs lignes (doublon sans diversification), et tableau de correction (une ligne
-    par ticker détenu, indice détecté automatiquement ou corrigé à la main)."""
-    empty_fig = go.Figure()
-    empty_fig.update_layout(template=chart_theme.template(dark))
+def _index_view(current_values: pd.Series, held_tickers: list, lang: str):
+    """Indice suivi par chaque ligne (détecté automatiquement ou corrigé à la main), alertes pour chaque
+    indice suivi par plusieurs lignes (doublon sans diversification) et tableau de correction.
+    Renvoie aussi index_of, qui regroupe les lignes du graphique soleil."""
     dropdown = {"index_key": {"options": [{"label": _index_label(key, lang), "value": key}
                                           for key in (*UNDERLYING_INDICES, STOCK_INDEX_KEY, UNKNOWN_INDEX_KEY)]}}
     if not held_tickers:
-        return empty_fig, [], [], dropdown
+        return [], [], dropdown, {}
     detected = {t: portfolio_engine.detect_underlying_index(t, **get_instrument_profile(t)) for t in held_tickers}
     overrides = portfolio_db.get_index_overrides()
     index_of = portfolio_engine.resolve_underlying_indices(detected, overrides)
     rows = [{"ticker": t, "label": _ticker_display_label(t), "index_key": index_of[t], "detected": detected[t],
              "source": L(lang, "index_source_override" if t in overrides else "index_source_auto")}
             for t in held_tickers]
-
     exposure = portfolio_engine.exposure_by_index(current_values, index_of)
-    if exposure.empty:
-        return empty_fig, [], rows, dropdown
-    slices = portfolio_engine.allocation_slices(exposure.set_index("key")["value"], max_slices=MAX_DONUT_SLICES)
-    tickers_of = dict(zip(exposure["key"], exposure["tickers"]))
-    special = (UNKNOWN_INDEX_KEY, portfolio_engine.OTHER_ALLOCATION_KEY)
-    shown = sorted(k for k in slices["key"] if k not in special)
-    color_of = {key: chart_theme.palette_for(None, dark)[i] for i, key in enumerate(shown)}
-    labels = [_index_label(k, lang) for k in slices["key"]]
-    hover = [f"{_index_label(k, lang)} : {', '.join(tickers_of.get(k, []))}" if k in tickers_of else _index_label(k, lang)
-             for k in slices["key"]]
-    colors = [color_of.get(k, OTHER_SLICE_COLOR) for k in slices["key"]]
-    total_text = f"{float(exposure['value'].sum()):,.0f}".replace(",", " ")
-    fig = make_allocation_donut(labels, list(slices["value"]), hover, colors, L(lang, "index_chart_title"),
-                                L(lang, "allocation_center", total=total_text), "€", dark=dark,
-                                separators=L(lang, "plotly_separators"))
     alerts = []
     for _, dup in portfolio_engine.duplicate_index_exposures(exposure).iterrows():
         share = f"{dup['share'] * 100:.0f}"
@@ -185,7 +196,7 @@ def _index_view(current_values: pd.Series, held_tickers: list, lang: str, dark: 
                                 color="warning", className="py-2 mb-2"))
     if any(index_of[t] == UNKNOWN_INDEX_KEY for t in held_tickers):
         alerts.append(html.Small(L(lang, "index_unknown_hint"), className="text-muted d-block mb-2"))
-    return fig, alerts, rows, dropdown
+    return alerts, rows, dropdown, index_of
 
 
 @app.callback(
@@ -451,7 +462,7 @@ def delete_removed_weights(table_data):
     Output("tab3-totals-cards", "children"),
     Output("tab3-allocation-graph", "figure"),
     Output("tab3-allocation-note", "children"),
-    Output("tab3-index-graph", "figure"),
+    Output("tab3-allocation-list", "children"),
     Output("tab3-index-alerts", "children"),
     Output("tab3-index-table", "data"),
     Output("tab3-index-table", "dropdown"),
@@ -523,7 +534,9 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
 
     current_value_total = float(current_values.sum()) if not current_values.empty else 0.0
     totals = portfolio_engine.compute_totals(transactions, dividends, current_value_total)
-    totals_cards = build_portfolio_totals_cards(totals, lang)
+    real_series = portfolio_engine.reconstruct_equity_curve(transactions, price_histories)
+    totals_cards = build_portfolio_totals_cards(totals, lang, real_series=real_series, dark=dark,
+                                               palette=chart_theme.palette_for(None, dark))
     unpriced = [t for t in holdings["ticker"] if t not in current_values.index] if not holdings.empty else []
     if unpriced:
         # Sans cours, une ligne manque à la valeur actuelle mais pas au capital investi : la plus-value
@@ -533,11 +546,11 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
                       className="py-2 mb-2"),
             totals_cards,
         ])
-    allocation_fig, allocation_note = _allocation_view(current_values, current_value_total, unpriced, lang, dark)
     held_tickers = sorted(holdings["ticker"]) if not holdings.empty else []
-    index_fig, index_alerts, index_rows, index_dropdown = _index_view(current_values, held_tickers, lang, dark)
+    index_alerts, index_rows, index_dropdown, index_of = _index_view(current_values, held_tickers, lang)
+    allocation_fig, allocation_list, allocation_note = _allocation_view(
+        current_values, current_value_total, unpriced, index_of, lang, dark)
 
-    real_series = portfolio_engine.reconstruct_equity_curve(transactions, price_histories)
 
     rebalancing_df = portfolio_engine.compute_rebalancing_plan(target_weights, current_values)
     rebalancing_data, rebalancing_columns = build_rebalancing_table_data(rebalancing_df, lang)
@@ -606,6 +619,7 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
                     real_vs_sim_fig = build_real_vs_simulated_figure(
                         portfolio_returns, monthly_amounts.values, monthly_amounts.index, real_series,
                         annual_fee_pct=0.0, lower_pct=10, upper_pct=90, lang=lang, palette=chart_theme.palette_for(None, dark), dark=dark,
+                        purchases=portfolio_engine.purchase_points(transactions, real_series),
                     )
         elif not real_series.empty:
             # Historique insuffisant pour aligner tous les tickers détenus (voir
@@ -630,7 +644,7 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
 
     return (
         totals_cards, allocation_fig, allocation_note,
-        index_fig, index_alerts, index_rows, index_dropdown, *table_styles,
+        allocation_list, index_alerts, index_rows, index_dropdown, *table_styles,
         real_pace_display, real_vs_sim_fig, projection_fig, corr_fig,
         rebalancing_data, rebalancing_columns, *table_styles, rebalancing_warning,
         _target_vs_actual_view(current_values, target_weights, lang, dark),

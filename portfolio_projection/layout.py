@@ -804,9 +804,9 @@ def build_tab3(lang):
         html.H5(L(lang, "section_allocation"), className="section-title", id="anchor-tab3-allocation"),
         dbc.Card(dbc.CardBody([
             dcc.Loading(type="circle", children=[dbc.Row([
-                dbc.Col(dcc.Graph(id="tab3-allocation-graph", config=GRAPH_CONFIG), lg=6),
-                dbc.Col(dcc.Graph(id="tab3-index-graph", config=GRAPH_CONFIG), lg=6),
-            ])]),
+                dbc.Col(dcc.Graph(id="tab3-allocation-graph", config=GRAPH_CONFIG), lg=7),
+                dbc.Col(html.Div(id="tab3-allocation-list"), lg=5, className="d-flex align-items-center"),
+            ], className="g-3")]),
             html.Div(id="tab3-index-alerts"),
             html.Div(id="tab3-allocation-note", className="text-muted", style={"fontSize": "0.8rem"}),
             html.Details([

@@ -26,12 +26,18 @@ qu'une simulation aurait donné.
   Trade Republic) des transactions et dividendes, valeur reconstruite dans le
   temps, réel vs simulé, projection depuis aujourd'hui avec la pondération
   actuelle, corrélations entre les lignes détenues, plan de rééquilibrage.
-- **Répartition actuelle** : anneau des lignes détenues, à leur valeur de
-  marché en euros, avec le total au centre et le nom de chaque fonds en
-  légende. Une couleur fixe par ligne, attribuée par ticker et non par rang,
-  pour qu'une ligne qui grossit ne change pas de couleur. Au-delà de six
-  lignes, les plus petites sont regroupées en « Autres ». Une ligne sans
-  cours est signalée sous le graphique plutôt que comptée pour 0.
+- **Tableau de bord** : en haut de l'onglet, des tuiles de chiffres clés.
+  La valeur actuelle porte une mini-courbe des 12 derniers mois, la
+  plus-value une pastille ▲/▼ (flèche, signe et couleur : jamais la couleur
+  seule). Sur la courbe de valeur, un point marque chaque jour d'achat,
+  proportionnel au montant, et le capital investi est tracé en escalier.
+- **Répartition actuelle** : un graphique « soleil » avec le total au
+  centre, les indices suivis sur l'anneau intérieur et les lignes autour,
+  chacune dans une nuance de la couleur de son indice. À côté, les lignes
+  sont classées de la plus grosse à la plus petite, avec leur part en barre.
+  La couleur est attribuée par indice et non par rang, pour qu'un indice
+  qui grossit ne change pas de couleur. Une ligne sans cours est signalée,
+  sous le graphique et au-dessus des totaux, plutôt que comptée pour 0.
 - **Exposition par indice suivi** : un second anneau regroupe les lignes
   par indice, et une alerte signale deux lignes qui suivent le même
   (deux ETF S&P 500 d'émetteurs différents ne se diversifient pas l'un

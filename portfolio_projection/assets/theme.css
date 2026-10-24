@@ -112,6 +112,32 @@ h1, h2, h3, h4, h5, h6 { font-family: "Inter", sans-serif; font-weight: 600; let
     border: 1px solid var(--border-soft);
 }
 
+/* -------- Classement des lignes (à côté du graphique soleil) -------- */
+.alloc-ranking { width: 100%; display: flex; flex-direction: column; gap: 0.85rem; }
+.alloc-head { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; }
+.alloc-dot { width: 10px; height: 10px; border-radius: 3px; flex: 0 0 auto; }
+.alloc-name { flex: 1 1 auto; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.alloc-share { font-weight: 600; font-variant-numeric: tabular-nums; }
+.alloc-bar { height: 6px; border-radius: 3px; background: var(--surface-2); margin: 0.3rem 0 0.15rem; overflow: hidden; }
+.alloc-bar-fill { height: 100%; border-radius: 3px; }
+.alloc-sub { color: var(--Dash-Text-Weak, #6c757d); font-size: 0.75rem; }
+
+/* -------- Tuiles de chiffres clés (onglet portefeuille réel) -------- */
+.kpi-tile { border: 1px solid var(--border-soft); border-radius: 14px; background: var(--surface);
+            box-shadow: var(--shadow-card); height: 100%; }
+.kpi-tile .card-body { padding: 0.9rem 1rem 0.6rem; }
+.kpi-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.06em;
+             color: var(--Dash-Text-Weak, #6c757d); margin-bottom: 0.2rem; }
+.kpi-value { font-size: 1.65rem; font-weight: 700; line-height: 1.15; letter-spacing: -0.02em; }
+.kpi-value-sm { font-size: 1.25rem; }
+.kpi-sub { font-size: 0.78rem; color: var(--Dash-Text-Weak, #6c757d); margin-top: 0.15rem; }
+.kpi-delta { display: inline-flex; align-items: center; gap: 0.25rem; font-size: 0.78rem; font-weight: 600;
+             padding: 0.1rem 0.45rem; border-radius: 999px; margin-top: 0.3rem; }
+.kpi-delta.up { background: color-mix(in srgb, #0ca30c 16%, transparent); color: #0b8a0b; }
+.kpi-delta.down { background: color-mix(in srgb, #d03b3b 16%, transparent); color: #c23434; }
+[data-bs-theme="dark"] .kpi-delta.up { color: #3fd13f; }
+[data-bs-theme="dark"] .kpi-delta.down { color: #ff7a7a; }
+
 /* -------- Liens -------- */
 a { color: var(--accent); }
 

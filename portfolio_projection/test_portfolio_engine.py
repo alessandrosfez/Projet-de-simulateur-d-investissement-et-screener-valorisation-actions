@@ -135,6 +135,18 @@ def test_target_vs_actual_shares_folds_small_lines_and_needs_both_sides():
     assert m.target_vs_actual_shares(values, pd.DataFrame(columns=["ticker", "weight_pct"]), 6).empty
 
 
+def test_purchase_points_sum_same_day_and_snap_to_next_trading_day():
+    curve = pd.Series([100.0, 150.0, 155.0], index=pd.to_datetime(["2024-03-01", "2024-03-04", "2024-03-05"]))
+    transactions = pd.DataFrame([
+        _tx("AAA", "2024-03-01", 60.0, 10.0), _tx("BBB", "2024-03-01", 40.0, 5.0),
+        _tx("AAA", "2024-03-02", 50.0, 10.0),  # samedi : posé sur le lundi 04/03
+        _tx("AAA", "2024-04-01", 30.0, 10.0),  # après la courbe : écarté
+    ])
+    points = m.purchase_points(transactions, curve)
+    assert points == [(pd.Timestamp("2024-03-01"), 100.0, 100.0), (pd.Timestamp("2024-03-04"), 150.0, 50.0)]
+    assert m.purchase_points(transactions.iloc[0:0], curve) == []
+
+
 def test_reconstruct_equity_curve_sums_across_tickers():
     transactions = pd.DataFrame([
         _tx("AAA", "2024-01-01", 100.0, 10.0),  # 10 parts

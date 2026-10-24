@@ -29,24 +29,39 @@ def make_correlation_heatmap(corr: pd.DataFrame, lang="fr", dark: bool = False):
     return fig
 
 
-def make_allocation_donut(labels: list, values: list, hover_names: list, colors: list, title: str,
-                          center_text: str, value_suffix: str, dark: bool = False, separators: str | None = None):
-    """Répartition en anneau : parts dans l'ordre fourni (de la plus grosse à la plus petite, sens
-    horaire depuis midi), pourcentage inscrit dans les parts assez grandes, nom complet, montant et
-    part au survol, total au centre. Fin liseré de la couleur du fond entre les parts, pour que deux
-    parts voisines restent distinctes même de teintes proches."""
+def make_allocation_sunburst(ids: list, labels: list, parents: list, values: list, colors: list,
+                             hover_names: list, title: str, value_suffix: str, dark: bool = False,
+                             separators: str | None = None):
+    """Répartition en « soleil » : au centre le total, anneau intérieur = indices suivis, anneau
+    extérieur = lignes détenues, chacune dans une nuance de la couleur de son indice. Remplace les deux
+    anneaux séparés (par ligne, par indice) : on voit d'un coup quelles lignes forment un même bloc.
+    branchvalues="total" : la valeur d'un indice est la somme de ses lignes, jamais recomptée."""
     surface = chart_theme.surface_color(dark)
-    fig = go.Figure(go.Pie(
-        labels=labels, values=values, customdata=hover_names, hole=0.58, sort=False, direction="clockwise",
+    fig = go.Figure(go.Sunburst(
+        ids=ids, labels=labels, parents=parents, values=values, customdata=hover_names,
+        branchvalues="total", sort=False, insidetextorientation="horizontal",
         marker=dict(colors=colors, line=dict(color=surface, width=2)),
-        texttemplate="%{percent:.1%}", textposition="inside", insidetextorientation="horizontal",
-        hovertemplate=f"%{{customdata}}<br>%{{value:,.0f}} {value_suffix}<br>%{{percent:.1%}}<extra></extra>",
+        # Centre : le total seul (son « 100 % » n'apprend rien) ; parts : libellé et part du total.
+        texttemplate=["%{label}"] + ["%{label}<br>%{percentRoot:.0%}"] * (len(ids) - 1),
+        hovertemplate=f"%{{customdata}}<br>%{{value:,.0f}} {value_suffix}<br>%{{percentRoot:.1%}}<extra></extra>",
     ))
     fig.update_layout(
         template=chart_theme.template(dark), title=dict(text=title, font=dict(size=14)),
-        annotations=[dict(text=center_text, x=0.5, y=0.5, showarrow=False, font=dict(size=15))],
-        legend=dict(font=dict(size=11)), uniformtext=dict(minsize=10, mode="hide"),
-        margin=dict(t=60, b=20, l=20, r=20), separators=separators,
+        uniformtext=dict(minsize=10, mode="hide"), margin=dict(t=48, b=8, l=8, r=8), height=420,
+        separators=separators,
+    )
+    return fig
+
+
+def make_sparkline(dates, values, color: str, dark: bool = False):
+    """Mini-courbe sans axe ni grille pour une tuile de chiffre clé : seule la forme compte, le
+    chiffre lui-même est écrit en grand à côté."""
+    fig = go.Figure(go.Scatter(x=dates, y=values, mode="lines", line=dict(color=color, width=2),
+                               fill="tozeroy", fillcolor=hex_to_rgba(color, 0.12), hoverinfo="skip"))
+    lows = [v for v in values if v is not None]
+    fig.update_layout(
+        template=chart_theme.template(dark), height=56, margin=dict(t=2, b=2, l=0, r=0), showlegend=False,
+        xaxis=dict(visible=False), yaxis=dict(visible=False, range=[min(lows) * 0.98, max(lows) * 1.02] if lows else None),
     )
     return fig
 
@@ -126,7 +141,8 @@ def make_band_figure(series, years_axis, title, lang="fr", palette=None, investe
 
 
 def make_actual_vs_simulated_figure(real_dates, real_values, sim_dates, sim_median, sim_p_low, sim_p_high,
-                                     invested_capital, lang="fr", palette=None, dark: bool = False):
+                                     invested_capital, lang="fr", palette=None, dark: bool = False,
+                                     purchases=None):
     """Portefeuille réel (courbe pleine, valeur de marché reconstruite depuis les transactions) vs
     ce que le même échéancier de versements aurait donné sous le moteur Monte Carlo existant
     (bande de percentiles) -- les deux sur un axe de vraies dates calendaires. Pas une variante de
@@ -145,15 +161,28 @@ def make_actual_vs_simulated_figure(real_dates, real_values, sim_dates, sim_medi
     fig.add_trace(go.Scatter(x=sim_dates, y=sim_median, mode="lines", name=L(lang, "simulated_median_trace"),
                               line=dict(color=sim_color, dash="dash")))
     fig.add_trace(go.Scatter(x=real_dates, y=real_values, mode="lines", name=L(lang, "real_equity_trace"),
-                              line=dict(color=real_color, width=2)))
-    fig.add_trace(go.Scatter(x=sim_dates, y=invested_capital, mode="lines",
+                              line=dict(color=real_color, width=2.5)))
+    # Capital investi en escalier : il ne bouge qu'aux versements, pas entre deux.
+    fig.add_trace(go.Scatter(x=sim_dates, y=invested_capital, mode="lines", line_shape="hv",
                               name=L(lang, "invested_capital_trace"),
                               line=dict(color="gray", dash="dot")))
+    if purchases:
+        # Un point par jour d'achat sur la courbe réelle, taille selon le montant : on lit d'où viennent
+        # les marches de la courbe (versements) et ce qui relève du marché (entre deux points).
+        dates, values, amounts = zip(*purchases)
+        largest = max(amounts) or 1.0
+        fig.add_trace(go.Scatter(
+            x=list(dates), y=list(values), mode="markers", name=L(lang, "purchase_marker"),
+            marker=dict(size=[8 + 10 * a / largest for a in amounts], color=real_color,
+                        line=dict(color=chart_theme.surface_color(dark), width=2)),
+            customdata=list(amounts), hovertemplate=f"{L(lang, 'purchase_marker')} : %{{customdata:,.0f}} €<extra></extra>",
+        ))
     fig.update_layout(
         template=chart_theme.template(dark),
         title=dict(text=L(lang, "real_vs_simulated_chart_title"), font=dict(size=14)),
         xaxis_title=L(lang, "date_axis"), yaxis_title=L(lang, "value_axis"),
-        hovermode="x unified", legend=dict(font=dict(size=9)), margin=dict(t=60),
+        hovermode="x unified", margin=dict(t=70),
+        legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="right", x=1, font=dict(size=11)),
     )
     return fig
 
