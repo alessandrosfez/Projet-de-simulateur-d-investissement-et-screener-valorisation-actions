@@ -2,6 +2,7 @@
 Traductions (FR/EN) et palettes de couleurs. Aucune dépendance sur les autres
 modules du projet.
 """
+import string
 
 PALETTES = {
     # Palette de référence validée (variante claire ; la sombre est dans chart_theme.SERIES_DARK).
@@ -1034,8 +1035,30 @@ TRANSLATIONS = {
 }
 
 
+# Remplacement simultané : la virgule des milliers devient une espace, le point décimal une virgule.
+_FRENCH_DIGITS = str.maketrans({",": " ", ".": ","})
+
+
+class _FrenchNumberFormatter(string.Formatter):
+    """Formatage des gabarits français : un nombre passé à « {rate:.1f} » ou « {amount:,.0f} » sort
+    avec une virgule décimale et une espace pour les milliers (« 17,2 % », « 1 234 € »), au lieu des
+    conventions anglaises de .format(). Les chaînes passent telles quelles."""
+
+    def format_field(self, value, format_spec):
+        text = super().format_field(value, format_spec)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            text = text.translate(_FRENCH_DIGITS)
+        return text
+
+
+_FRENCH_FORMATTER = _FrenchNumberFormatter()
+
+
 def L(lang: str, key: str, **kwargs) -> str:
     """Traduit `key` dans la langue `lang` (repli sur le français puis sur la clé elle-même).
-    Les `**kwargs` sont appliqués via .format() pour les chaînes paramétrées."""
+    Les `**kwargs` sont appliqués via .format() pour les chaînes paramétrées, avec les conventions
+    numériques françaises quand le texte est en français."""
     text = TRANSLATIONS.get(lang, TRANSLATIONS["fr"]).get(key, TRANSLATIONS["fr"].get(key, key))
-    return text.format(**kwargs) if kwargs else text
+    if not kwargs:
+        return text
+    return _FRENCH_FORMATTER.format(text, **kwargs) if lang not in TRANSLATIONS or lang == "fr" else text.format(**kwargs)

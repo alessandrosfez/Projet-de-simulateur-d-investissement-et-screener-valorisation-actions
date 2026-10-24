@@ -24,7 +24,28 @@ GRAPH_CONFIG = {
     ],
 }
 
+
+def icon_label(icon: str, text: str) -> list:
+    """Libellé de bouton précédé d'une icône Bootstrap Icons (feuille chargée dans app.py). L'icône
+    accompagne le texte, elle ne le remplace jamais."""
+    return [html.I(className=f"bi bi-{icon} me-1", **{"aria-hidden": "true"}), text]
+
 TABLE_BASE_CELL_STYLE = {"fontSize": "0.8rem", "textAlign": "left"}
+
+# Squelette affiché pendant un calcul : la forme du contenu à venir (titre, lignes, bloc) plutôt
+# qu'un rond qui tourne. Animation dans assets/theme.css (.skeleton), aux couleurs du mode affiché
+# et figée si le système demande moins d'animations. delay_show : rien ne clignote pour un calcul
+# instantané.
+LOADING_PROPS = {
+    "custom_spinner": html.Div([
+        html.Div(className="skeleton-bar skeleton-title"),
+        html.Div(className="skeleton-bar"),
+        html.Div(className="skeleton-bar skeleton-short"),
+        html.Div(className="skeleton-block"),
+    ], className="skeleton", **{"aria-busy": "true"}),
+    "delay_show": 200,
+    "parent_className": "loading-area",
+}
 
 
 def table_style_overrides(dark: bool):
@@ -478,7 +499,7 @@ def build_sidebar(lang, v=None):
     ]
 
     config_section = [
-        dbc.Button(L(lang, "config_export_btn"), id="btn-download-config", color="primary", size="sm", className="mb-2 w-100"),
+        dbc.Button(icon_label("download", L(lang, "config_export_btn")), id="btn-download-config", color="primary", size="sm", className="mb-2 w-100"),
         dcc.Download(id="download-config"),
         dcc.Upload(
             id="upload-config",
@@ -524,7 +545,7 @@ def build_tab1(lang, v=None):
             value=gv(v, "indices-checklist", list(TICKERS.keys())), inline=True, className="mb-3",
         ),
         html.Div(id="tab1-warning"),
-        dcc.Loading(type="circle", children=[
+        dcc.Loading(**LOADING_PROPS, children=[
             html.H5(L(lang, "trajectories_title"), id="tab1-trajectories-title", className="section-title"),
             html.Div([
                 html.Div(dcc.Graph(id="tab1-graph-const", config=GRAPH_CONFIG),
@@ -547,7 +568,7 @@ def build_tab1(lang, v=None):
                 dcc.Graph(id="tab1-sequence-risk-chart", config=GRAPH_CONFIG),
             ], id="tab1-sequence-risk-container", style={"display": "none"}),
         ]),
-        dbc.Button(L(lang, "download_metrics_btn"), id="btn-download-tab1", color="secondary", size="sm", className="mt-2"),
+        dbc.Button(icon_label("filetype-csv", L(lang, "download_metrics_btn")), id="btn-download-tab1", color="secondary", size="sm", className="mt-2"),
         dcc.Download(id="download-tab1"),
         dcc.Store(id="tab1-csv-store"),
     ], className="p-3")
@@ -586,7 +607,7 @@ def build_tab2(lang, v=None):
 
         html.Div(id="tab2-warning"),
 
-        dcc.Loading(type="circle", children=[
+        dcc.Loading(**LOADING_PROPS, children=[
             html.H5(L(lang, "corr_title"), className="section-title"),
             dcc.Graph(id="tab2-corr-heatmap", config=GRAPH_CONFIG),
 
@@ -642,7 +663,7 @@ def build_tab2(lang, v=None):
         dcc.Store(id="vol-weights-store"),
         dcc.Store(id="rp-weights-store"),
 
-        dcc.Loading(type="circle", children=[
+        dcc.Loading(**LOADING_PROPS, children=[
             html.H5(L(lang, "trajectories_title"), id="tab2-trajectories-title", className="section-title"),
             html.Div([
                 html.Div(dcc.Graph(id="tab2-graph-const", config=GRAPH_CONFIG),
@@ -665,7 +686,7 @@ def build_tab2(lang, v=None):
                 dcc.Graph(id="tab2-sequence-risk-chart", config=GRAPH_CONFIG),
             ], id="tab2-sequence-risk-container", style={"display": "none"}),
         ]),
-        dbc.Button(L(lang, "download_metrics_btn"), id="btn-download-tab2", color="secondary", size="sm", className="mt-2"),
+        dbc.Button(icon_label("filetype-csv", L(lang, "download_metrics_btn")), id="btn-download-tab2", color="secondary", size="sm", className="mt-2"),
         dcc.Download(id="download-tab2"),
         dcc.Store(id="tab2-csv-store"),
     ], className="p-3")
@@ -741,7 +762,7 @@ def build_tab3(lang):
                            className="form-control form-control-sm", style={"width": "110px"}), width="auto"),
         dbc.Col(dcc.Input(id="tab3-tx-fee-input", type="number", placeholder=L(lang, "tx_fee_label"),
                            className="form-control form-control-sm", style={"width": "90px"}), width="auto"),
-        dbc.Col(dbc.Button(L(lang, "btn_add_transaction"), id="tab3-btn-add-tx", color="primary", size="sm"),
+        dbc.Col(dbc.Button(icon_label("plus-lg", L(lang, "btn_add_transaction")), id="tab3-btn-add-tx", color="primary", size="sm"),
                 width="auto"),
     ], className="mb-2 gx-2 align-items-center")
 
@@ -751,7 +772,7 @@ def build_tab3(lang):
                                       placeholder=L(lang, "div_date_label")), width="auto"),
         dbc.Col(dcc.Input(id="tab3-div-amount-input", type="number", placeholder=L(lang, "div_amount_label"),
                            className="form-control form-control-sm", style={"width": "110px"}), width="auto"),
-        dbc.Col(dbc.Button(L(lang, "btn_add_dividend"), id="tab3-btn-add-div", color="primary", size="sm"),
+        dbc.Col(dbc.Button(icon_label("plus-lg", L(lang, "btn_add_dividend")), id="tab3-btn-add-div", color="primary", size="sm"),
                 width="auto"),
     ], className="mb-2 gx-2 align-items-center")
 
@@ -759,7 +780,7 @@ def build_tab3(lang):
         dbc.Col(ticker_dropdown("tab3-weight-ticker-input", L(lang, "weight_ticker_label")), width="auto"),
         dbc.Col(dcc.Input(id="tab3-weight-pct-input", type="number", placeholder=L(lang, "weight_pct_label"),
                            className="form-control form-control-sm", style={"width": "150px"}), width="auto"),
-        dbc.Col(dbc.Button(L(lang, "btn_add_weight"), id="tab3-btn-add-weight", color="secondary", size="sm"),
+        dbc.Col(dbc.Button(icon_label("plus-lg", L(lang, "btn_add_weight")), id="tab3-btn-add-weight", color="secondary", size="sm"),
                 width="auto"),
     ], className="mb-2 gx-2 align-items-center")
 
@@ -780,9 +801,9 @@ def build_tab3(lang):
         ),
         html.Div(id="tab3-csv-import-result", className="mt-1", style={"fontSize": "0.8rem"}),
         dbc.Row([
-            dbc.Col(dbc.Button(L(lang, "btn_download_tx_template"), id="tab3-btn-download-tx-template",
+            dbc.Col(dbc.Button(icon_label("file-earmark-arrow-down", L(lang, "btn_download_tx_template")), id="tab3-btn-download-tx-template",
                                 color="link", size="sm", className="p-0"), width="auto"),
-            dbc.Col(dbc.Button(L(lang, "btn_download_div_template"), id="tab3-btn-download-div-template",
+            dbc.Col(dbc.Button(icon_label("file-earmark-arrow-down", L(lang, "btn_download_div_template")), id="tab3-btn-download-div-template",
                                 color="link", size="sm", className="p-0"), width="auto"),
         ], className="mt-1 gx-3"),
         dcc.Download(id="tab3-download-tx-template"),
@@ -803,7 +824,7 @@ def build_tab3(lang):
 
         html.H5(L(lang, "section_allocation"), className="section-title", id="anchor-tab3-allocation"),
         dbc.Card(dbc.CardBody([
-            dcc.Loading(type="circle", children=[dbc.Row([
+            dcc.Loading(**LOADING_PROPS, children=[dbc.Row([
                 dbc.Col(dcc.Graph(id="tab3-allocation-graph", config=GRAPH_CONFIG), lg=7),
                 dbc.Col(html.Div(id="tab3-allocation-list"), lg=5, className="d-flex align-items-center"),
             ], className="g-3")]),
@@ -857,25 +878,25 @@ def build_tab3(lang):
                     style={"width": "320px", "fontSize": "0.85rem"},
                 ),
             ], className="mb-3"),
-            dcc.Loading(type="circle", children=[html.Div(id="tab3-performance-cards")]),
+            dcc.Loading(**LOADING_PROPS, children=[html.Div(id="tab3-performance-cards")]),
             html.Small(L(lang, "performance_conventions_note"), className="text-muted d-block mt-1"),
         ]), className="mb-4"),
 
         html.H5(L(lang, "section_real_vs_simulated"), className="section-title", id="anchor-tab3-chart"),
         dbc.Card(dbc.CardBody(
-            dcc.Loading(type="circle", children=[dcc.Graph(id="tab3-real-vs-sim-graph", config=GRAPH_CONFIG)]),
+            dcc.Loading(**LOADING_PROPS, children=[dcc.Graph(id="tab3-real-vs-sim-graph", config=GRAPH_CONFIG)]),
         ), className="mb-4"),
 
         html.H5(L(lang, "section_real_portfolio_projection"), className="section-title", id="anchor-tab3-projection"),
         dbc.Card(dbc.CardBody([
             html.Small(L(lang, "real_portfolio_projection_hint"), className="text-muted d-block mb-2"),
-            dcc.Loading(type="circle", children=[dcc.Graph(id="tab3-projection-graph", config=GRAPH_CONFIG)]),
+            dcc.Loading(**LOADING_PROPS, children=[dcc.Graph(id="tab3-projection-graph", config=GRAPH_CONFIG)]),
         ]), className="mb-4"),
 
         html.H5(L(lang, "section_real_portfolio_corr"), className="section-title", id="anchor-tab3-corr"),
         dbc.Card(dbc.CardBody([
             html.Small(L(lang, "real_portfolio_corr_hint"), className="text-muted d-block mb-2"),
-            dcc.Loading(type="circle", children=[dcc.Graph(id="tab3-corr-heatmap", config=GRAPH_CONFIG)]),
+            dcc.Loading(**LOADING_PROPS, children=[dcc.Graph(id="tab3-corr-heatmap", config=GRAPH_CONFIG)]),
         ]), className="mb-4"),
 
         html.H5(L(lang, "section_rebalancing"), className="section-title", id="anchor-tab3-rebalancing"),
@@ -998,7 +1019,7 @@ def build_tab4(lang):
                 className="mt-1",
             ),
         ], className="mb-3"),
-        dcc.Loading(type="circle", children=[
+        dcc.Loading(**LOADING_PROPS, children=[
             html.Div(id="validation-error", className="text-danger"),
             html.Div(id="validation-info-caption", className="text-muted mb-2", style={"fontSize": "0.85rem"}),
             html.Div([

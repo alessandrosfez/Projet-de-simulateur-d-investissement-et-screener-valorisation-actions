@@ -41,6 +41,12 @@ Ils partagent aussi un thème visuel, recopié dans chaque dossier
 - **palette « Défaut » validée** pour le contraste et le daltonisme, avec
   une variante claire et une sombre. L'ancienne palette, celle de Plotly,
   échouait au contrôle de luminance dans les deux modes.
+- **couleurs d'état** (zone sûre, grise, détresse) distinctes des couleurs
+  de séries, toujours accompagnées d'un libellé ;
+- **icônes Bootstrap** sur les actions principales, **squelettes de
+  chargement** à la place des spinners, et une mise en page qui tient sur
+  un téléphone (réglages repliés sous le titre, sans défilement
+  horizontal).
 
 Aucun n'est un outil de prédiction ni un avis : chaque projection montre
 une bande de scénarios possibles, pas un chiffre garanti ; chaque
@@ -57,8 +63,9 @@ python run_all.py
 
 Lance les trois outils en parallèle (http://localhost:8050,
 http://localhost:8051 et http://localhost:8052) et ouvre `index.html`, une
-page d'accueil statique avec un lien vers chacun (et leur statut de
-démarrage en direct) ; Ctrl+C pour tout arrêter. `python run_all.py
+page d'accueil statique avec un lien vers chacun, un aperçu dessiné de
+son écran principal et leur statut de démarrage en direct (thème clair ou
+sombre selon le système) ; Ctrl+C pour tout arrêter. `python run_all.py
 --no-browser` lance les outils sans ouvrir la page d'accueil (serveur sans
 écran). Pur confort de lancement : `run_all.py` et `index.html` ne créent
 aucun lien entre les projets, qui restent des process Dash indépendants,

@@ -24,6 +24,12 @@ GRAPH_CONFIG = {
     ],
 }
 
+
+def icon_label(icon: str, text: str) -> list:
+    """Libellé de bouton précédé d'une icône Bootstrap Icons (feuille chargée dans app.py). L'icône
+    accompagne le texte, elle ne le remplace jamais."""
+    return [html.I(className=f"bi bi-{icon} me-1", **{"aria-hidden": "true"}), text]
+
 TABLE_BASE_CELL_STYLE = {"fontSize": "0.82rem", "textAlign": "right", "padding": "0.45rem 0.8rem", "minWidth": "95px"}
 
 # Champs dont la valeur doit survivre à un changement de langue (voir gv() et
@@ -32,6 +38,21 @@ TAB_STATE_FIELDS = [
     ("ticker-input", "value"), ("benford-source-radio", "value"), ("benford-column-dropdown", "value"),
     ("benford-sign-radio", "value"), ("benford-min-amount-input", "value"),
 ]
+
+# Squelette affiché pendant un calcul : la forme du contenu à venir (titre, lignes, bloc) plutôt
+# qu'un rond qui tourne. Animation dans assets/theme.css (.skeleton), aux couleurs du mode affiché
+# et figée si le système demande moins d'animations. delay_show : rien ne clignote pour un calcul
+# instantané.
+LOADING_PROPS = {
+    "custom_spinner": html.Div([
+        html.Div(className="skeleton-bar skeleton-title"),
+        html.Div(className="skeleton-bar"),
+        html.Div(className="skeleton-bar skeleton-short"),
+        html.Div(className="skeleton-block"),
+    ], className="skeleton", **{"aria-busy": "true"}),
+    "delay_show": 200,
+    "parent_className": "loading-area",
+}
 
 
 def table_style_overrides(dark: bool):
@@ -993,7 +1014,7 @@ def build_main(lang, v=None):
                 ),
             ], width="auto"),
             dbc.Col(
-                dbc.Button(L(lang, "analyze_btn"), id="analyze-btn", color="primary"),
+                dbc.Button(icon_label("search", L(lang, "analyze_btn")), id="analyze-btn", color="primary"),
                 width="auto", className="d-flex align-items-end",
             ),
         ], className="mb-2 gx-3"),
@@ -1005,11 +1026,11 @@ def build_main(lang, v=None):
                 dcc.Upload(
                     id="statements-upload", children=html.Div(L(lang, "import_upload")), multiple=False,
                     style={"borderWidth": "1px", "borderStyle": "dashed", "borderRadius": "10px", "padding": "0.5rem 1rem",
-                           "textAlign": "center", "cursor": "pointer", "width": "420px"},
+                           "textAlign": "center", "cursor": "pointer", "width": "420px", "maxWidth": "100%"},
                 ),
             ], width="auto"),
             dbc.Col([
-                dbc.Button(L(lang, "import_template_btn"), id="statements-template-btn", color="secondary",
+                dbc.Button(icon_label("file-earmark-arrow-down", L(lang, "import_template_btn")), id="statements-template-btn", color="secondary",
                            outline=True, size="sm"),
                 dcc.Download(id="statements-template-download"),
             ], width="auto", className="d-flex align-items-end"),

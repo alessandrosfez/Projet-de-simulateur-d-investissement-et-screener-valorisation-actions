@@ -20,6 +20,12 @@ GRAPH_CONFIG = {
     ],
 }
 
+
+def icon_label(icon: str, text: str) -> list:
+    """Libellé de bouton précédé d'une icône Bootstrap Icons (feuille chargée dans app.py). L'icône
+    accompagne le texte, elle ne le remplace jamais."""
+    return [html.I(className=f"bi bi-{icon} me-1", **{"aria-hidden": "true"}), text]
+
 # Alignées à droite comme il est d'usage pour des valeurs numériques (les décimales s'alignent
 # d'une ligne à l'autre) ; Entreprise, Ticker, Secteur et Devise restent alignés à gauche.
 NUMERIC_TABLE_COLUMNS = [
@@ -67,6 +73,21 @@ COLUMN_WIDTHS = {
 }
 # Deux décimales, « N/A » pour une valeur manquante (jamais 0).
 NUMBER_FORMATTER = {"function": "params.value == null ? 'N/A' : d3.format('.2f')(params.value)"}
+
+# Squelette affiché pendant un calcul : la forme du contenu à venir (titre, lignes, bloc) plutôt
+# qu'un rond qui tourne. Animation dans assets/theme.css (.skeleton), aux couleurs du mode affiché
+# et figée si le système demande moins d'animations. delay_show : rien ne clignote pour un calcul
+# instantané.
+LOADING_PROPS = {
+    "custom_spinner": html.Div([
+        html.Div(className="skeleton-bar skeleton-title"),
+        html.Div(className="skeleton-bar"),
+        html.Div(className="skeleton-bar skeleton-short"),
+        html.Div(className="skeleton-block"),
+    ], className="skeleton", **{"aria-busy": "true"}),
+    "delay_show": 200,
+    "parent_className": "loading-area",
+}
 
 
 def stocks_column_defs(labels: dict[str, str], help_texts: dict[str, str]) -> list[dict]:
@@ -160,7 +181,7 @@ def build_tab3(lang, v=None):
             options=[{"label": f" {L(lang, f'universe_{code}')}", "value": code} for code in UNIVERSE_CODES],
             value=gv(v, "universe-checklist", ["cac40"]), labelStyle={"display": "block"}, className="mb-2",
         ),
-        dbc.Button(L(lang, "load_btn"), id="btn-load-stocks", color="primary", className="mb-2"),
+        dbc.Button(icon_label("cloud-arrow-down", L(lang, "load_btn")), id="btn-load-stocks", color="primary", className="mb-2"),
         # Avance par petits pas pendant que load_stock_valuations tourne (voir callbacks.py) :
         # un chargement à froid de tout un gros panier (plusieurs centaines de titres jamais mis
         # en cache) prend par nature une bonne minute (latence Yahoo Finance, hors de notre
@@ -185,7 +206,7 @@ def build_tab3(lang, v=None):
                 html.A(L(lang, "dcf_title"), href="#anchor-dcf", className="quick-nav-link"),
             ], className="quick-nav"),
 
-            dcc.Loading(type="circle", color="#636efa", children=[
+            dcc.Loading(**LOADING_PROPS, children=[
                 html.H5(L(lang, "sector_compare_title"), id="anchor-sector", className="section-title"),
                 dbc.Row([
                     dbc.Col(dcc.Graph(id="stocks-sector-bar", config=GRAPH_CONFIG), width=6),
@@ -197,7 +218,7 @@ def build_tab3(lang, v=None):
             html.Hr(),
             html.H5(L(lang, "pe_backtest_title"), className="section-title", id="anchor-pe-backtest"),
             html.P(L(lang, "pe_backtest_intro"), className="text-muted", style={"fontSize": "0.85rem"}),
-            dcc.Loading(type="circle", color="#636efa", children=[
+            dcc.Loading(**LOADING_PROPS, children=[
                 html.Div(id="pe-backtest-result", children=L(lang, "pe_backtest_hint_default")),
             ]),
 
@@ -265,7 +286,7 @@ def build_tab3(lang, v=None):
                 ),
             ], className="mb-3"),
 
-            dcc.Loading(type="circle", color="#636efa", children=[
+            dcc.Loading(**LOADING_PROPS, children=[
                 html.Div(id="stocks-top-cards"),
                 html.H5(L(lang, "pe_ratio_by_stock_title"), className="section-title"),
                 dcc.Graph(id="stocks-pe-chart", config=GRAPH_CONFIG),
@@ -331,7 +352,7 @@ def build_tab3(lang, v=None):
                 html.Div(id="dcf-result", children=L(lang, "dcf_hint_default"), className="text-muted mb-2"),
                 dcc.Graph(id="dcf-chart", config=GRAPH_CONFIG),
             ]),
-            dbc.Button(L(lang, "download_btn"), id="btn-download-stocks", color="secondary", size="sm", className="mt-2"),
+            dbc.Button(icon_label("filetype-csv", L(lang, "download_btn")), id="btn-download-stocks", color="secondary", size="sm", className="mt-2"),
         ]),
         dcc.Download(id="download-stocks"),
         dcc.Store(id="stocks-csv-store"),

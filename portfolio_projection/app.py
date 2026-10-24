@@ -96,8 +96,9 @@ for _dropdown_id in ("tab3-tx-ticker-input", "tab3-div-ticker-input", "tab3-weig
 # (update_tax_label(), toggle_etf_info()...) qui doivent déjà être enregistrés comme callbacks.
 app.layout = dbc.Container([
     html.Link(id="theme-stylesheet", rel="stylesheet", href=dbc.themes.DARKLY),
+    html.Link(rel="stylesheet", href=dbc.icons.BOOTSTRAP),
     dbc.Row([
-        dbc.Col(html.Div(layout.build_header_text("fr"), id="header-text-container"), width=9),
+        dbc.Col(html.Div(layout.build_header_text("fr"), id="header-text-container"), xs=12, md=9),
         dbc.Col([
             dbc.Label(L("fr", "lang_label"), id="lang-label", className="mb-0", style={"fontSize": "0.8rem"}),
             dcc.RadioItems(
@@ -122,11 +123,11 @@ app.layout = dbc.Container([
             # une nouvelle série à tout moment.
             html.Div(id="data-freshness-badge", className="mt-1"),
             dcc.Interval(id="data-freshness-interval", interval=60_000, n_intervals=0),
-        ], width=3),
+        ], xs=12, md=3, className="header-controls"),
     ], className="mt-2 align-items-start app-header"),
     dbc.Row([
-        dbc.Col(html.Div(layout.build_sidebar("fr", {}), id="sidebar-container"), width=3, id="sidebar-col", className="sidebar-panel"),
-        dbc.Col(html.Div(layout.build_tabs("fr", {}), id="tabs-container"), width=9, id="main-col"),
+        dbc.Col(html.Div(layout.build_sidebar("fr", {}), id="sidebar-container"), xs=12, lg=3, id="sidebar-col", className="sidebar-panel"),
+        dbc.Col(html.Div(layout.build_tabs("fr", {}), id="tabs-container"), xs=12, lg=9, id="main-col"),
     ]),
     html.Hr(className="mt-4"),
     html.Div(layout.build_footer("fr"), id="footer-container", className="text-center mb-2"),

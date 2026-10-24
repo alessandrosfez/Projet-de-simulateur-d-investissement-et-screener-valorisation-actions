@@ -190,3 +190,35 @@ a { color: var(--accent); }
 }
 [data-bs-theme="dark"] .DayPickerNavigation_button { background-color: var(--surface); }
 [data-bs-theme="dark"] .DayPickerNavigation_svg { fill: var(--Dash-Text-Primary, #e9ecef); }
+
+/* -------- Squelettes de chargement (layout.LOADING_PROPS) -------- */
+.skeleton { width: 100%; padding: 1rem 0.25rem; display: flex; flex-direction: column; gap: 0.6rem;
+            align-self: flex-start; }
+.skeleton-bar, .skeleton-block {
+    border-radius: 6px;
+    background: linear-gradient(90deg, var(--surface-2) 0%,
+                color-mix(in srgb, var(--surface-2) 50%, var(--border-soft)) 50%, var(--surface-2) 100%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.4s ease-in-out infinite;
+}
+/* Le squelette est posé en absolu sur la zone qui charge : une zone encore vide (première analyse)
+   lui réserve sa hauteur, sinon il recouvrirait la section suivante. */
+.loading-area:has(> .skeleton), .loading-area:has(.skeleton) { min-height: 260px; }
+.skeleton-bar { height: 12px; width: 92%; }
+.skeleton-title { height: 18px; width: 40%; }
+.skeleton-short { width: 64%; }
+.skeleton-block { height: 160px; width: 100%; }
+@keyframes skeleton-shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .skeleton-bar, .skeleton-block { animation: none; } }
+
+/* -------- Petits écrans (téléphone) -------- */
+/* Réglages (langue, palette, mode sombre) en une ligne qui passe à la ligne sous le titre, au lieu
+   d'une colonne étroite à droite ; barre d'outils Plotly masquée : sur un écran tactile étroit elle
+   recouvre le titre des graphiques, et le zoom au doigt reste disponible. */
+@media (max-width: 767.98px) {
+    .header-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 1rem; margin-top: 0.75rem; }
+    .header-controls > * { margin-bottom: 0 !important; }
+    .header-controls .dash-dropdown, .header-controls #palette-dropdown { min-width: 160px; }
+    .js-plotly-plot .modebar-container { display: none; }
+    h1 { font-size: 1.6rem; }
+}

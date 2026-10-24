@@ -56,8 +56,9 @@ app.clientside_callback(
 # un seul outil, tous ses contrôles sont dans le corps de la page ; pleine largeur.
 app.layout = dbc.Container([
     html.Link(id="theme-stylesheet", rel="stylesheet", href=dbc.themes.DARKLY),
+    html.Link(rel="stylesheet", href=dbc.icons.BOOTSTRAP),
     dbc.Row([
-        dbc.Col(html.Div(layout.build_header_text("fr"), id="header-text-container"), width=9),
+        dbc.Col(html.Div(layout.build_header_text("fr"), id="header-text-container"), xs=12, md=9),
         dbc.Col([
             dbc.Label(L("fr", "lang_label"), id="lang-label", className="mb-0", style={"fontSize": "0.8rem"}),
             dcc.RadioItems(
@@ -77,7 +78,7 @@ app.layout = dbc.Container([
                 id="dark-mode-switch", label=L("fr", "dark_mode_label"),
                 value=True, persistence=True, persistence_type="local",
             ),
-        ], width=3),
+        ], xs=12, md=3, className="header-controls"),
     ], className="mt-2 align-items-start app-header"),
     html.Div(layout.build_tab3("fr", {}), id="main-content-container"),
     html.Hr(className="mt-4"),

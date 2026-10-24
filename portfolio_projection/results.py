@@ -197,7 +197,7 @@ def build_metric_cards(all_metrics, series_by_strategy, apply_tax, tax_rate, lan
                 html.H6(label, className="card-subtitle text-muted mb-1"),
                 html.H5(f"{m['median']:,.0f} €".replace(",", " "), className="mb-1"),
                 html.P(f"{gain:+,.0f} €".replace(",", " "), className=f"text-{color} mb-1"),
-                html.Small(f"{L(lang, 'prob_gain_prefix')}{m['prob_gain']:.1f} %", className="text-muted"),
+                html.Small(f"{L(lang, 'prob_gain_prefix')}{_num(m['prob_gain'], '.1f', lang)} %", className="text-muted"),
             ]), className="h-100"), width=width, className="mb-2"))
         blocks.append(html.Div([html.H6(L(lang, f"schedule_{strat_name}"), className="mt-3"), dbc.Row(cards)]))
     return blocks
@@ -282,9 +282,9 @@ def build_metrics_outputs(all_metrics: dict, lang: str, lower_pct: float, upper_
         if fmt == "currency":
             display_df[col_label] = raw_df[col_label].map(lambda v: f"{v:,.0f} €".replace(",", " "))
         elif fmt == "percent":
-            display_df[col_label] = raw_df[col_label].map(lambda v: f"{v:.1f} %")
+            display_df[col_label] = raw_df[col_label].map(lambda v: f"{_num(v, '.1f', lang)} %")
         elif fmt == "ratio":
-            display_df[col_label] = raw_df[col_label].map(lambda v: f"{v:.2f}")
+            display_df[col_label] = raw_df[col_label].map(lambda v: _num(v, ".2f", lang))
 
     columns = [{"name": c, "id": c} for c in display_df.columns]
     table_data = display_df.to_dict("records")
@@ -327,11 +327,11 @@ def build_historique_metrics_outputs(historique_metrics: dict, lang: str):
     display_df = raw_df.copy()
     for _, col_label, fmt, _label_key in col_defs:
         if fmt == "percent":
-            display_df[col_label] = raw_df[col_label].map(lambda v: f"{v:.1f} %" if v is not None else "—")
+            display_df[col_label] = raw_df[col_label].map(lambda v: f"{_num(v, '.1f', lang)} %" if v is not None else "—")
         elif fmt == "ratio":
-            display_df[col_label] = raw_df[col_label].map(lambda v: f"{v:.2f}" if v is not None else "—")
+            display_df[col_label] = raw_df[col_label].map(lambda v: _num(v, ".2f", lang) if v is not None else "—")
         elif fmt == "years":
-            display_df[col_label] = raw_df[col_label].map(lambda v: f"{v:.1f}")
+            display_df[col_label] = raw_df[col_label].map(lambda v: _num(v, ".1f", lang))
 
     columns = [{"name": c, "id": c} for c in display_df.columns]
     table_data = display_df.to_dict("records")
@@ -431,7 +431,7 @@ def build_portfolio_totals_cards(totals: dict, lang: str, real_series=None, dark
 
     pnl = totals["pnl_eur"]
     direction = "up" if pnl >= 0 else "down"
-    pct_text = f"{totals['pnl_pct']:+.1f} %".replace(".", ",") if totals["pnl_pct"] is not None else ""
+    pct_text = f"{_num(totals['pnl_pct'], '+.1f', lang)} %" if totals["pnl_pct"] is not None else ""
     if lang != "fr":
         pct_text = pct_text.replace(",", ".")
     delta = html.Span([html.Span("▲" if pnl >= 0 else "▼"), html.Span(pct_text)], className=f"kpi-delta {direction}")
@@ -446,8 +446,14 @@ def build_portfolio_totals_cards(totals: dict, lang: str, real_series=None, dark
     return dbc.Row(tiles, className="g-3")
 
 
+def _num(value, spec: str, lang: str) -> str:
+    """Nombre décimal selon spec, virgule décimale en français (« +2,77 % », pas « +2.77 % »)."""
+    text = format(value, spec)
+    return text.replace(".", ",") if lang == "fr" else text
+
+
 def _pct_per_year(rate, lang):
-    return f"{rate * 100:+.2f} {L(lang, 'pct_per_year_unit')}" if rate is not None else "N/A"
+    return f"{_num(rate * 100, '+.2f', lang)} {L(lang, 'pct_per_year_unit')}" if rate is not None else "N/A"
 
 
 def _money(value, signed=False):
@@ -497,7 +503,7 @@ def build_performance_cards(perf: dict, lang: str):
     if twr is not None:
         cards.append(card(
             "metric_twr", "twr_help", _pct_per_year(twr["twr_annualized"], lang),
-            L(lang, "twr_cumulative_sub", pct=f"{twr['twr'] * 100:+.1f} %", years=f"{twr['n_years']:.1f}"),
+            L(lang, "twr_cumulative_sub", pct=f"{_num(twr['twr'] * 100, '+.1f', lang)} %", years=_num(twr['n_years'], '.1f', lang)),
             color=sign_color(twr["twr_annualized"]),
         ))
     else:
@@ -513,7 +519,7 @@ def build_performance_cards(perf: dict, lang: str):
               real=_money(real_value), diff=_money(real_value - bench_value, signed=True)),
         ))
         diff_text = (
-            L(lang, "benchmark_xirr_sub", diff=f"{(xirr_real - bench_xirr) * 100:+.2f}")
+            L(lang, "benchmark_xirr_sub", diff=_num((xirr_real - bench_xirr) * 100, "+.2f", lang))
             if xirr_real is not None and bench_xirr is not None else None
         )
         cards.append(card(
@@ -529,7 +535,7 @@ def build_pea_milestone_cards(milestones: dict, cap: dict, tax: dict, opening_is
     date_fmt = L(lang, "date_format")
 
     if milestones["is_mature"]:
-        maturity_sub = L(lang, "pea_mature_sub", years=f"{milestones['years_held']:.1f}")
+        maturity_sub = L(lang, "pea_mature_sub", years=_num(milestones['years_held'], '.1f', lang))
     else:
         days = milestones["days_remaining"]
         maturity_sub = L(lang, "pea_countdown_sub", days=days, years=days // 365, months=(days % 365) // 30)
@@ -549,7 +555,7 @@ def build_pea_milestone_cards(milestones: dict, cap: dict, tax: dict, opening_is
         cap_sub = L(lang, "pea_cap_remaining_sub", remaining=_money(cap["remaining"]))
     cap_card = _info_card(
         lang, "real_pea_cap_label", "real_pea_cap_help", f"{_money(cap['consumed'])} / {_money(cap['cap'])}", cap_sub,
-        extra=dbc.Progress(value=min(cap["pct"], 100), label=f"{cap['pct']:.1f} %", className="mb-1",
+        extra=dbc.Progress(value=min(cap["pct"], 100), label=f"{_num(cap['pct'], '.1f', lang)} %", className="mb-1",
                            style={"height": "14px"}),
         width=4,
     )
@@ -557,7 +563,7 @@ def build_pea_milestone_cards(milestones: dict, cap: dict, tax: dict, opening_is
     if tax["is_loss"]:
         tax_sub = L(lang, "latent_tax_loss_sub", gain=_money(tax["gain"], signed=True))
     else:
-        tax_sub = L(lang, "latent_tax_sub", rate=f"{tax['rate'] * 100:.1f}", gain=_money(tax["gain"], signed=True),
+        tax_sub = L(lang, "latent_tax_sub", rate=_num(tax['rate'] * 100, '.1f', lang), gain=_money(tax["gain"], signed=True),
                     net=_money(tax["net_value"]))
     rule_key = "latent_tax_rule_mature" if milestones["is_mature"] else "latent_tax_rule_early"
     tax_card = _info_card(
@@ -582,8 +588,8 @@ def build_rebalancing_table_data(rebalancing_df: pd.DataFrame, lang: str):
     rows = [
         {
             col_ticker: r["ticker"],
-            col_target: f"{r['target_pct']:.1f} %",
-            col_current: f"{r['current_pct']:.1f} %",
+            col_target: f"{_num(r['target_pct'], '.1f', lang)} %",
+            col_current: f"{_num(r['current_pct'], '.1f', lang)} %",
             col_value: f"{r['current_value_eur']:,.0f} €".replace(",", " "),
             col_delta: f"{r['delta_eur']:+,.0f} €".replace(",", " "),
         }

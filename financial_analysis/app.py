@@ -54,8 +54,9 @@ app.clientside_callback(
 # l'ordre d'exécution entre reconstruction et rendu.
 app.layout = dbc.Container([
     html.Link(id="theme-stylesheet", rel="stylesheet", href=dbc.themes.DARKLY),
+    html.Link(rel="stylesheet", href=dbc.icons.BOOTSTRAP),
     dbc.Row([
-        dbc.Col(html.Div(layout.build_header_text("fr"), id="header-text-container"), width=9),
+        dbc.Col(html.Div(layout.build_header_text("fr"), id="header-text-container"), xs=12, md=9),
         dbc.Col([
             dbc.Label(L("fr", "lang_label"), id="lang-label", className="mb-0", style={"fontSize": "0.8rem"}),
             dcc.RadioItems(
@@ -75,7 +76,7 @@ app.layout = dbc.Container([
                 id="dark-mode-switch", label=L("fr", "dark_mode_label"),
                 value=True, persistence=True, persistence_type="local",
             ),
-        ], width=3),
+        ], xs=12, md=3, className="header-controls"),
     ], className="mt-2 align-items-start app-header"),
     html.Div(layout.build_main("fr", {}), id="main-content-container"),
     dcc.Store(id="analysis-ticker-store"),
@@ -84,13 +85,13 @@ app.layout = dbc.Container([
     dcc.Store(id="adjustments-store", storage_type="session"),
     # Hors de results-container : le bouton d'export y est recréé à chaque rendu, le téléchargement non.
     dcc.Download(id="databook-download"),
-    dcc.Loading(type="circle", color="#636efa", children=[html.Div(id="results-container", className="px-3")]),
+    dcc.Loading(**layout.LOADING_PROPS, children=[html.Div(id="results-container", className="px-3")]),
     # Module Benford : ses contrôles sont reconstruits au changement de langue, mais le fichier importé
     # (benford-file-store) et le résultat (benford-result) restent hors de cette zone, pour ne jamais
     # perdre l'import ni dépendre de l'ordre d'exécution entre reconstruction et calcul.
     dcc.Store(id="benford-file-store"),
     html.Div(layout.build_benford("fr", {}, None), id="benford-container"),
-    dcc.Loading(type="circle", color="#636efa", children=[html.Div(id="benford-result", className="px-3")]),
+    dcc.Loading(**layout.LOADING_PROPS, children=[html.Div(id="benford-result", className="px-3")]),
     html.Hr(className="mt-4"),
     html.Div(layout.build_footer("fr"), id="footer-container", className="text-center mb-2"),
     dcc.Interval(id="resize-kick", interval=300, n_intervals=0, max_intervals=8),

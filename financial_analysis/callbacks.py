@@ -320,8 +320,8 @@ def _peers_section(regime: dict, lang: str) -> list:
     if regime["regime"] != "general":
         return section + [_not_applicable(regime, lang)]
     return section + [
-        dbc.Button(L(lang, "peers_btn"), id="peers-btn", color="secondary", outline=True, size="sm", className="mb-2"),
-        dcc.Loading(type="circle", color="#636efa", children=[html.Div(id="peers-container")]),
+        dbc.Button(layout.icon_label("people", L(lang, "peers_btn")), id="peers-btn", color="secondary", outline=True, size="sm", className="mb-2"),
+        dcc.Loading(**layout.LOADING_PROPS, children=[html.Div(id="peers-container")]),
     ]
 
 
@@ -621,7 +621,7 @@ def render_analysis(store, lang, dark_mode, palette_code, saved_store):
     # Couverture rappelée AVANT les analyses : toutes reposent sur ces ~4 exercices.
     return html.Div([
         card,
-        html.Div([dbc.Button(L(lang, "databook_btn"), id="databook-btn", color="primary", outline=True, size="sm")]
+        html.Div([dbc.Button(layout.icon_label("file-earmark-spreadsheet", L(lang, "databook_btn")), id="databook-btn", color="primary", outline=True, size="sm")]
                  + layout.info_tooltip("databook-info", L(lang, "databook_help")), className="mb-3"),
         *layout.analysis_alerts(profile, regime, market, consistency, lang),
         dbc.Alert(coverage, color="light", className="py-2"),
