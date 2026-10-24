@@ -33,6 +33,15 @@ appels `yfinance`) plutôt que du code partagé, pour que chacun reste
 indépendamment clonable et compréhensible : quand du code d'un outil sert
 à un autre, il est recopié et adapté, pas importé.
 
+Ils partagent aussi un thème visuel, recopié dans chaque dossier
+(`chart_theme.py`), pour se lire comme un seul ensemble :
+- **fonds de graphique transparents**, qui prennent la couleur de la carte
+  qui les contient ;
+- **police Inter**, grilles discrètes, infobulles aux couleurs des cartes ;
+- **palette « Défaut » validée** pour le contraste et le daltonisme, avec
+  une variante claire et une sombre. L'ancienne palette, celle de Plotly,
+  échouait au contrôle de luminance dans les deux modes.
+
 Aucun n'est un outil de prédiction ni un avis : chaque projection montre
 une bande de scénarios possibles, pas un chiffre garanti ; chaque
 estimation de valorisation dépend fortement des hypothèses choisies ;

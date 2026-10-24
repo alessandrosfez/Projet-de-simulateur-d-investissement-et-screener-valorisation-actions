@@ -17,7 +17,8 @@ from constants import BACKTEST_ANCHORS, PEA_CONTRIBUTION_CAP, TICKER_KEYS, TICKE
 from engine import (
     inject_shock, simulate_index_returns,
 )
-from i18n import L, PALETTE, PALETTES
+import chart_theme
+from i18n import L
 from market_data import (
     get_monthly_returns,
 )
@@ -100,15 +101,15 @@ def update_tab1(indices, source, lookback_years, horizon_years, view_mode, backt
                  cto_method, cto_tmi, compare_val, band_width, n_sims, seed, lang, palette_code, dark_mode,
                  objective_val, objective_amount, objective_percentile, *mu_overrides):
     lang = lang or "fr"
-    palette = PALETTES.get(palette_code, PALETTE)
     dark = bool(dark_mode)
+    palette = chart_theme.palette_for(palette_code, dark)
     view_mode = view_mode or "prevision"
     style_header, style_cell, style_data = layout.table_style_overrides(dark)
     trajectories_title = L(lang, "historique_trajectory_title") if view_mode == "historique" else L(lang, "trajectories_title")
     prog_container_style = {"display": "none"} if view_mode == "historique" else {"flex": "1", "minWidth": "0"}
     metrics_title = L(lang, "historique_metrics_title") if view_mode == "historique" else L(lang, "metrics_title")
     empty_fig = go.Figure()
-    empty_fig.update_layout(template="plotly_dark" if dark else "plotly")
+    empty_fig.update_layout(template=chart_theme.template(dark))
     if not indices:
         return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, {}, "",
                 dbc.Alert(L(lang, "tab1_warning_select_index"), color="warning"), {"display": "none"}, empty_fig,

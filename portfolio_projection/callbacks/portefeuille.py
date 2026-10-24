@@ -17,7 +17,8 @@ from constants import BACKTEST_ANCHORS, N_PORTFOLIOS_MAX, PEA_CONTRIBUTION_CAP, 
 from engine import (
     inject_shock, simulate_portfolio_asset_returns, suggest_optimal_weights,
 )
-from i18n import L, PALETTE, PALETTES
+import chart_theme
+from i18n import L
 from market_data import (
     get_aligned_returns,
 )
@@ -230,8 +231,8 @@ def update_tab2(n_portfolios, *args):
      lang, palette_code) = rest
     view_mode = view_mode or "prevision"
     lang = lang or "fr"
-    palette = PALETTES.get(palette_code, PALETTE)
     dark = bool(dark_mode)
+    palette = chart_theme.palette_for(palette_code, dark)
     style_header, style_cell, style_data = layout.table_style_overrides(dark)
     trajectories_title = L(lang, "historique_trajectory_title") if view_mode == "historique" else L(lang, "trajectories_title")
     prog_container_style = {"display": "none"} if view_mode == "historique" else {"flex": "1", "minWidth": "0"}
@@ -241,7 +242,7 @@ def update_tab2(n_portfolios, *args):
     weights_raw = [flat_weights[p * k:(p + 1) * k] for p in range(N_PORTFOLIOS_MAX)]
 
     empty_fig = go.Figure()
-    empty_fig.update_layout(template="plotly_dark" if dark else "plotly")
+    empty_fig.update_layout(template=chart_theme.template(dark))
     n_portfolios = int(n_portfolios or 1)
 
     universe = list(TICKERS.keys())

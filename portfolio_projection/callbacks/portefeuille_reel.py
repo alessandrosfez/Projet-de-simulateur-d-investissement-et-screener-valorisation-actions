@@ -22,7 +22,8 @@ from constants import PEA_TAX_RATE, STOCK_INDEX_KEY, UNDERLYING_INDICES, UNKNOWN
 from engine import (
     simulate_portfolio_asset_returns,
 )
-from i18n import L, PALETTE
+import chart_theme
+from i18n import L
 from market_data import (
     get_aligned_returns_for_tickers, get_current_price, get_instrument_profile,
     get_daily_price_history, get_daily_total_return_history, get_ticker_name, resolve_isin_to_ticker,
@@ -63,6 +64,8 @@ def _ticker_display_label(ticker: str) -> str:
 
 
 OTHER_SLICE_COLOR = "#9AA0A6"
+# Au-delà, un anneau devient illisible : les plus petites parts sont regroupées en « Autres ».
+MAX_DONUT_SLICES = 6
 LEGEND_LABEL_MAX = 42
 
 
@@ -72,16 +75,16 @@ def _allocation_view(current_values: pd.Series, total: float, unpriced: list, la
     change pas de couleur. Six couleurs dans la palette : au-delà de six lignes, les plus petites
     sont regroupées en « Autres » (gris)."""
     empty_fig = go.Figure()
-    empty_fig.update_layout(template="plotly_dark" if dark else "plotly")
+    empty_fig.update_layout(template=chart_theme.template(dark))
     notes = []
     if unpriced:
         notes.append(html.Div(L(lang, "allocation_unpriced", tickers=", ".join(unpriced))))
-    slices = portfolio_engine.allocation_slices(current_values, max_slices=len(PALETTE))
+    slices = portfolio_engine.allocation_slices(current_values, max_slices=MAX_DONUT_SLICES)
     if slices.empty:
         return empty_fig, notes or L(lang, "allocation_no_data")
     # Ordre alphabétique des seules parts affichées : jamais deux parts visibles de même couleur.
     shown = sorted(k for k in slices["key"] if k != portfolio_engine.OTHER_ALLOCATION_KEY)
-    color_of = {ticker: PALETTE[i] for i, ticker in enumerate(shown)}
+    color_of = {ticker: chart_theme.palette_for(None, dark)[i] for i, ticker in enumerate(shown)}
     labels, hover_names, colors = [], [], []
     for key in slices["key"]:
         if key == portfolio_engine.OTHER_ALLOCATION_KEY:
@@ -105,11 +108,11 @@ def _allocation_view(current_values: pd.Series, total: float, unpriced: list, la
 def _target_vs_actual_view(current_values: pd.Series, target_weights: pd.DataFrame, lang: str, dark: bool):
     """Anneaux cible (intérieur) / actuel (extérieur), seulement s'il y a des pondérations cibles et des
     lignes valorisées : sinon rien, le tableau de rééquilibrage affiche déjà la consigne."""
-    shares = portfolio_engine.target_vs_actual_shares(current_values, target_weights, max_slices=len(PALETTE))
+    shares = portfolio_engine.target_vs_actual_shares(current_values, target_weights, max_slices=MAX_DONUT_SLICES)
     if shares.empty:
         return None
     shown = sorted(k for k in shares["key"] if k != portfolio_engine.OTHER_ALLOCATION_KEY)
-    color_of = {ticker: PALETTE[i] for i, ticker in enumerate(shown)}
+    color_of = {ticker: chart_theme.palette_for(None, dark)[i] for i, ticker in enumerate(shown)}
     labels, hover_names, colors = [], [], []
     for key in shares["key"]:
         if key == portfolio_engine.OTHER_ALLOCATION_KEY:
@@ -144,7 +147,7 @@ def _index_view(current_values: pd.Series, held_tickers: list, lang: str, dark: 
     suivi par plusieurs lignes (doublon sans diversification), et tableau de correction (une ligne
     par ticker détenu, indice détecté automatiquement ou corrigé à la main)."""
     empty_fig = go.Figure()
-    empty_fig.update_layout(template="plotly_dark" if dark else "plotly")
+    empty_fig.update_layout(template=chart_theme.template(dark))
     dropdown = {"index_key": {"options": [{"label": _index_label(key, lang), "value": key}
                                           for key in (*UNDERLYING_INDICES, STOCK_INDEX_KEY, UNKNOWN_INDEX_KEY)]}}
     if not held_tickers:
@@ -159,11 +162,11 @@ def _index_view(current_values: pd.Series, held_tickers: list, lang: str, dark: 
     exposure = portfolio_engine.exposure_by_index(current_values, index_of)
     if exposure.empty:
         return empty_fig, [], rows, dropdown
-    slices = portfolio_engine.allocation_slices(exposure.set_index("key")["value"], max_slices=len(PALETTE))
+    slices = portfolio_engine.allocation_slices(exposure.set_index("key")["value"], max_slices=MAX_DONUT_SLICES)
     tickers_of = dict(zip(exposure["key"], exposure["tickers"]))
     special = (UNKNOWN_INDEX_KEY, portfolio_engine.OTHER_ALLOCATION_KEY)
     shown = sorted(k for k in slices["key"] if k not in special)
-    color_of = {key: PALETTE[i] for i, key in enumerate(shown)}
+    color_of = {key: chart_theme.palette_for(None, dark)[i] for i, key in enumerate(shown)}
     labels = [_index_label(k, lang) for k in slices["key"]]
     hover = [f"{_index_label(k, lang)} : {', '.join(tickers_of.get(k, []))}" if k in tickers_of else _index_label(k, lang)
              for k in slices["key"]]
@@ -550,7 +553,7 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
         )
 
     empty_fig = go.Figure()
-    empty_fig.update_layout(template="plotly_dark" if dark else "plotly")
+    empty_fig.update_layout(template=chart_theme.template(dark))
     real_vs_sim_fig = empty_fig
     projection_fig = empty_fig
     corr_fig = empty_fig
@@ -591,7 +594,7 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
                 projection_fig = build_real_portfolio_future_figure(
                     portfolio_returns_forward, current_value_total, monthly_pace,
                     annual_fee_pct=annual_fee_pct or 0.0, apply_tax=apply_tax, tax_rate=PEA_TAX_RATE,
-                    lower_pct=10, upper_pct=90, lang=lang, palette=PALETTE, dark=dark,
+                    lower_pct=10, upper_pct=90, lang=lang, palette=chart_theme.palette_for(None, dark), dark=dark,
                 )
 
                 if not monthly_amounts.empty:
@@ -602,7 +605,7 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
                     portfolio_returns = asset_returns @ weights_vec
                     real_vs_sim_fig = build_real_vs_simulated_figure(
                         portfolio_returns, monthly_amounts.values, monthly_amounts.index, real_series,
-                        annual_fee_pct=0.0, lower_pct=10, upper_pct=90, lang=lang, palette=PALETTE, dark=dark,
+                        annual_fee_pct=0.0, lower_pct=10, upper_pct=90, lang=lang, palette=chart_theme.palette_for(None, dark), dark=dark,
                     )
         elif not real_series.empty:
             # Historique insuffisant pour aligner tous les tickers détenus (voir
@@ -610,7 +613,7 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
             # plutôt que rien, la comparaison simulée n'étant qu'un complément.
             real_vs_sim_fig.add_trace(go.Scatter(
                 x=real_series.index, y=real_series.values, mode="lines",
-                name=L(lang, "real_equity_trace"), line=dict(color=PALETTE[0], width=2),
+                name=L(lang, "real_equity_trace"), line=dict(color=chart_theme.palette_for(None, dark)[0], width=2),
             ))
             real_vs_sim_fig.update_layout(
                 title=dict(text=L(lang, "real_vs_simulated_chart_title"), font=dict(size=14)),

@@ -12,6 +12,7 @@ from constants import TICKERS
 from engine import (
     summarize_calibration, walk_forward_calibration,
 )
+import chart_theme
 from i18n import L, PALETTE
 from market_data import (
     get_monthly_returns,
@@ -55,7 +56,7 @@ def run_model_validation(n_clicks, index_name, source, horizon_months, step_mont
     lang = lang or "fr"
     dark = bool(dark_mode)
     empty_fig = go.Figure()
-    empty_fig.update_layout(template="plotly_dark" if dark else "plotly")
+    empty_fig.update_layout(template=chart_theme.template(dark))
 
     ticker = TICKERS[index_name][source or "indice"]
     try:

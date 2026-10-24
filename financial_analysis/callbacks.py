@@ -29,7 +29,8 @@ from engine import (
     piotroski_f_score, price_on_or_before, regime_from_import, sloan_accruals, split_currency_unit,
     statements_csv_template, transaction_multiples, working_capital_days,
 )
-from i18n import L, PALETTE, PALETTE_CODES, PALETTE_NAMES, PALETTES
+import chart_theme
+from i18n import L, PALETTE_CODES, PALETTE_NAMES
 from market_data import fx_symbol, get_annual_statements, get_company_profile, get_daily_closes, get_fx_rate
 
 EARNINGS_QUALITY_METRICS = ("cfo_to_net_income", "fcf_to_net_income", "sloan_accruals")
@@ -508,7 +509,7 @@ app.callback(
 def render_analysis(store, lang, dark_mode, palette_code, saved_store):
     lang = lang or "fr"
     dark = bool(dark_mode)
-    palette = PALETTES.get(palette_code, PALETTE)
+    palette = chart_theme.palette_for(palette_code, dark)
     if not store:
         return html.Div(L(lang, "results_placeholder"), className="text-muted")
     ctx = _load_context(store)
@@ -586,7 +587,7 @@ def update_bridge(year_value, lang, dark_mode, palette_code, store):
     figure = make_bridge_waterfall(
         bridge["steps"], bridge["cfo"], labels, L(lang, "bridge_cfo"),
         L(lang, "bridge_title", year=layout.format_year(year, lang)),
-        lambda value: layout.format_amount(value, lang), dark=dark, palette=PALETTES.get(palette_code, PALETTE),
+        lambda value: layout.format_amount(value, lang), dark=dark, palette=chart_theme.palette_for(palette_code, dark),
     )
     notes = [html.Div(L(lang, f"flag_{flag}")) for flag in bridge["flags"]]
     if bridge["missing_items"]:
@@ -654,7 +655,7 @@ def store_benford_file(contents, filename, lang):
 def update_benford(source, column, sign, min_amount, file_store, analysis_store, lang, dark_mode, palette_code):
     lang = lang or "fr"
     dark = bool(dark_mode)
-    palette = PALETTES.get(palette_code, PALETTE)
+    palette = chart_theme.palette_for(palette_code, dark)
     min_amount = float(min_amount) if min_amount is not None else DEFAULT_BENFORD_MIN_AMOUNT
     if source == "statements":
         ctx = _load_context(analysis_store)

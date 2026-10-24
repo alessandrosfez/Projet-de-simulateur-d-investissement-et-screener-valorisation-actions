@@ -3,13 +3,15 @@ Constructeurs de graphiques Plotly, indépendants de Dash (pas de callback ici).
 """
 import plotly.graph_objects as go
 
+import chart_theme
+
 
 def empty_figure_with_message(message: str, dark: bool = False) -> go.Figure:
     """Graphique vide avec un message centré, pour un état 'pas encore de données' propre
     plutôt qu'une grille vide qui ressemble à une erreur."""
     fig = go.Figure()
     fig.update_layout(
-        template="plotly_dark" if dark else "plotly",
+        template=chart_theme.template(dark),
         xaxis=dict(visible=False), yaxis=dict(visible=False),
         annotations=[dict(
             text=message, xref="paper", yref="paper", x=0.5, y=0.5,

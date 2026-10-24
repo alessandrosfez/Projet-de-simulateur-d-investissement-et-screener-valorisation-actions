@@ -16,6 +16,7 @@ from engine import (
     summarize_historique, to_display_values, withdrawal_schedule,
 )
 from charts import make_actual_vs_simulated_figure, make_band_figure
+import chart_theme
 from i18n import L, PALETTE
 
 
@@ -233,7 +234,7 @@ def build_envelope_comparison_figure(items, pea_schedules, cto_schedules, annual
     fig.add_trace(go.Bar(name=L(lang, "pea_trace_label", rate=PEA_TAX_RATE * 100), x=labels, y=pea_values, marker_color=palette[0]))
     fig.add_trace(go.Bar(name=L(lang, "cto_trace_label", rate=cto_tax_rate * 100), x=labels, y=cto_values, marker_color=palette[1 % len(palette)]))
     fig.update_layout(
-        template="plotly_dark" if dark else "plotly",
+        template=chart_theme.template(dark),
         title=L(lang, "envelope_compare_title"),
         barmode="group", xaxis_title="", yaxis_title=L(lang, "value_axis"),
         margin=dict(t=60, b=120), xaxis=dict(tickangle=-30),

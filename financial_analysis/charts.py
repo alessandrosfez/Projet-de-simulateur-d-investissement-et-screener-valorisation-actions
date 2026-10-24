@@ -4,6 +4,8 @@ résultats déjà calculés par engine.py et des libellés déjà traduits : auc
 """
 import plotly.graph_objects as go
 
+import chart_theme
+
 
 def make_bridge_waterfall(steps: list[dict], cfo: float, labels: dict[str, str], cfo_label: str, title: str,
                           value_formatter, dark: bool = False, palette=None) -> go.Figure:
@@ -24,7 +26,7 @@ def make_bridge_waterfall(steps: list[dict], cfo: float, labels: dict[str, str],
         hovertemplate="%{x}<br>%{text}<extra></extra>",
     ))
     fig.update_layout(
-        template="plotly_dark" if dark else "plotly", title=title, showlegend=False,
+        template=chart_theme.template(dark), title=title, showlegend=False,
         margin=dict(t=60, b=40), yaxis=dict(showticklabels=False),
     )
     return fig
@@ -48,7 +50,7 @@ def make_benford_chart(observed: dict[int, float], expected: dict[int, float], l
         hovertemplate=f"{labels['digit']} %{{x}} : %{{y:.1f}} %<extra>{labels['expected']}</extra>",
     ))
     fig.update_layout(
-        template="plotly_dark" if dark else "plotly", title=title, xaxis=dict(title=labels["digit"], dtick=1),
+        template=chart_theme.template(dark), title=title, xaxis=dict(title=labels["digit"], dtick=1),
         yaxis_title=labels["frequency"], margin=dict(t=60), legend=dict(orientation="h", y=-0.2),
         separators=separators,
     )
@@ -71,7 +73,7 @@ def make_working_capital_days_chart(years: list, series: dict[str, list], labels
             hovertemplate=f"{labels[metric]} : %{{y:.0f}}<extra></extra>",
         ))
     fig.update_layout(
-        template="plotly_dark" if dark else "plotly", title=title, yaxis_title=y_title,
+        template=chart_theme.template(dark), title=title, yaxis_title=y_title,
         margin=dict(t=60), hovermode="x unified", xaxis=dict(type="category"), separators=separators,
     )
     return fig
@@ -82,7 +84,7 @@ def empty_figure_with_message(message: str, dark: bool = False) -> go.Figure:
     plutôt qu'une grille vide qui ressemble à une erreur. Recopié de stock_valuation."""
     fig = go.Figure()
     fig.update_layout(
-        template="plotly_dark" if dark else "plotly",
+        template=chart_theme.template(dark),
         xaxis=dict(visible=False), yaxis=dict(visible=False),
         annotations=[dict(
             text=message, xref="paper", yref="paper", x=0.5, y=0.5,

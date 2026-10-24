@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 
+import chart_theme
 from i18n import L, PALETTE
 
 
@@ -22,7 +23,7 @@ def make_correlation_heatmap(corr: pd.DataFrame, lang="fr", dark: bool = False):
         text=np.round(z, 2), texttemplate="%{text}",
     ))
     fig.update_layout(
-        template="plotly_dark" if dark else "plotly",
+        template=chart_theme.template(dark),
         title=L(lang, "corr_chart_title"), margin=dict(t=40, l=10, r=10),
     )
     return fig
@@ -34,7 +35,7 @@ def make_allocation_donut(labels: list, values: list, hover_names: list, colors:
     horaire depuis midi), pourcentage inscrit dans les parts assez grandes, nom complet, montant et
     part au survol, total au centre. Fin liseré de la couleur du fond entre les parts, pour que deux
     parts voisines restent distinctes même de teintes proches."""
-    surface = "#111111" if dark else "#FFFFFF"
+    surface = chart_theme.surface_color(dark)
     fig = go.Figure(go.Pie(
         labels=labels, values=values, customdata=hover_names, hole=0.58, sort=False, direction="clockwise",
         marker=dict(colors=colors, line=dict(color=surface, width=2)),
@@ -42,7 +43,7 @@ def make_allocation_donut(labels: list, values: list, hover_names: list, colors:
         hovertemplate=f"%{{customdata}}<br>%{{value:,.0f}} {value_suffix}<br>%{{percent:.1%}}<extra></extra>",
     ))
     fig.update_layout(
-        template="plotly_dark" if dark else "plotly", title=dict(text=title, font=dict(size=14)),
+        template=chart_theme.template(dark), title=dict(text=title, font=dict(size=14)),
         annotations=[dict(text=center_text, x=0.5, y=0.5, showarrow=False, font=dict(size=15))],
         legend=dict(font=dict(size=11)), uniformtext=dict(minsize=10, mode="hide"),
         margin=dict(t=60, b=20, l=20, r=20), separators=separators,
@@ -56,7 +57,7 @@ def make_target_vs_actual_rings(labels: list, actual: list, target: list, hover_
     """Deux anneaux concentriques aux mêmes couleurs : extérieur = répartition actuelle, intérieur =
     répartition cible. Un écart se lit comme un décalage entre les deux anneaux d'une même couleur.
     La légende, partagée par libellé, n'apparaît qu'une fois."""
-    surface = "#111111" if dark else "#FFFFFF"
+    surface = chart_theme.surface_color(dark)
     common = dict(labels=labels, customdata=hover_names, sort=False, direction="clockwise",
                   marker=dict(colors=colors, line=dict(color=surface, width=2)),
                   texttemplate="%{percent:.0%}", textposition="inside", insidetextorientation="horizontal")
@@ -68,7 +69,7 @@ def make_target_vs_actual_rings(labels: list, actual: list, target: list, hover_
                showlegend=False, **common),
     ])
     fig.update_layout(
-        template="plotly_dark" if dark else "plotly", title=dict(text=title, font=dict(size=14)),
+        template=chart_theme.template(dark), title=dict(text=title, font=dict(size=14)),
         annotations=[dict(text=center_text, x=0.5, y=0.5, showarrow=False, font=dict(size=12))],
         legend=dict(font=dict(size=11)), uniformtext=dict(minsize=9, mode="hide"),
         margin=dict(t=60, b=20, l=20, r=20), separators=separators,
@@ -113,7 +114,7 @@ def make_band_figure(series, years_axis, title, lang="fr", palette=None, investe
             fig.add_vline(x=phase_boundary_years, line_dash="dot", line_color="gray",
                           annotation_text=L(lang, "withdrawal_start_annotation"), annotation_position="top")
     fig.update_layout(
-        template="plotly_dark" if dark else "plotly",
+        template=chart_theme.template(dark),
         title=dict(text=title, font=dict(size=14)),
         xaxis_title=L(lang, "date_axis") if view_mode == "historique" else L(lang, "years_axis"),
         yaxis_title=L(lang, "value_axis_base100") if view_mode == "historique" else L(lang, "value_axis"),
@@ -149,7 +150,7 @@ def make_actual_vs_simulated_figure(real_dates, real_values, sim_dates, sim_medi
                               name=L(lang, "invested_capital_trace"),
                               line=dict(color="gray", dash="dot")))
     fig.update_layout(
-        template="plotly_dark" if dark else "plotly",
+        template=chart_theme.template(dark),
         title=dict(text=L(lang, "real_vs_simulated_chart_title"), font=dict(size=14)),
         xaxis_title=L(lang, "date_axis"), yaxis_title=L(lang, "value_axis"),
         hovermode="x unified", legend=dict(font=dict(size=9)), margin=dict(t=60),
@@ -177,7 +178,7 @@ def make_pit_histogram(pit_values, title, lang="fr", palette=None, dark: bool = 
             annotation_text=L(lang, "pit_expected_uniform_line"), annotation_position="top left",
         )
     fig.update_layout(
-        template="plotly_dark" if dark else "plotly",
+        template=chart_theme.template(dark),
         title=dict(text=title, font=dict(size=14)),
         xaxis_title=L(lang, "pit_x_axis"), yaxis_title=L(lang, "pit_y_axis"),
         bargap=0.05, margin=dict(t=60),
@@ -201,7 +202,7 @@ def make_sequence_risk_figure(shock_years, final_values, invested_capital, lang=
     fig.add_hline(y=invested_capital, line_dash="dash", line_color="gray",
                   annotation_text=L(lang, "invested_capital_trace"), annotation_position="top left")
     fig.update_layout(
-        template="plotly_dark" if dark else "plotly",
+        template=chart_theme.template(dark),
         title=L(lang, "sequence_risk_chart_title"),
         xaxis_title=L(lang, "sequence_risk_x_axis"),
         yaxis_title=L(lang, "value_axis"),

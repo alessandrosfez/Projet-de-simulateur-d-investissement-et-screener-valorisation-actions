@@ -23,7 +23,8 @@ from engine import (
     compute_comparables_fair_value, compute_dcf_sensitivity_grid, compute_scenario_dcf_fair_values,
     max_drawdown, pe_signal_forward_returns, sharpe_ratio, summarize_pe_signal_backtest,
 )
-from i18n import L, PALETTE, PALETTE_CODES, PALETTE_NAMES, PALETTES
+import chart_theme
+from i18n import L, PALETTE_CODES, PALETTE_NAMES
 from market_data import (
     get_dcf_inputs, get_stock_pe_history, get_stock_price_history, get_stock_quality_metrics, get_stock_valuation,
     major_currency,
@@ -295,8 +296,8 @@ def render_pe_backtest(rows, lang):
 def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, watchlist_tickers, watchlist_only,
                         lang, palette_code, dark_mode):
     lang = lang or "fr"
-    palette = PALETTES.get(palette_code, PALETTE)
     dark = bool(dark_mode)
+    palette = chart_theme.palette_for(palette_code, dark)
     style_header, style_cell, style_data = layout.table_style_overrides(dark)
     conditional_style = (
         layout.peg_conditional_style(dark) + layout.pe_history_conditional_style(dark)
@@ -372,7 +373,7 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
             x=sector_means.index, y=sector_means.values, marker_color=palette[1 % len(palette)],
         ))
         sector_bar.update_layout(
-            template="plotly_dark" if dark else "plotly",
+            template=chart_theme.template(dark),
             title=L(lang, "sector_avg_pe_title"), xaxis_title="", yaxis_title=L(lang, "axis_pe_avg"),
             margin=dict(t=60, b=100), xaxis=dict(tickangle=-45),
         )
@@ -395,7 +396,7 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
                 hovertemplate="<b>%{text}</b><br>P/E : %{y:.1f}<extra></extra>",
             ))
         sector_box.update_layout(
-            template="plotly_dark" if dark else "plotly",
+            template=chart_theme.template(dark),
             title=L(lang, "sector_dist_pe_title"), showlegend=False, yaxis_title="P/E",
             # Échelle log : un seul P/E extrême (voir ci-dessus) écrase sinon visuellement toutes
             # les autres boîtes près de zéro, rendant leur survol imprécis (cible de quelques
@@ -478,7 +479,7 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
             annotation_text=L(lang, "basket_avg_annotation"), annotation_position="top left",
         )
     fig.update_layout(
-        template="plotly_dark" if dark else "plotly",
+        template=chart_theme.template(dark),
         title=L(lang, "pe_by_stock_chart_title"),
         xaxis_title="", yaxis_title="P/E",
         margin=dict(t=60, b=120), xaxis=dict(tickangle=-60),
@@ -535,8 +536,8 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
 )
 def update_pe_history_chart(selected_rows, lang, palette_code, dark_mode, virtual_data):
     lang = lang or "fr"
-    palette = PALETTES.get(palette_code, PALETTE)
     dark = bool(dark_mode)
+    palette = chart_theme.palette_for(palette_code, dark)
     if not selected_rows or not virtual_data:
         return empty_figure_with_message(L(lang, "history_hint_default"), dark=dark), ""
 
@@ -565,7 +566,7 @@ def update_pe_history_chart(selected_rows, lang, palette_code, dark_mode, virtua
             annotation_text=L(lang, "history_current_annotation"), annotation_position="bottom left",
         )
     fig.update_layout(
-        template="plotly_dark" if dark else "plotly",
+        template=chart_theme.template(dark),
         title=L(lang, "history_chart_title", name=name),
         xaxis_title="", yaxis_title="P/E", margin=dict(t=60),
     )
@@ -712,8 +713,8 @@ def update_dcf(selected_rows, growth_pct, discount_pct, terminal_growth_pct, hor
                 growth_offset_pct, discount_offset_pct, weight_bear, weight_base, weight_bull,
                 lang, palette_code, dark_mode, virtual_data):
     lang = lang or "fr"
-    palette = PALETTES.get(palette_code, PALETTE)
     dark = bool(dark_mode)
+    palette = chart_theme.palette_for(palette_code, dark)
     empty_fig = empty_figure_with_message("", dark=dark)
     if not selected_rows or not virtual_data:
         return L(lang, "dcf_hint_default"), empty_fig
@@ -997,7 +998,7 @@ def update_dcf(selected_rows, growth_pct, discount_pct, terminal_growth_pct, hor
     fig = go.Figure()
     fig.add_trace(go.Bar(x=bar_labels, y=bar_values, marker_color=bar_colors))
     fig.update_layout(
-        template="plotly_dark" if dark else "plotly",
+        template=chart_theme.template(dark),
         title=L(lang, "dcf_chart_title", name=name), yaxis_title=currency, margin=dict(t=60),
     )
     return card, fig
