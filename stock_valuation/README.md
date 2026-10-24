@@ -16,6 +16,11 @@ d'un plan d'épargne), indépendant de celui-ci.
   DAX 40, FTSE 100 (sélection) et un échantillon de grandes capitalisations
   américaines, avec position de chaque titre vs son propre P/E historique
   sur 5 ans (un signal souvent plus parlant que la comparaison sectorielle).
+- **Tableau de criblage AG Grid** (`dash-ag-grid`) : tri et redimensionnement
+  des colonnes, colonne Entreprise figée, sélection d'une ligne par case ou
+  clic, définition de chaque indicateur au survol de son en-tête, couleurs
+  qui suivent le mode sombre. Une valeur manquante s'affiche N/A et n'est
+  jamais coloriée.
 - **DCF** (flux de trésorerie actualisés) : FCF de départ moyenné sur les
   3 derniers exercices clos plutôt que le seul FCF sur 12 mois glissants,
   avec avertissement explicite (plutôt qu'un chiffre trompeur) si le FCF
@@ -140,7 +145,8 @@ L'application est servie sur [http://localhost:8051](http://localhost:8051)
   Aucune dépendance Dash/réseau.
 - `charts.py` : constructeur de graphique Plotly (état "pas encore de données").
 - `layout.py` : construction de l'écran unique (pas de sidebar : un seul
-  outil, tous ses contrôles sont dans le corps de la page).
+  outil, tous ses contrôles sont dans le corps de la page) et colonnes du
+  tableau de criblage (formats, couleurs conditionnelles, `test_layout.py`).
 - `app_instance.py` / `callbacks.py` / `app.py` : instance Dash, callbacks, point d'entrée.
 
 ## Tests

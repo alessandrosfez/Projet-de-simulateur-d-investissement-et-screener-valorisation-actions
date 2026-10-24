@@ -31,6 +31,10 @@ from market_data import (
     major_currency,
 )
 
+# Hauteur du tableau de criblage : en-tête (libellés sur deux ou trois lignes) puis lignes du thème
+# AG Grid, en pixels.
+GRID_HEADER_PX, GRID_ROW_PX = 96, 42
+
 # ============================================================
 # Habillage global (langue, palette, thème) : identique dans l'esprit à
 # portfolio_projection, mais reconstruit ici son propre sous-ensemble de
@@ -273,13 +277,9 @@ def render_pe_backtest(rows, lang):
     Output("stocks-sector-box", "figure"),
     Output("stocks-top-cards", "children"),
     Output("stocks-pe-chart", "figure"),
-    Output("stocks-table", "data"),
-    Output("stocks-table", "columns"),
-    Output("stocks-table", "style_header"),
-    Output("stocks-table", "style_cell"),
-    Output("stocks-table", "style_data"),
-    Output("stocks-table", "style_data_conditional"),
-    Output("stocks-table", "tooltip_header"),
+    Output("stocks-table", "rowData"),
+    Output("stocks-table", "columnDefs"),
+    Output("stocks-table", "style"),
     Output("stocks-csv-store", "data"),
     Output("stocks-results-container", "style"),
     Input("stocks-raw-store", "data"),
@@ -299,11 +299,6 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
     lang = lang or "fr"
     dark = bool(dark_mode)
     palette = chart_theme.palette_for(palette_code, dark)
-    style_header, style_cell, style_data = layout.table_style_overrides(dark)
-    conditional_style = (
-        layout.peg_conditional_style(dark) + layout.pe_history_conditional_style(dark)
-        + layout.score_conditional_style(dark)
-    )
     column_label_keys = {
         "Entreprise": "col_company", "Ticker": "col_ticker", "Score": "col_score", "Secteur": "col_sector",
         "Devise": "col_currency", "Prix": "col_price", "P/E (trailing)": "col_pe_trailing",
@@ -311,22 +306,18 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
         "Rendement dividende (%)": "col_div_yield", "P/E moyen 5 ans (approx.)": "col_pe_5y_mean",
         "Position vs historique 5 ans (percentile)": "col_pe_5y_pct", "Capitalisation": "col_market_cap",
     }
-    # tooltip_header est indexé par id de colonne (le nom technique interne, pas le libellé
-    # affiché) : survol d'un en-tête -> définition/formule. Seules les colonnes avec une clé
-    # "..._help" dans i18n.py en ont un (L() retombe sur la clé elle-même si absente, d'où le
-    # test d'égalité pour ne garder que les traductions qui existent vraiment). Construit ici
-    # (dépend seulement de lang, pas des données chargées) pour être disponible même dans la
-    # branche "rien à afficher" juste en dessous.
-    tooltip_header = {}
+    # Infobulle d'en-tête indexée par colonne interne : survol d'un en-tête -> définition/formule.
+    # Seules les colonnes avec une clé "..._help" dans i18n.py en ont une (L() retombe sur la clé
+    # elle-même si absente, d'où le test d'égalité).
+    help_texts = {}
     for c, label_key in column_label_keys.items():
         help_key = f"{label_key}_help"
         help_text = L(lang, help_key)
         if help_text != help_key:
-            tooltip_header[c] = {"type": "text", "value": help_text}
+            help_texts[c] = help_text
     if not rows:
         placeholder = empty_figure_with_message(L(lang, "load_hint_placeholder"), dark=dark)
-        return (placeholder, placeholder, "", placeholder, [], [], style_header, style_cell, style_data, conditional_style,
-                tooltip_header, "", {"display": "none"})
+        return (placeholder, placeholder, "", placeholder, [], [], {"height": "70vh"}, "", {"display": "none"})
 
     # Noms de colonnes internes gardés stables (français) : ce sont des clés de travail, pas du
     # texte affiché : seul le libellé de colonne du tableau final ("name") est traduit plus bas.
@@ -506,43 +497,38 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
         table_df[col] = table_df[col].round(2)
     table_df = table_df.sort_values("P/E (trailing)")
 
-    columns = [{"name": L(lang, column_label_keys.get(c, c)), "id": c} for c in table_df.columns]
+    column_defs = layout.stocks_column_defs(
+        {c: L(lang, column_label_keys.get(c, c)) for c in table_df.columns}, help_texts,
+    )
     csv_data = table_df.to_csv(index=False)
-    # Colonne technique, absente de `columns` donc jamais affichée, mais présente dans `data` :
-    # dash_table l'utilise quand même pour évaluer le filter_query de pe_history_conditional_style.
-    # Nécessaire parce que ce filter_query ne peut pas tester directement "valeur manquante" (voir
-    # layout.pe_history_conditional_style) : un NaN substitué par 50 (ni < 20 ni > 80) retombe
-    # naturellement dans la zone neutre non coloriée, sans fausse coloration verte/rouge.
-    table_df["_pe_pct_for_style"] = table_df["Position vs historique 5 ans (percentile)"].fillna(50)
-    # Même raisonnement pour le Score composite (voir layout.score_conditional_style) : un N/A
-    # (aucun des 3 piliers disponible) retombe dans la bande neutre (40-70) plutôt que faussement
-    # vert ou rouge.
-    table_df["_score_for_style"] = table_df["Score"].fillna(50)
-    # NaN -> None : sinon un JSON NaN (invalide) part vers le DataTable et s'affiche mal.
+    # NaN -> None : un NaN JSON est invalide ; None s'affiche « N/A » et n'est jamais colorié.
     table_df = table_df.astype(object).where(pd.notnull(table_df), None)
+    # Hauteur ajustée au nombre de lignes, plafonnée à 70 % de l'écran (au-delà, défilement interne
+    # avec en-tête et première colonne figés) : un filtre qui ne garde que 3 titres ne laisse pas un
+    # grand cadre vide.
+    grid_style = {"height": f"min(70vh, {GRID_HEADER_PX + GRID_ROW_PX * max(len(table_df), 1)}px)"}
 
-    return (sector_bar, sector_box, cards_row, fig, table_df.to_dict("records"), columns,
-            style_header, style_cell, style_data, conditional_style, tooltip_header, csv_data,
-            {"display": "block"})
+    return (sector_bar, sector_box, cards_row, fig, table_df.to_dict("records"), column_defs, grid_style,
+            csv_data, {"display": "block"})
 
 
 @app.callback(
     Output("stocks-pe-history-chart", "figure"),
     Output("stocks-pe-history-title", "children"),
-    Input("stocks-table", "derived_virtual_selected_rows"),
+    Input("stocks-table", "selectedRows"),
     Input("lang-radio", "value"),
     Input("palette-dropdown", "value"),
     Input("dark-mode-switch", "value"),
-    State("stocks-table", "derived_virtual_data"),
+    State("stocks-table", "rowData"),
 )
-def update_pe_history_chart(selected_rows, lang, palette_code, dark_mode, virtual_data):
+def update_pe_history_chart(selected_rows, lang, palette_code, dark_mode, grid_rows):
     lang = lang or "fr"
     dark = bool(dark_mode)
     palette = chart_theme.palette_for(palette_code, dark)
-    if not selected_rows or not virtual_data:
+    if not selected_rows or not grid_rows:
         return empty_figure_with_message(L(lang, "history_hint_default"), dark=dark), ""
 
-    row = virtual_data[selected_rows[0]]
+    row = selected_rows[0]
     ticker, name = row["Ticker"], row["Entreprise"]
     pe_series = get_stock_pe_history(ticker)
     if pe_series.empty:
@@ -614,16 +600,16 @@ def update_dcf_scenario_weights_caption(weight_bear, weight_base, weight_bull, l
 
 @app.callback(
     Output("quality-metrics-card", "children"),
-    Input("stocks-table", "derived_virtual_selected_rows"),
+    Input("stocks-table", "selectedRows"),
     Input("lang-radio", "value"),
-    State("stocks-table", "derived_virtual_data"),
+    State("stocks-table", "rowData"),
 )
-def update_quality_metrics(selected_rows, lang, virtual_data):
+def update_quality_metrics(selected_rows, lang, grid_rows):
     lang = lang or "fr"
-    if not selected_rows or not virtual_data:
+    if not selected_rows or not grid_rows:
         return html.Div(L(lang, "quality_hint_default"), className="text-muted")
 
-    row = virtual_data[selected_rows[0]]
+    row = selected_rows[0]
     ticker = row["Ticker"]
     m = get_stock_quality_metrics(ticker)
 
@@ -651,16 +637,16 @@ def update_quality_metrics(selected_rows, lang, virtual_data):
 
 @app.callback(
     Output("track-record-card", "children"),
-    Input("stocks-table", "derived_virtual_selected_rows"),
+    Input("stocks-table", "selectedRows"),
     Input("lang-radio", "value"),
-    State("stocks-table", "derived_virtual_data"),
+    State("stocks-table", "rowData"),
 )
-def update_track_record(selected_rows, lang, virtual_data):
+def update_track_record(selected_rows, lang, grid_rows):
     lang = lang or "fr"
-    if not selected_rows or not virtual_data:
+    if not selected_rows or not grid_rows:
         return html.Div(L(lang, "track_record_hint_default"), className="text-muted")
 
-    row = virtual_data[selected_rows[0]]
+    row = selected_rows[0]
     ticker = row["Ticker"]
     prices = get_stock_price_history(ticker)
     returns = prices.pct_change().dropna().to_numpy() if len(prices) > 1 else np.array([])
@@ -695,7 +681,7 @@ def update_track_record(selected_rows, lang, virtual_data):
 @app.callback(
     Output("dcf-result", "children"),
     Output("dcf-chart", "figure"),
-    Input("stocks-table", "derived_virtual_selected_rows"),
+    Input("stocks-table", "selectedRows"),
     Input("dcf-growth-slider", "value"),
     Input("dcf-discount-slider", "value"),
     Input("dcf-terminal-growth-slider", "value"),
@@ -708,19 +694,19 @@ def update_track_record(selected_rows, lang, virtual_data):
     Input("lang-radio", "value"),
     Input("palette-dropdown", "value"),
     Input("dark-mode-switch", "value"),
-    State("stocks-table", "derived_virtual_data"),
+    State("stocks-table", "rowData"),
 )
 def update_dcf(selected_rows, growth_pct, discount_pct, terminal_growth_pct, horizon_years,
                 growth_offset_pct, discount_offset_pct, weight_bear, weight_base, weight_bull,
-                lang, palette_code, dark_mode, virtual_data):
+                lang, palette_code, dark_mode, grid_rows):
     lang = lang or "fr"
     dark = bool(dark_mode)
     palette = chart_theme.palette_for(palette_code, dark)
     empty_fig = empty_figure_with_message("", dark=dark)
-    if not selected_rows or not virtual_data:
+    if not selected_rows or not grid_rows:
         return L(lang, "dcf_hint_default"), empty_fig
 
-    row = virtual_data[selected_rows[0]]
+    row = selected_rows[0]
     ticker, name = row["Ticker"], row["Entreprise"]
     inputs = get_dcf_inputs(ticker)
     price = inputs.get("price")
@@ -770,7 +756,7 @@ def update_dcf(selected_rows, growth_pct, discount_pct, terminal_growth_pct, hor
     # Toujours comparé au sein du même secteur, indépendamment du filtre "Filtrer sur un secteur"
     # de la table ci-dessus (comparer un P/E tech à un P/E utilities n'aurait pas de sens).
     peer_pes = [
-        r["P/E (trailing)"] for r in virtual_data
+        r["P/E (trailing)"] for r in grid_rows
         if r.get("Ticker") != ticker and r.get("Secteur") == sector
         and r.get("P/E (trailing)") and r["P/E (trailing)"] > 0
     ]
@@ -784,7 +770,7 @@ def update_dcf(selected_rows, growth_pct, discount_pct, terminal_growth_pct, hor
 
     own_ev_ebitda = row.get("EV/EBITDA")
     peer_ev_ebitdas = [
-        r["EV/EBITDA"] for r in virtual_data
+        r["EV/EBITDA"] for r in grid_rows
         if r.get("Ticker") != ticker and r.get("Secteur") == sector
         and r.get("EV/EBITDA") and r["EV/EBITDA"] > 0
     ]

@@ -40,6 +40,9 @@ app.clientside_callback(
         // Bootstrap 5.3+ garde certaines variables (dont la couleur du texte) derrière cet
         // attribut : sans lui, la feuille de style sombre change les fonds mais pas le texte.
         document.documentElement.setAttribute('data-bs-theme', isDark ? 'dark' : 'light');
+        // Même bascule pour le thème d'AG Grid (tableau de criblage) : ses couleurs dérivées
+        // (cases à cocher, icônes, barres de défilement) suivent cet attribut.
+        document.documentElement.setAttribute('data-ag-theme-mode', isDark ? 'dark' : 'light');
         return isDark ? "{dbc.themes.DARKLY}" : "{dbc.themes.BOOTSTRAP}";
     }}
     """,

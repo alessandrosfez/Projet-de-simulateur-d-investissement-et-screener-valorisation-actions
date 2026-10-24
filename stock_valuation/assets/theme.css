@@ -107,17 +107,46 @@ h1, h2, h3, h4, h5, h6 { font-family: "Inter", sans-serif; font-weight: 600; let
 }
 .btn-link { color: var(--accent); }
 
-/* -------- Tableau (dash_table) -------- */
-/* Les couleurs de fond/texte restent posées en Python (style_header/style_cell/style_data,
-   plus forte spécificité inline) : ici uniquement la forme (coins arrondis, survol de ligne). */
-.dash-spreadsheet-container {
-    border-radius: 10px;
-    overflow: hidden;
-    border: 1px solid var(--border-soft);
+/* -------- Tableau de criblage (AG Grid, className="pea-grid") -------- */
+/* Paramètres du thème Quartz d'AG Grid branchés sur les variables de la page : le tableau suit le
+   mode sombre sans couleur codée en Python. Posés sur le conteneur ET ses descendants, parce que
+   le thème redéfinit ses paramètres sur son propre élément racine (une valeur héritée du parent
+   seul serait écrasée). */
+.pea-grid, .pea-grid .ag-root-wrapper {
+    --ag-font-family: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --ag-font-size: 13px;
+    --ag-background-color: var(--surface);
+    --ag-foreground-color: var(--Dash-Text-Primary, #1f2430);
+    --ag-header-background-color: var(--surface-2);
+    --ag-header-text-color: var(--Dash-Text-Primary, #1f2430);
+    --ag-border-color: var(--border-soft);
+    --ag-row-border-color: var(--border-soft);
+    --ag-accent-color: var(--accent);
+    --ag-row-hover-color: color-mix(in srgb, var(--accent) 7%, transparent);
+    --ag-selected-row-background-color: color-mix(in srgb, var(--accent) 16%, transparent);
+    --ag-wrapper-border-radius: 10px;
+    --ag-header-font-weight: 600;
+    --ag-tooltip-background-color: var(--surface-2);
+    --ag-tooltip-text-color: var(--Dash-Text-Primary, #1f2430);
 }
-.dash-spreadsheet-container .dash-spreadsheet-inner tr:hover td {
-    background-color: var(--surface-2) !important;
+[data-bs-theme="dark"] .pea-grid, [data-bs-theme="dark"] .pea-grid .ag-root-wrapper {
+    --ag-foreground-color: #e9ecef;
+    --ag-header-text-color: #e9ecef;
+    --ag-tooltip-text-color: #e9ecef;
+    --ag-chrome-background-color: var(--surface-2);
+    --ag-checkbox-unchecked-border-color: #5b6275;
 }
+.pea-grid .ag-header { border-bottom: 2px solid var(--accent); }
+.pea-grid .ag-tooltip { max-width: 340px; white-space: normal; line-height: 1.4; }
+
+/* Coloration des cellules (règles dans layout.CELL_CLASS_RULES). Tons pastel en clair, sombres
+   en mode sombre, texte foncé ou clair assorti pour garder un contraste lisible. */
+.pea-grid .cell-good { background-color: #d4edda; color: #155724; }
+.pea-grid .cell-warn { background-color: #fff3cd; color: #856404; }
+.pea-grid .cell-bad  { background-color: #f8d7da; color: #721c24; }
+[data-bs-theme="dark"] .pea-grid .cell-good { background-color: #173a24; color: #8fd19e; }
+[data-bs-theme="dark"] .pea-grid .cell-warn { background-color: #3a2f12; color: #e0c46c; }
+[data-bs-theme="dark"] .pea-grid .cell-bad  { background-color: #3a1616; color: #e88a8a; }
 
 /* -------- Liens -------- */
 a { color: var(--accent); }

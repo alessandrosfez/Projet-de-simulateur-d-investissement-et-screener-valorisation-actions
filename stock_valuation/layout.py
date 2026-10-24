@@ -5,8 +5,9 @@ des composants) et par callbacks.py, qui les enregistre comme callbacks Dash.
 Ce module ne dépend jamais de callbacks.py ni de l'instance `app` (pour éviter
 tout import circulaire).
 """
+import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
-from dash import dash_table, dcc, html
+from dash import dcc, html
 
 from constants import UNIVERSE_CODES
 from i18n import L
@@ -19,128 +20,79 @@ GRAPH_CONFIG = {
     ],
 }
 
-TABLE_BASE_CELL_STYLE = {"fontSize": "0.82rem", "textAlign": "left", "padding": "0.55rem 0.8rem", "minWidth": "95px"}
-
 # Alignées à droite comme il est d'usage pour des valeurs numériques (les décimales s'alignent
-# visuellement d'une ligne à l'autre) ; le reste (Entreprise, Ticker, Secteur, Devise) garde
-# l'alignement à gauche par défaut de TABLE_BASE_CELL_STYLE. Statique (ne dépend pas du thème
-# clair/sombre) : posé directement sur le DataTable dans build_tab3, pas besoin de passer par un
-# callback.
+# d'une ligne à l'autre) ; Entreprise, Ticker, Secteur et Devise restent alignés à gauche.
 NUMERIC_TABLE_COLUMNS = [
     "Score", "Prix", "P/E (trailing)", "P/E (prévisionnel)", "PEG", "EV/EBITDA", "P/B",
     "Rendement dividende (%)", "P/E moyen 5 ans (approx.)", "Position vs historique 5 ans (percentile)",
-    "Capitalisation",
 ]
-TABLE_CELL_ALIGNMENT = [{"if": {"column_id": c}, "textAlign": "right"} for c in NUMERIC_TABLE_COLUMNS]
+PE_PERCENTILE_COLUMN = "Position vs historique 5 ans (percentile)"
+
+# Coloration des cellules : classes .cell-good / .cell-warn / .cell-bad de assets/theme.css, qui
+# suivent le mode sombre. Chaque règle teste d'abord la présence de la valeur : une donnée manquante
+# n'est jamais coloriée (dash_table, faute d'opérateur « non vide », obligeait à remplacer les
+# manquants par 50 dans des colonnes techniques ; AG Grid évalue une vraie expression).
+# - PEG : < 1 croissance pas chère payée, 1-2 neutre, > 2 chère payée ; un PEG négatif ou nul
+#   (croissance estimée négative) n'a pas de sens et reste non colorié.
+# - Score composite : >= 70 haut du classement, 40-70 neutre, < 40 bas du classement.
+# - P/E (trailing) : coloré selon le percentile du titre dans SA PROPRE histoire, jamais un seuil
+#   générique (un P/E bas ou haut dans l'absolu ne veut rien dire, voir « intro3 » dans i18n.py) :
+#   < 20 décoté, > 80 tendu, entre les deux volontairement neutre. Voir la section « Validité du
+#   signal P/E historique » (engine.pe_signal_forward_returns) avant de le lire comme un conseil.
+_PCT = f"params.data['{PE_PERCENTILE_COLUMN}']"
+CELL_CLASS_RULES = {
+    "PEG": {
+        "cell-good": "params.value != null && params.value > 0 && params.value < 1",
+        "cell-warn": "params.value != null && params.value >= 1 && params.value <= 2",
+        "cell-bad": "params.value != null && params.value > 2",
+    },
+    "Score": {
+        "cell-good": "params.value != null && params.value >= 70",
+        "cell-warn": "params.value != null && params.value >= 40 && params.value < 70",
+        "cell-bad": "params.value != null && params.value < 40",
+    },
+    "P/E (trailing)": {
+        "cell-good": f"{_PCT} != null && {_PCT} < 20",
+        "cell-bad": f"{_PCT} != null && {_PCT} > 80",
+    },
+}
+# Largeurs fixes (px), ajustées au contenu : le dimensionnement automatique d'AG Grid s'exécute
+# quand la grille est encore vide (données chargées plus tard par callback) et laisserait toutes
+# les colonnes à 200 px. Les en-têtes longs passent sur plusieurs lignes.
+COLUMN_WIDTHS = {
+    "Entreprise": 180, "Ticker": 100, "Score": 88, "Secteur": 170, "Devise": 84, "Prix": 92,
+    "P/E (trailing)": 100, "P/E (prévisionnel)": 132, "PEG": 80, "EV/EBITDA": 104, "P/B": 76,
+    "Rendement dividende (%)": 120, "P/E moyen 5 ans (approx.)": 124, PE_PERCENTILE_COLUMN: 136,
+    "Capitalisation": 140,
+}
+# Deux décimales, « N/A » pour une valeur manquante (jamais 0).
+NUMBER_FORMATTER = {"function": "params.value == null ? 'N/A' : d3.format('.2f')(params.value)"}
+
+
+def stocks_column_defs(labels: dict[str, str], help_texts: dict[str, str]) -> list[dict]:
+    """Colonnes du tableau de criblage : libellé traduit, définition en infobulle d'en-tête,
+    format numérique et coloration. La première colonne (Entreprise) reste figée au défilement
+    horizontal."""
+    defs = []
+    for column, label in labels.items():
+        col = {"field": column, "headerName": label, "width": COLUMN_WIDTHS.get(column, 110)}
+        if column in help_texts:
+            col["headerTooltip"] = help_texts[column]
+        if column in NUMERIC_TABLE_COLUMNS:
+            col.update(type="rightAligned", valueFormatter=NUMBER_FORMATTER)
+        elif column == "Capitalisation":
+            col["type"] = "rightAligned"
+        if column in CELL_CLASS_RULES:
+            col["cellClassRules"] = CELL_CLASS_RULES[column]
+        if column == "Entreprise":
+            col["pinned"] = "left"
+        defs.append(col)
+    return defs
+
 
 # Nav d'ancres sticky en tête de la zone résultats (voir build_tab3) : styles dans
 # assets/theme.css (.quick-nav / .quick-nav-link), qui suivent le mode sombre via l'attribut
 # data-bs-theme (posé par le clientside_callback du switch, voir app.py).
-
-
-def table_style_overrides(dark: bool):
-    """(style_header, style_cell, style_data) pour un dash_table.DataTable.
-    dash_table applique ses propres couleurs par défaut (JS injecté à l'exécution,
-    non couvert par le thème Bootstrap) : passer explicitement ces props est le
-    seul moyen fiable de le rendre lisible en mode sombre.
-
-    En-tête distinct (fond + bordure basse à l'accent) et bordures horizontales fines plutôt
-    qu'un quadrillage complet sur chaque cellule : un vrai tableau de données plutôt que la
-    grille brute de dash_table par défaut. Couleurs alignées sur assets/theme.css (--surface,
-    --surface-2, --border-soft, --accent) : dupliquées ici en dur faute de pouvoir lire des
-    variables CSS depuis Python, à garder synchronisées si la palette du thème change."""
-    if dark:
-        header_bg, header_fg, accent = "#1f2330", "#e9ecef", "#7b84ff"
-        cell_bg, cell_fg, row_border = "#171a23", "#e9ecef", "#2a2f3d"
-    else:
-        header_bg, header_fg, accent = "#f1f3f9", "#1f2430", "#636efa"
-        cell_bg, cell_fg, row_border = "#ffffff", "#1f2430", "#e4e7ef"
-    style_header = {
-        "backgroundColor": header_bg, "color": header_fg, "fontWeight": "600",
-        "borderBottom": f"2px solid {accent}", "borderTop": "none", "borderLeft": "none", "borderRight": "none",
-    }
-    style_cell = {
-        **TABLE_BASE_CELL_STYLE, "backgroundColor": cell_bg, "color": cell_fg,
-        "borderBottom": f"1px solid {row_border}", "borderTop": "none", "borderLeft": "none", "borderRight": "none",
-    }
-    style_data = {"backgroundColor": cell_bg, "color": cell_fg}
-    return style_header, style_cell, style_data
-
-
-def pe_history_conditional_style(dark: bool):
-    """style_data_conditional pour la colonne P/E (trailing), basé sur le percentile du titre vs
-    SA PROPRE histoire 5 ans, jamais un seuil générique : l'intro de l'app dit explicitement
-    qu'un P/E bas ou haut dans l'absolu ne veut rien dire, ça dépend du secteur et des
-    perspectives de croissance (voir "intro3" dans i18n.py). Vert = décoté vs sa propre histoire
-    (percentile < 20), rouge = tendu vs sa propre histoire (percentile > 80). Zone intermédiaire
-    (20-80) volontairement non colorée : voir la section "Validité du signal P/E historique"
-    (engine.pe_signal_forward_returns) pour une vérification empirique de ce signal avant de le
-    lire comme un conseil.
-
-    Référence la colonne technique "_pe_pct_for_style" (voir callbacks.render_stock_views), pas
-    directement "Position vs historique 5 ans (percentile)" : dash_table (bundle v7.4.1) n'a pas
-    d'opérateur "is not blank" utilisable ici (syntaxe rejetée côté client, qui casse le rendu
-    entier du tableau — vérifié en pratique) pour exclure les valeurs manquantes d'un filter_query
-    numérique ; sans cette exclusion, un percentile manquant (None, titre sans assez d'historique,
-    ex. Michelin) se comparait comme < 20 et se coloriait vert à tort. La colonne technique
-    substitue un None par 50 (ni < 20 ni > 80), qui retombe donc naturellement en zone neutre."""
-    style_col = "_pe_pct_for_style"
-    if dark:
-        green, red = "#173a24", "#3a1616"
-        green_fg, red_fg = "#8fd19e", "#e88a8a"
-    else:
-        green, red = "#d4edda", "#f8d7da"
-        green_fg, red_fg = "#155724", "#721c24"
-    return [
-        {"if": {"column_id": "P/E (trailing)", "filter_query": f"{{{style_col}}} < 20"},
-         "backgroundColor": green, "color": green_fg},
-        {"if": {"column_id": "P/E (trailing)", "filter_query": f"{{{style_col}}} > 80"},
-         "backgroundColor": red, "color": red_fg},
-    ]
-
-
-def peg_conditional_style(dark: bool):
-    """style_data_conditional pour la colonne PEG du tableau : vert (<1, croissance pas chère
-    payée), orange (1-2), rouge (>2, croissance chère payée) — lecture usuelle du PEG. PEG
-    négatif ou nul (croissance négative estimée) volontairement non coloré : le signal n'a pas
-    de sens dans ce cas."""
-    if dark:
-        green, amber, red = "#173a24", "#3a2f12", "#3a1616"
-        green_fg, amber_fg, red_fg = "#8fd19e", "#e0c46c", "#e88a8a"
-    else:
-        green, amber, red = "#d4edda", "#fff3cd", "#f8d7da"
-        green_fg, amber_fg, red_fg = "#155724", "#856404", "#721c24"
-    return [
-        {"if": {"column_id": "PEG", "filter_query": "{PEG} > 0 && {PEG} < 1"},
-         "backgroundColor": green, "color": green_fg},
-        {"if": {"column_id": "PEG", "filter_query": "{PEG} >= 1 && {PEG} <= 2"},
-         "backgroundColor": amber, "color": amber_fg},
-        {"if": {"column_id": "PEG", "filter_query": "{PEG} > 2"},
-         "backgroundColor": red, "color": red_fg},
-    ]
-
-
-def score_conditional_style(dark: bool):
-    """style_data_conditional pour la colonne Score (voir callbacks.render_stock_views) : vert
-    (>=70, haut du classement), amber (40-70, neutre), rouge (<40, bas du classement). Référence
-    la colonne technique "_score_for_style" (même raison que pe_history_conditional_style : un
-    Score manquant, substitué par 50, doit retomber dans la bande neutre plutôt que vert ou rouge
-    par accident)."""
-    style_col = "_score_for_style"
-    if dark:
-        green, amber, red = "#173a24", "#3a2f12", "#3a1616"
-        green_fg, amber_fg, red_fg = "#8fd19e", "#e0c46c", "#e88a8a"
-    else:
-        green, amber, red = "#d4edda", "#fff3cd", "#f8d7da"
-        green_fg, amber_fg, red_fg = "#155724", "#856404", "#721c24"
-    return [
-        {"if": {"column_id": "Score", "filter_query": f"{{{style_col}}} >= 70"},
-         "backgroundColor": green, "color": green_fg},
-        {"if": {"column_id": "Score", "filter_query": f"{{{style_col}}} >= 40 && {{{style_col}}} < 70"},
-         "backgroundColor": amber, "color": amber_fg},
-        {"if": {"column_id": "Score", "filter_query": f"{{{style_col}}} < 40"},
-         "backgroundColor": red, "color": red_fg},
-    ]
 
 
 # Champs dont la valeur doit survivre à un changement de langue (voir gv() et
@@ -319,22 +271,22 @@ def build_tab3(lang, v=None):
                 dcc.Graph(id="stocks-pe-chart", config=GRAPH_CONFIG),
                 html.H5(L(lang, "detail_title"), className="section-title", id="anchor-table"),
                 html.P(L(lang, "detail_hint"), className="text-muted", style={"fontSize": "0.8rem"}),
-                dash_table.DataTable(
+                # AG Grid : tri, redimensionnement et colonne figée natifs, sélection d'une ligne
+                # (case ou clic) ; getRowId garde la sélection quand les données se rechargent
+                # (changement de langue, de thème ou de filtre qui la laisse visible).
+                dag.AgGrid(
                     id="stocks-table",
-                    sort_action="native",
-                    row_selectable="single",
-                    selected_rows=[],
-                    # Hauteur bornée + scroll interne : condition pour que fixed_rows/fixed_columns
-                    # ci-dessous aient un sens (sans plafond, le tableau grandit avec ses lignes et
-                    # c'est la page entière qui défile — rien ne "fige" dans ce cas, dash_table n'a
-                    # de quoi figer que par rapport à SON PROPRE scroll interne).
-                    style_table={"overflowX": "auto", "overflowY": "auto", "maxHeight": "70vh", "minWidth": "100%"},
-                    style_cell=TABLE_BASE_CELL_STYLE,
-                    style_cell_conditional=TABLE_CELL_ALIGNMENT,
-                    style_header_conditional=TABLE_CELL_ALIGNMENT,
-                    fixed_rows={"headers": True},
-                    fixed_columns={"headers": True, "data": 1},
-                    tooltip_delay=0, tooltip_duration=None,
+                    rowData=[], columnDefs=[],
+                    getRowId="params.data.Ticker",
+                    defaultColDef={"sortable": True, "resizable": True, "minWidth": 72,
+                                   "wrapHeaderText": True, "autoHeaderHeight": True},
+                    dashGridOptions={
+                        "rowSelection": {"mode": "singleRow", "checkboxes": True, "enableClickSelection": True},
+                        "selectionColumnDef": {"pinned": "left"},
+                        "tooltipShowDelay": 0, "tooltipHideDelay": 60000,
+                        "suppressDragLeaveHidesColumns": True,
+                    },
+                    className="pea-grid", style={"height": "70vh"},
                 ),
                 html.H5(L(lang, "history_title"), className="section-title", id="anchor-history"),
                 html.Div(id="stocks-pe-history-title", className="text-muted", style={"fontSize": "0.85rem"}),
