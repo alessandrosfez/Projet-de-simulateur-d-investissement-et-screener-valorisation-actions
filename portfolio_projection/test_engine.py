@@ -420,3 +420,33 @@ def test_summarize_calibration_perfectly_uniform_pit_matches_nominal_exactly():
 def test_summarize_calibration_empty_pit_returns_none_observed():
     summary = m.summarize_calibration(np.array([]), bands=((5, 95),))
     assert summary == [{"lower_pct": 5, "upper_pct": 95, "nominal_pct": 90, "observed_pct": None}]
+
+
+# ---------- verdict de calibration (test binomial, intervalle de Wilson) ----------
+
+def test_wilson_interval_matches_reference_value():
+    # Valeur de référence (Wilson 1927, formule standard) : 8 succès sur 10 -> [0,490 ; 0,943].
+    low, high = m.wilson_interval(0.8, 10)
+    assert low == pytest.approx(0.4902, abs=1e-3) and high == pytest.approx(0.9433, abs=1e-3)
+
+
+def test_calibration_verdict_flags_understated_risk_only_when_the_interval_excludes_nominal():
+    # 60 % observés sur 100 observations indépendantes : [50,2 ; 69,1], loin sous 90 % -> trop étroites.
+    assert m.calibration_verdict(60.0, 90, 100)["verdict"] == "too_narrow"
+    # Mêmes 60 % sur 4 observations : intervalle [20,5 ; 89,7] -> 90 % reste au-dessus, de justesse.
+    assert m.calibration_verdict(60.0, 90, 4)["verdict"] == "too_narrow"
+    # 75 % sur 4 observations : [30 ; 95] contient 90 %, mais trop large pour conclure.
+    assert m.calibration_verdict(75.0, 90, 4)["verdict"] == "inconclusive"
+    # 88 % sur 400 observations : étroit et compatible -> calibré.
+    assert m.calibration_verdict(88.0, 90, 400)["verdict"] == "calibrated"
+    # 80 % observés pour une bande nominale de 50 % sur 100 observations -> trop prudentes.
+    assert m.calibration_verdict(80.0, 50, 100)["verdict"] == "too_wide"
+    assert m.calibration_verdict(None, 50, 10)["verdict"] is None
+
+
+def test_combined_verdict_puts_understated_risk_first():
+    assert m.combine_calibration_verdicts(["calibrated", "too_narrow"]) == "too_narrow"
+    assert m.combine_calibration_verdicts(["too_wide", "inconclusive"]) == "too_wide"
+    assert m.combine_calibration_verdicts(["calibrated", "inconclusive"]) == "inconclusive"
+    assert m.combine_calibration_verdicts(["calibrated", "calibrated"]) == "calibrated"
+    assert m.combine_calibration_verdicts([None]) is None

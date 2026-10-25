@@ -69,7 +69,10 @@ qu'une simulation aurait donné.
 - **Validation du modèle** : backtest walk-forward qui vérifie si les bandes
   de percentiles sont fiables (taux de couverture observé vs nominal,
   histogramme des PIT), loi de Student et bootstrap par blocs comparés côte
-  à côte.
+  à côte. Un verdict en clair par méthode (bandes fiables, trop étroites,
+  trop prudentes, ou pas assez de recul) repose sur un test binomial à 95 %
+  (intervalle de Wilson) calculé sur le nombre d'observations
+  indépendantes, pas sur le nombre de dates testées, qui se chevauchent.
 - **Simulation** (mode Prévision) paramétrique (loi de Student, queues
   épaisses) ou bootstrap par blocs de l'historique réel.
 - **Risque de séquence des rendements** : impact du timing d'un krach (début

@@ -262,3 +262,14 @@ a { color: var(--accent); }
 .perf-group .kpi-tile { box-shadow: none; }
 .row > .col-xl-6:nth-child(2) > .perf-group { border-style: dashed; }
 .kpi-unit { font-size: 0.8rem; font-weight: 500; letter-spacing: 0; color: var(--Dash-Text-Weak, #6c757d); }
+
+/* -------- Verdict de la validation du modèle (callbacks/validation.py) -------- */
+/* Liseré et icône aux couleurs d'état de la palette de référence ; le texte reste en encre normale. */
+.verdict-tile { border: 1px solid var(--border-soft); border-left-width: 4px; border-radius: 12px;
+                padding: 0.8rem 1rem; background: var(--surface); }
+.verdict-tile.good { border-left-color: #0ca30c; } .verdict-tile.good .bi { color: #0ca30c; }
+.verdict-tile.bad { border-left-color: #d03b3b; } .verdict-tile.bad .bi { color: #d03b3b; }
+.verdict-tile.warn { border-left-color: #fab219; } .verdict-tile.warn .bi { color: #c98500; }
+.verdict-tile.neutral { border-left-color: var(--border-soft); } .verdict-tile.neutral .bi { color: var(--accent); }
+.verdict-title { font-size: 1.1rem; font-weight: 700; margin: 0.15rem 0 0.25rem; }
+.verdict-details { font-size: 0.78rem; color: var(--Dash-Text-Weak, #6c757d); margin: 0; padding-left: 1.1rem; }

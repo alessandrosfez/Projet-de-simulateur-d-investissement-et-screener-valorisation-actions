@@ -92,6 +92,29 @@ TRANSLATIONS = {
         "pit_x_axis": "PIT (rang percentile du réel dans le simulé)",
         "pit_y_axis": "Nombre d'origines",
         "validation_coverage_table_title": "Couverture observée des bandes de percentiles",
+        "verdict_heading": "Verdict",
+        "verdict_help": "Pour chaque bande (90 % et 50 %), on compare la part des cas où la réalité est tombée "
+                         "dedans à la part annoncée, avec un test binomial à 95 % (intervalle de Wilson) "
+                         "calculé sur le nombre d'observations INDÉPENDANTES, pas sur le nombre de dates "
+                         "testées, qui se chevauchent. Annoncé hors de l'intervalle : bandes trop étroites "
+                         "ou trop prudentes. Dans l'intervalle mais intervalle large (plus de 15 points de "
+                         "part et d'autre) : pas assez de recul pour conclure.",
+        "verdict_method_normal": "Méthode paramétrique (loi t)",
+        "verdict_method_bootstrap": "Méthode bootstrap par blocs",
+        "verdict_calibrated": "Bandes fiables",
+        "verdict_calibrated_sub": "La réalité est tombée dans les bandes à peu près aussi souvent qu'annoncé.",
+        "verdict_too_narrow": "Bandes trop étroites : risque sous-estimé",
+        "verdict_too_narrow_sub": "La réalité est sortie des bandes plus souvent qu'annoncé : les vrais scénarios "
+                                   "sont plus dispersés que ceux affichés.",
+        "verdict_too_wide": "Bandes trop prudentes",
+        "verdict_too_wide_sub": "La réalité est restée dans les bandes plus souvent qu'annoncé : l'incertitude "
+                                 "affichée est exagérée.",
+        "verdict_inconclusive": "Pas assez de recul pour conclure",
+        "verdict_inconclusive_sub": "Rien ne montre une mauvaise calibration, mais avec {n} observations "
+                                     "indépendantes le test reste trop incertain pour affirmer que les bandes "
+                                     "sont fiables.",
+        "verdict_band_line": "Bande {band} : {observed:.0f} % observés pour {nominal} % annoncés "
+                              "(intervalle de confiance {low:.0f}-{high:.0f} %)",
         "validation_col_band": "Bande",
         "validation_col_nominal": "Nominal (%)",
         "validation_col_observed_normal": "Observé -- paramétrique (%)",
@@ -638,6 +661,27 @@ TRANSLATIONS = {
         "pit_x_axis": "PIT (percentile rank of the real outcome in the simulation)",
         "pit_y_axis": "Number of origins",
         "validation_coverage_table_title": "Observed coverage of the percentile bands",
+        "verdict_heading": "Verdict",
+        "verdict_help": "For each band (90% and 50%), the share of cases where reality fell inside is compared "
+                         "with the announced share, using a 95% binomial test (Wilson interval) on the number "
+                         "of INDEPENDENT observations, not on the number of tested dates, which overlap. "
+                         "Announced share outside the interval: bands too narrow or too cautious. Inside but "
+                         "wide interval (more than 15 points either side): not enough history to conclude.",
+        "verdict_method_normal": "Parametric method (Student t)",
+        "verdict_method_bootstrap": "Block bootstrap method",
+        "verdict_calibrated": "Reliable bands",
+        "verdict_calibrated_sub": "Reality fell inside the bands about as often as announced.",
+        "verdict_too_narrow": "Bands too narrow: risk understated",
+        "verdict_too_narrow_sub": "Reality fell outside the bands more often than announced: actual scenarios are "
+                                   "more dispersed than the ones shown.",
+        "verdict_too_wide": "Bands too cautious",
+        "verdict_too_wide_sub": "Reality stayed inside the bands more often than announced: the uncertainty shown "
+                                 "is overstated.",
+        "verdict_inconclusive": "Not enough history to conclude",
+        "verdict_inconclusive_sub": "Nothing shows poor calibration, but with {n} independent observations the "
+                                     "test remains too uncertain to say the bands are reliable.",
+        "verdict_band_line": "{band} band: {observed:.0f}% observed for {nominal}% announced "
+                              "(confidence interval {low:.0f}-{high:.0f}%)",
         "validation_col_band": "Band",
         "validation_col_nominal": "Nominal (%)",
         "validation_col_observed_normal": "Observed -- parametric (%)",

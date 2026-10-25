@@ -376,6 +376,62 @@ def summarize_calibration(pit_values: np.ndarray,
     return rows
 
 
+# Demi-largeur (en points de pourcentage) au-delà de laquelle un intervalle de confiance compatible
+# avec la couverture nominale ne prouve rien : « compatible » avec 50 % +/- 30 pt ne dit pas que le
+# modèle est bon, seulement qu'on n'a pas assez de recul pour le prendre en défaut.
+CALIBRATION_CONCLUSIVE_HALF_WIDTH_PT = 15.0
+
+
+def wilson_interval(proportion: float, n: int, z: float = 1.96) -> tuple[float, float]:
+    """Intervalle de confiance de Wilson (95 % par défaut) d'une proportion observée sur n
+    observations, en fractions. Préféré à l'intervalle normal simple, qui sort de [0, 1] et se
+    resserre à tort sur de petits échantillons (ici n est petit : quelques observations
+    indépendantes)."""
+    denominator = 1 + z * z / n
+    center = (proportion + z * z / (2 * n)) / denominator
+    half = float(z * np.sqrt(proportion * (1 - proportion) / n + z * z / (4 * n * n)) / denominator)
+    return max(0.0, center - half), min(1.0, center + half)
+
+
+def calibration_verdict(observed_pct: float | None, nominal_pct: float, n_effective: int) -> dict:
+    """Verdict d'une bande de percentiles : la couverture observée est-elle compatible avec la
+    nominale, compte tenu du nombre d'observations INDÉPENDANTES (n_effective, pas le nombre de
+    dates d'origine, qui se chevauchent) ? Test binomial via l'intervalle de Wilson à 95 % :
+    - "too_narrow" : la nominale est au-dessus de l'intervalle, la réalité sort trop souvent des
+      bandes, le risque est sous-estimé ;
+    - "too_wide" : la nominale est en dessous, les bandes sont trop prudentes ;
+    - "inconclusive" : compatible, mais l'intervalle est trop large pour conclure
+      (CALIBRATION_CONCLUSIVE_HALF_WIDTH_PT) ;
+    - "calibrated" : compatible avec un intervalle assez étroit.
+    Renvoie {"verdict", "low_pct", "high_pct"} ; verdict None sans couverture observée."""
+    if observed_pct is None or n_effective < 1:
+        return {"verdict": None, "low_pct": None, "high_pct": None}
+    low, high = wilson_interval(observed_pct / 100, n_effective)
+    low_pct, high_pct = low * 100, high * 100
+    if nominal_pct > high_pct:
+        verdict = "too_narrow"
+    elif nominal_pct < low_pct:
+        verdict = "too_wide"
+    elif (high_pct - low_pct) / 2 > CALIBRATION_CONCLUSIVE_HALF_WIDTH_PT:
+        verdict = "inconclusive"
+    else:
+        verdict = "calibrated"
+    return {"verdict": verdict, "low_pct": low_pct, "high_pct": high_pct}
+
+
+def combine_calibration_verdicts(verdicts: Sequence[str | None]) -> str | None:
+    """Verdict global d'une méthode à partir de ses bandes : un risque sous-estimé l'emporte (c'est
+    l'erreur la plus coûteuse pour un épargnant), puis des bandes trop prudentes, puis le manque de
+    recul ; « calibrated » seulement si toutes les bandes le sont."""
+    present = [v for v in verdicts if v is not None]
+    if not present:
+        return None
+    for verdict in ("too_narrow", "too_wide", "inconclusive"):
+        if verdict in present:
+            return verdict
+    return "calibrated"
+
+
 def simplex_grid(k: int, total: int, step: int) -> Iterator[tuple[int, ...]]:
     """Génère tous les vecteurs entiers non-négatifs de longueur k sommant à `total`, multiples de `step`."""
     if k == 1:

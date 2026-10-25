@@ -1073,6 +1073,8 @@ def build_tab4(lang):
         ], className="mb-3"),
         dcc.Loading(**LOADING_PROPS, children=[
             html.Div(id="validation-error", className="text-danger"),
+            # Verdict en clair (engine.calibration_verdict) avant les histogrammes, plus techniques.
+            html.Div(id="validation-verdict"),
             html.Div(id="validation-info-caption", className="text-muted mb-2", style={"fontSize": "0.85rem"}),
             html.Div([
                 html.Div(dcc.Graph(id="validation-pit-graph-normal", config=GRAPH_CONFIG),
