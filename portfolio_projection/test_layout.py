@@ -21,3 +21,11 @@ def test_grid_columns_keep_tooltips_pin_first_column_and_fit_longest_cell():
 def test_grid_columns_without_rows_still_fit_the_longest_header_word():
     defs = layout.grid_columns([{"name": "Probabilité de gain (%)", "id": "p"}])
     assert defs[0]["minWidth"] >= len("Probabilité") * layout.GRID_CHAR_PX
+
+
+def test_correlation_bands_follow_the_agreed_thresholds():
+    from charts import corr_band
+    assert corr_band(1.0) == "duplicate" and corr_band(0.90) == "duplicate"
+    assert corr_band(0.89) == "strong" and corr_band(0.70) == "strong"
+    assert corr_band(0.69) == "linked" and corr_band(0.40) == "linked"
+    assert corr_band(0.39) == "diversifying" and corr_band(-0.5) == "diversifying"

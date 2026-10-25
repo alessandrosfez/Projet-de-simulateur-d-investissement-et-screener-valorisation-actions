@@ -15,52 +15,112 @@ def hex_to_rgba(hex_color: str, alpha: float) -> str:
     return f"rgba({r},{g},{b},{alpha})"
 
 
-# Paire divergente de la palette de référence : bleu (corrélation négative) <-> rouge (positive),
-# milieu gris neutre (0 = pas de lien), propre à chaque mode.
-DIVERGING = {"light": ("#2a78d6", "#f0efec", "#e34948"), "dark": ("#3987e5", "#383835", "#e66767")}
+# Paliers de lecture des corrélations (choix validé : repères usuels, pas une norme) : en dessous de
+# 0,40 les lignes se diversifient, 0,40-0,70 liées, 0,70-0,90 très liées, à partir de 0,90 doublon.
+CORR_BANDS = (("diversifying", None, 0.40), ("linked", 0.40, 0.70), ("strong", 0.70, 0.90), ("duplicate", 0.90, None))
+# Couleur de chaque palier par mode : bleu pour ce qui diversifie, rouges de plus en plus intenses pour
+# ce qui se recouvre. Des paliers francs plutôt qu'un dégradé, qui rendait 0,48 et 0,60 presque
+# identiques (bruns ternes en mode sombre).
+CORR_BAND_COLORS = {
+    "light": {"diversifying": "#2a78d6", "linked": "#f2b0a8", "strong": "#e7766d", "duplicate": "#c62f2b"},
+    "dark": {"diversifying": "#3987e5", "linked": "#a85a55", "strong": "#d65f58", "duplicate": "#ff7c73"},
+}
+
+
+def corr_band(value: float) -> str:
+    """Palier de lecture d'une corrélation (voir CORR_BANDS), bornes basses incluses."""
+    for band, low, high in CORR_BANDS:
+        if (low is None or value >= low) and (high is None or value < high):
+            return band
+    return CORR_BANDS[-1][0]
 
 
 def make_correlation_heatmap(corr: pd.DataFrame, lang="fr", dark: bool = False):
-    """Corrélations entre lignes en demi-matrice (la moitié haute répète la basse, la diagonale vaut
-    toujours 1) : cases carrées séparées d'un liseré, couleur divergente centrée sur 0, valeur écrite
-    dans chaque case avec une encre qui contraste avec son fond."""
+    """Corrélations entre lignes, en deux parties qui partagent les mêmes paliers de couleur
+    (CORR_BANDS) : à gauche la demi-matrice (la moitié haute répète la basse, la diagonale vaut
+    toujours 1), à droite les paires classées de la plus liée à la moins liée, chacune avec sa
+    valeur et son palier en clair. Le classement répond directement à « quelles lignes font
+    doublon ? » et sert de légende à la matrice."""
+    from plotly.subplots import make_subplots
+
     mode = "dark" if dark else "light"
     chrome = chart_theme.CHROME[mode]
-    negative, neutral, positive = DIVERGING[mode]
+    colors = CORR_BAND_COLORS[mode]
     names = list(corr.columns)
     n = len(names)
     if n < 2:
         fig = go.Figure()
         fig.update_layout(template=chart_theme.template(dark), title=L(lang, "corr_chart_title"))
         return fig
-    # Axes au nom court (« PSP5.PA », pas « PSP5.PA (S&P 500) ») : les libellés longs, tournés,
-    # mangeaient la hauteur et réduisaient les cases. Le nom complet reste dans l'infobulle.
+
+    def fmt(value):
+        return f"{value:.2f}".replace(".", ",") if lang == "fr" else f"{value:.2f}"
+
+    # Nom court sur les axes (« PSP5.PA », pas « PSP5.PA (S&P 500) ») ; nom complet en infobulle.
     short = [str(name).split(" (")[0] for name in names]
+    order = [band for band, _, _ in CORR_BANDS]
     rows, cols = short[1:], short[:-1]
-    z = [[corr.iloc[i, j] if j < i else None for j in range(n - 1)] for i in range(1, n)]
+    values = [[corr.iloc[i, j] if j < i else None for j in range(n - 1)] for i in range(1, n)]
+    # Matrice en indices de palier (0 à 3) avec une échelle de couleur en marches : couleur franche
+    # par palier, valeur réelle écrite dans la case.
+    steps = len(order)
+    scale = []
+    for k, band in enumerate(order):
+        scale += [[k / steps, colors[band]], [(k + 1) / steps, colors[band]]]
+    z = [[None if v is None or pd.isna(v) else order.index(corr_band(float(v))) + 0.5 for v in row] for row in values]
     pairs = [[f"{names[i]}<br>{names[j]}" for j in range(n - 1)] for i in range(1, n)]
-    fig = go.Figure(go.Heatmap(
-        z=z, x=cols, y=rows, zmin=-1, zmid=0, zmax=1, xgap=3, ygap=3, hoverongaps=False, customdata=pairs,
-        colorscale=[[0, negative], [0.5, neutral], [1, positive]],
-        colorbar=dict(thickness=10, len=0.7, tickvals=[-1, 0, 1], outlinewidth=0,
-                      ticktext=["-1", "0", "+1"], tickfont=dict(color=chrome["muted"])),
-        hovertemplate="%{customdata}<br>r = %{z:.2f}<extra></extra>",
-    ))
+
+    ranked = sorted(
+        ((float(corr.iloc[i, j]), short[i], short[j]) for i in range(n) for j in range(i) if pd.notna(corr.iloc[i, j])),
+        reverse=True,
+    )
+    # Espace entre les deux parties à la mesure du plus long nom de paire, qui sinon déborde sur la matrice.
+    longest = max((len(f"{a} · {b}") for _, a, b in ranked), default=10)
+    fig = make_subplots(rows=1, cols=2, column_widths=[0.42, 0.58], horizontal_spacing=min(0.34, 0.03 + 0.0066 * longest),
+                        subplot_titles=(L(lang, "corr_matrix_title"), L(lang, "corr_pairs_title")))
+    fig.add_trace(go.Heatmap(
+        z=z, x=cols, y=rows, zmin=0, zmax=steps, colorscale=scale, showscale=False, xgap=4, ygap=4,
+        hoverongaps=False, customdata=[[f"{pair}<br>r = {fmt(v)}" if v is not None else "" for pair, v in zip(pr, vr)]
+                                       for pr, vr in zip(pairs, values)],
+        hovertemplate="%{customdata}<extra></extra>",
+    ), row=1, col=1)
     for i, row_name in enumerate(rows):
         for j, col_name in enumerate(cols):
-            value = z[i][j]
+            value = values[i][j]
             if value is None or pd.isna(value):
                 continue
-            text = f"{value:.2f}".replace(".", ",") if lang == "fr" else f"{value:.2f}"
-            # Texte blanc sur une case très colorée, encre normale sur une case pâle.
-            fig.add_annotation(x=col_name, y=row_name, text=text, showarrow=False,
-                               font=dict(size=12, color="#ffffff" if abs(value) > 0.55 else chrome["ink"]))
+            light_cell = corr_band(float(value)) == "linked" and not dark
+            fig.add_annotation(x=col_name, y=row_name, text=f"<b>{fmt(value)}</b>", showarrow=False, xref="x", yref="y",
+                               font=dict(size=13, color=chrome["ink"] if light_cell else "#ffffff"))
+
+    labels = [f"{a} · {b}" for _, a, b in ranked]
+    fig.add_trace(go.Bar(
+        x=[v for v, _, _ in ranked], y=labels, orientation="h", width=0.62,
+        marker=dict(color=[colors[corr_band(v)] for v, _, _ in ranked], cornerradius=4),
+        text=[f"{fmt(v)}  {L(lang, f'corr_band_{corr_band(v)}')}" for v, _, _ in ranked],
+        textposition="outside", cliponaxis=False, textfont=dict(size=12, color=chrome["ink"]),
+        hovertemplate="%{y} : r = %{x:.2f}<extra></extra>",
+    ), row=1, col=2)
+    # Seuils des paliers en traits fins, pour lire le classement comme la matrice.
+    for _, low, _ in CORR_BANDS[1:]:
+        fig.add_vline(x=low, line_width=1, line_dash="dot", line_color=chrome["axis"], row=1, col=2)
+
+    height = max(320, 120 + 64 * (n - 1), 90 + 30 * len(ranked))
     fig.update_layout(
         template=chart_theme.template(dark), title=dict(text=L(lang, "corr_chart_title"), font=dict(size=14)),
-        xaxis=dict(showgrid=False, side="bottom"),
-        yaxis=dict(showgrid=False, autorange="reversed", scaleanchor="x", ticklabelstandoff=6),
-        margin=dict(t=50, l=10, r=10, b=10), height=max(300, 110 + 64 * (n - 1)), separators=L(lang, "plotly_separators"),
+        showlegend=False, height=height, margin=dict(t=80, l=10, r=120, b=30), separators=L(lang, "plotly_separators"),
     )
+    # Cases carrées tenues dans leur moitié (constrain) et calées en haut à gauche : la matrice ne
+    # déborde plus sur le classement et ne flotte plus en bas quand la liste de paires est longue.
+    fig.update_xaxes(showgrid=False, constrain="domain", constraintoward="left", row=1, col=1)
+    fig.update_yaxes(showgrid=False, autorange="reversed", scaleanchor="x", constrain="domain", constraintoward="top",
+                     ticklabelstandoff=6, row=1, col=1)
+    lowest = min(0.0, min(v for v, _, _ in ranked))
+    fig.update_xaxes(range=[lowest, 1.0], showgrid=False, zeroline=False, tickvals=[0, 0.4, 0.7, 0.9, 1.0],
+                     row=1, col=2)
+    fig.update_yaxes(autorange="reversed", showgrid=False, ticklabelstandoff=6, row=1, col=2)
+    for annotation in fig.layout.annotations[:2]:  # titres des deux parties
+        annotation.font = dict(size=12, color=chrome["muted"])
     return fig
 
 
