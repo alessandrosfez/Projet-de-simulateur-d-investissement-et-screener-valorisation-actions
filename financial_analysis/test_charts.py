@@ -4,6 +4,7 @@ changerait la lecture : une donnée manquante qui ne devient jamais 0, un score 
 distingué d'un score officiel, des zones posées aux seuils demandés.
 Usage : pip install -r requirements-dev.txt && pytest -v
 """
+import layout
 from charts import make_income_vs_cfo_chart, make_score_zone_chart
 
 
@@ -38,3 +39,16 @@ def test_income_vs_cfo_chart_keeps_missing_values_missing_and_scales_axis():
     assert list(cfo.y) == [2.5, 1.0]
     assert fig.layout.yaxis.ticksuffix == " Md"
     assert list(net_income.customdata) == ["2000000000", "n.d."]
+
+
+def test_spark_text_follows_the_values_and_marks_missing_years():
+    assert layout.spark_text([1.0, 2.0, 3.0]) == "▁▅█"
+    assert layout.spark_text([1.2, None, 1.5]) == "▁·█"
+    assert layout.spark_text([5.0]) == ""
+
+
+def test_trend_state_uses_the_favourable_direction_of_each_ratio():
+    assert layout.trend_state("dso", -5.0) == "good"          # clients payés plus vite
+    assert layout.trend_state("cfo_to_net_income", -0.2) == "bad"
+    assert layout.trend_state("dpo", 4.0) == "neutral"        # lecture non univoque
+    assert layout.trend_state("ccc", None) == "neutral"

@@ -199,7 +199,8 @@ def _earnings_quality_section(normalized: NormalizedStatements, regime: dict, la
     merged = {year: {**conversion[year], "sloan_accruals": accruals[year]} for year in normalized.years}
     figure = _income_vs_cfo_figure(normalized, conversion, lang, dark, palette)
     return section + [
-        layout.ratio_table(merged, EARNINGS_QUALITY_METRICS, normalized.years, lang, dark, "table-earnings-quality"),
+        layout.ratio_table(merged, EARNINGS_QUALITY_METRICS, normalized.years, lang, dark, "table-earnings-quality",
+                           trends={metric: metric_trend(merged, metric) for metric in EARNINGS_QUALITY_METRICS}),
         *([dcc.Graph(figure=figure, config=layout.GRAPH_CONFIG)] if figure is not None else []),
         html.H5(L(lang, "section_bridge"), className="section-title"),
         layout.bridge_controls(normalized.years, lang),

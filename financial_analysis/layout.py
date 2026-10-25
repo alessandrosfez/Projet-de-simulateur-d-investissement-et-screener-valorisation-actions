@@ -221,6 +221,36 @@ RATIO_KINDS = {
     "cfo_to_net_income": "multiple", "fcf_to_net_income": "multiple", "sloan_accruals": "percent",
     "dso": "days", "dio": "days", "dpo": "days", "ccc": "days",
 }
+# Sens favorable d'une évolution, pour colorer la colonne Évolution : +1 = une hausse est bonne
+# (plus de cash par euro de résultat), -1 = une baisse est bonne (moins d'accruals, clients payés
+# plus vite, stocks qui tournent plus vite, cycle plus court), 0 = pas de lecture univoque. Le DPO est
+# neutre : payer ses fournisseurs plus tard améliore la trésorerie mais peut aussi signaler des
+# tensions, la couleur ne trancherait pas honnêtement.
+TREND_FAVORABLE = {
+    "cfo_to_net_income": 1, "fcf_to_net_income": 1, "sloan_accruals": -1,
+    "dso": -1, "dio": -1, "dpo": 0, "ccc": -1,
+}
+SPARK_BLOCKS = "▁▂▃▄▅▆▇█"
+
+
+def spark_text(values: list) -> str:
+    """Mini-courbe en caractères (▁▃▅▇), de l'exercice le plus ancien au plus récent : la forme de
+    l'évolution dans une cellule de tableau. Un exercice n.d. est un point médian, jamais un 0."""
+    present = [v for v in values if v is not None]
+    if len(present) < 2:
+        return ""
+    low, high = min(present), max(present)
+    span = (high - low) or 1.0
+    return "".join("·" if v is None else SPARK_BLOCKS[round((v - low) / span * (len(SPARK_BLOCKS) - 1))]
+                   for v in values)
+
+
+def trend_state(metric: str, delta: float | None) -> str:
+    """« good », « bad » ou « neutral » selon TREND_FAVORABLE et le signe de l'évolution."""
+    direction = TREND_FAVORABLE.get(metric, 0)
+    if delta is None or direction == 0 or delta == 0:
+        return "neutral"
+    return "good" if delta * direction > 0 else "bad"
 
 
 def format_ratio(value: float | None, kind: str, lang: str, signed: bool = False) -> str:
@@ -296,10 +326,17 @@ def ratio_table(results_by_year: dict, metrics: tuple[str, ...], years: list, la
             tooltip[year_id] = {"value": ratio_tooltip(result, lang), "type": "markdown"}
         if trends is not None:
             trend = trends.get(metric)
-            row["trend"] = L(lang, "trend_na") if trend is None else L(
-                lang, "trend_text", delta=format_ratio(trend["delta"], kind, lang, signed=True),
-                first=trend["first_year"].year, last=trend["last_year"].year,
-            )
+            if trend is None:
+                row["trend"], row["_trend_state"] = L(lang, "trend_na"), "neutral"
+            else:
+                # Mini-courbe chronologique, flèche, écart : la tendance se lit sans comparer les colonnes.
+                chronological = [results_by_year[year][metric]["value"] for year in sorted(years)]
+                arrow = "▲" if trend["delta"] > 0 else ("▼" if trend["delta"] < 0 else "▶")
+                row["trend"] = f"{spark_text(chronological)}  {arrow} " + L(
+                    lang, "trend_text", delta=format_ratio(trend["delta"], kind, lang, signed=True),
+                    first=trend["first_year"].year, last=trend["last_year"].year,
+                )
+                row["_trend_state"] = trend_state(metric, trend["delta"])
         rows.append(row)
         tooltips.append(tooltip)
 
@@ -310,6 +347,13 @@ def ratio_table(results_by_year: dict, metrics: tuple[str, ...], years: list, la
         conditional.append({"if": {"column_id": year_id, "filter_query": f"{{_state_{year_id}}} = flagged"},
                             "fontStyle": "italic"})
         conditional.append({"if": {"column_id": year_id, "filter_query": f"{{_state_{year_id}}} = na"}, "color": muted})
+    # Évolution favorable / défavorable (TREND_FAVORABLE) : la flèche et l'écart portent le sens, la
+    # couleur le rappelle.
+    good, bad = ("#3fd13f", "#ff7a7a") if dark else ("#0b7a0b", "#c23434")
+    conditional += [
+        {"if": {"column_id": "trend", "filter_query": "{_trend_state} = good"}, "color": good, "fontWeight": "600"},
+        {"if": {"column_id": "trend", "filter_query": "{_trend_state} = bad"}, "color": bad, "fontWeight": "600"},
+    ]
     return dash_table.DataTable(
         id=table_id, columns=columns, data=rows, tooltip_data=tooltips, tooltip_delay=0, tooltip_duration=None,
         style_header=style_header, style_cell=style_cell, style_data=style_data,
