@@ -67,10 +67,19 @@ def _ticker_display_label(ticker: str) -> str:
     return f"{ticker} ({name})" if name else ticker
 
 
+def _readable_names(tickers) -> dict:
+    """Nom court lisible de chaque ligne pour les graphiques (portfolio_engine.readable_line_names) :
+    indice suivi (détecté ou corrigé à la main, comme le graphique soleil) ou nom de la société, avec
+    l'émetteur pour distinguer deux ETF du même indice. Appels réseau en cache."""
+    tickers = list(tickers)
+    detected = {t: portfolio_engine.detect_underlying_index(t, **get_instrument_profile(t)) for t in tickers}
+    index_of = portfolio_engine.resolve_underlying_indices(detected, portfolio_db.get_index_overrides())
+    return portfolio_engine.readable_line_names(index_of, {t: get_ticker_name(t) for t in tickers})
+
+
 OTHER_SLICE_COLOR = "#9AA0A6"
 # Au-delà, un anneau devient illisible : les plus petites parts sont regroupées en « Autres ».
 MAX_DONUT_SLICES = 6
-LEGEND_LABEL_MAX = 42
 
 
 def _allocation_view(current_values: pd.Series, total: float, unpriced: list, index_of: dict, lang: str,
@@ -147,15 +156,15 @@ def _target_vs_actual_view(current_values: pd.Series, target_weights: pd.DataFra
     shown = sorted(k for k in shares["key"] if k != portfolio_engine.OTHER_ALLOCATION_KEY)
     color_of = {ticker: chart_theme.palette_for(None, dark)[i] for i, ticker in enumerate(shown)}
     labels, hover_names, colors = [], [], []
+    readable = _readable_names(shown)
     for key in shares["key"]:
         if key == portfolio_engine.OTHER_ALLOCATION_KEY:
             labels.append(L(lang, "allocation_other"))
             hover_names.append(L(lang, "allocation_other"))
             colors.append(OTHER_SLICE_COLOR)
         else:
-            full_name = _ticker_display_label(key)
-            labels.append(full_name if len(full_name) <= LEGEND_LABEL_MAX else full_name[:LEGEND_LABEL_MAX - 1] + "…")
-            hover_names.append(full_name)
+            labels.append(readable[key])
+            hover_names.append(_ticker_display_label(key))
             colors.append(color_of[key])
     fig = make_target_vs_actual_rings(
         labels, list(shares["actual"]), list(shares["target"]), hover_names, colors, L(lang, "target_chart_title"),
@@ -559,6 +568,10 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
 
 
     rebalancing_df = portfolio_engine.compute_rebalancing_plan(target_weights, current_values)
+    if not rebalancing_df.empty:
+        # Nom lisible de la ligne à la place du ticker seul (« S&P 500 · Amundi » plutôt que « PSP5.PA »).
+        names = _readable_names(rebalancing_df["ticker"])
+        rebalancing_df = rebalancing_df.assign(ticker=rebalancing_df["ticker"].map(names))
     rebalancing_data, rebalancing_columns = build_rebalancing_table_data(rebalancing_df, lang)
     rebalancing_warning = ""
     # Sans pondération cible, tout le détail du plan est masqué : l'état vide illustré du plan de
@@ -591,9 +604,12 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
         if not aligned.empty and list(aligned.columns) == tickers:
             if len(tickers) >= 2:
                 corr_matrix = aligned.corr()
-                labels = [_ticker_display_label(t) for t in corr_matrix.columns]
+                # Noms lisibles sur les axes et dans le classement des paires, ticker complet au survol.
+                readable = _readable_names(corr_matrix.columns)
+                hover_names = [_ticker_display_label(t) for t in corr_matrix.columns]
+                labels = [readable[t] for t in corr_matrix.columns]
                 corr_matrix = corr_matrix.set_axis(labels, axis=0).set_axis(labels, axis=1)
-                corr_fig = make_correlation_heatmap(corr_matrix, lang=lang, dark=dark)
+                corr_fig = make_correlation_heatmap(corr_matrix, lang=lang, dark=dark, hover_names=hover_names)
 
             weights_vec = current_values.reindex(tickers).fillna(0.0).to_numpy()
             total_w = weights_vec.sum()
@@ -771,7 +787,7 @@ def plan_next_contribution(_trigger, amount, lang, dark_mode, palette_code):
     summary_text = L(lang, "next_contribution_summary", amount=money(amount),
                      before=summary["deviation_before_pt"], after=summary["deviation_after_pt"])
     fig = make_contribution_plan_figure(
-        [_ticker_display_label(t) for t in lines["ticker"]],
+        [_readable_names(lines["ticker"])[t] for t in lines["ticker"]],
         lines["current_pct"].tolist(), lines["after_pct"].tolist(), lines["target_pct"].tolist(),
         [f"+{money(v)}" if v >= 0.5 else "" for v in lines["contribution_eur"]],
         (L(lang, "next_contribution_current"), L(lang, "next_contribution_after"), L(lang, "next_contribution_target")),
@@ -812,10 +828,12 @@ def refresh_line_contributions(_trigger, lang, dark_mode):
     def money(value):
         return f"{value:,.0f} €".replace(",", " ")
 
-    labels = [_ticker_display_label(t) for t in priced["ticker"]]
+    readable = _readable_names(priced["ticker"])
+    labels = [readable[t] for t in priced["ticker"]]
     texts = [L(lang, "line_contribution_text", gain=g, pct=p * 100) for g, p in zip(priced["gain_eur"], priced["gain_pct"])]
     hovers = [
-        L(lang, "line_contribution_hover", label=label, cost=money(r.cost_eur), value=money(r.value_eur),
+        L(lang, "line_contribution_hover", label=_ticker_display_label(r.ticker), cost=money(r.cost_eur),
+          value=money(r.value_eur),
           dividends=money(r.dividends_eur))
         for label, r in zip(labels, priced.itertuples())
     ]
@@ -883,7 +901,7 @@ def refresh_dividend_calendar(_trigger, lang, dark_mode, palette_code):
     this_month = today.replace(day=1)
     fig = make_dividend_calendar_figure(
         calendar, this_month - pd.DateOffset(months=11), this_month, this_month + pd.DateOffset(months=12),
-        {t: _ticker_display_label(t) for t in tickers}, colors,
+        _readable_names(tickers), colors,
         (L(lang, "dividends_received"), L(lang, "dividends_estimated")), L(lang, "dividends_chart_title"),
         L(lang, "dividends_today"), dark=dark, separators=L(lang, "plotly_separators"),
     )

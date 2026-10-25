@@ -324,7 +324,7 @@ TRANSLATIONS = {
                                                 "automatiquement pour ce calcul.",
         "rebalancing_no_weights_hint": "Ajoute au moins une pondération cible ci-dessous pour voir apparaître le "
                                         "plan de rééquilibrage.",
-        "rebalancing_col_ticker": "Ticker",
+        "rebalancing_col_ticker": "Ligne",
         "rebalancing_col_target_pct": "Cible",
         "rebalancing_col_current_pct": "Actuel",
         "rebalancing_col_current_value": "Valeur actuelle",
@@ -927,7 +927,7 @@ TRANSLATIONS = {
         "rebalancing_weights_not_100_warning": "Target weights don't add up to 100%: automatically normalized for "
                                                 "this calculation.",
         "rebalancing_no_weights_hint": "Add at least one target weight below to see the rebalancing plan appear.",
-        "rebalancing_col_ticker": "Ticker",
+        "rebalancing_col_ticker": "Line",
         "rebalancing_col_target_pct": "Target",
         "rebalancing_col_current_pct": "Current",
         "rebalancing_col_current_value": "Current value",

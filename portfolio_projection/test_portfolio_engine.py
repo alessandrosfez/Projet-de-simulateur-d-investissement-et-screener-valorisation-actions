@@ -788,3 +788,25 @@ def test_latent_tax_loss_means_no_tax(is_mature):
     assert result["is_loss"] is True
     assert result["tax"] == 0.0
     assert result["net_value"] == pytest.approx(8_000.0)
+
+
+# ---------- noms lisibles des lignes ----------
+
+def test_readable_names_use_the_index_and_split_duplicates_by_issuer():
+    index_of = {"SPA.PA": "S&P 500", "SPB.PA": "S&P 500", "EUR.PA": "Stoxx Europe 600", "TTE.PA": m.STOCK_INDEX_KEY}
+    funds = {"SPA.PA": "AMUNDI PEA S&P 500 UCITS ETF", "SPB.PA": "BNP Paribas Easy S&P 500 UCITS ETF",
+             "EUR.PA": "BNP Paribas Easy Stoxx Europe 600", "TTE.PA": "TotalEnergies SE"}
+    names = m.readable_line_names(index_of, funds)
+    assert names["SPA.PA"] == "S&P 500 · Amundi" and names["SPB.PA"] == "S&P 500 · BNP"
+    assert names["EUR.PA"] == "Stoxx Europe 600"
+    assert names["TTE.PA"] == "TotalEnergies SE"
+
+
+def test_readable_names_fall_back_to_ticker_root_when_issuers_collide_or_names_missing():
+    index_of = {"CW8.PA": "MSCI World", "MWRD.PA": "MSCI World", "XYZ.PA": m.UNKNOWN_INDEX_KEY}
+    funds = {"CW8.PA": "Amundi MSCI World Swap", "MWRD.PA": "Amundi MSCI World UCITS", "XYZ.PA": None}
+    names = m.readable_line_names(index_of, funds)
+    assert names["CW8.PA"] == "MSCI World · CW8" and names["MWRD.PA"] == "MSCI World · MWRD"
+    assert names["XYZ.PA"] == "XYZ"
+    long_name = m.readable_line_names({"ABC.PA": m.STOCK_INDEX_KEY}, {"ABC.PA": "Une Société Au Nom Vraiment Très Long"})
+    assert len(long_name["ABC.PA"]) <= m.READABLE_NAME_MAX_CHARS and long_name["ABC.PA"].endswith("…")

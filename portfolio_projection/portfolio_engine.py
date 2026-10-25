@@ -15,7 +15,7 @@ import pandas as pd
 
 from constants import (
     INDEX_NAME_KEYWORDS, PEA_CONTRIBUTION_CAP, PEA_EARLY_WITHDRAWAL_TAX_RATE, PEA_MATURITY_YEARS, PEA_TAX_RATE,
-    STOCK_INDEX_KEY, TICKERS, TICKERS_UNDERLYING, UNKNOWN_INDEX_KEY,
+    STOCK_INDEX_KEY, TICKERS, TICKERS_UNDERLYING, UNDERLYING_INDICES, UNKNOWN_INDEX_KEY,
 )
 from engine import cap_schedule, overflow_schedule
 
@@ -796,6 +796,52 @@ def known_tickers(transactions: pd.DataFrame, dividends: pd.DataFrame, target_we
     if not target_weights.empty:
         tickers |= set(target_weights["ticker"])
     return sorted(tickers)
+
+
+READABLE_NAME_MAX_CHARS = 24
+
+
+def _issuer(fund_name: str | None) -> str | None:
+    """Émetteur d'un ETF : premier mot de son nom (« AMUNDI PEA S&P 500 » -> « Amundi », « BNP Paribas
+    Easy... » -> « BNP »). Sigle court gardé en majuscules."""
+    if not fund_name or not fund_name.split():
+        return None
+    word = fund_name.split()[0].strip(",.")
+    return word if len(word) <= 4 and word.isupper() else word.capitalize()
+
+
+def readable_line_names(index_of: dict[str, str], fund_names: dict[str, str | None]) -> dict[str, str]:
+    """Nom court et lisible de chaque ligne pour les graphiques, à la place d'un ticker (« PSP5.PA »)
+    ou d'un nom de fonds à rallonge : l'indice suivi pour un ETF (« S&P 500 »), le nom de la société
+    pour une action. Deux lignes qui suivent le même indice sont distinguées par leur émetteur
+    (« S&P 500 · Amundi », « S&P 500 · BNP »), puis par leur ticker si l'émetteur ne suffit pas.
+    index_of : voir resolve_underlying_indices ; fund_names : nom Yahoo de chaque ticker (ou None)."""
+    def root(ticker: str) -> str:
+        return ticker.split(".")[0]
+
+    def shorten(text: str) -> str:
+        text = " ".join(text.split())
+        return text if len(text) <= READABLE_NAME_MAX_CHARS else text[:READABLE_NAME_MAX_CHARS - 1].rstrip() + "…"
+
+    base = {}
+    for ticker, index_key in index_of.items():
+        name = fund_names.get(ticker)
+        if index_key in UNDERLYING_INDICES:
+            base[ticker] = index_key
+        elif name:
+            base[ticker] = shorten(name)
+        else:
+            base[ticker] = root(ticker)
+    names = dict(base)
+    for label in set(base.values()):
+        same = [t for t in base if base[t] == label]
+        if len(same) < 2:
+            continue
+        issuers = {t: _issuer(fund_names.get(t)) for t in same}
+        distinct = len({issuers[t] for t in same}) == len(same) and all(issuers.values())
+        for t in same:
+            names[t] = f"{label} · {issuers[t] if distinct else root(t)}"
+    return names
 
 
 def ticker_display_label(ticker: str) -> str:

@@ -35,12 +35,13 @@ def corr_band(value: float) -> str:
     return CORR_BANDS[-1][0]
 
 
-def make_correlation_heatmap(corr: pd.DataFrame, lang="fr", dark: bool = False):
+def make_correlation_heatmap(corr: pd.DataFrame, lang="fr", dark: bool = False, hover_names: list | None = None):
     """Corrélations entre lignes, en deux parties qui partagent les mêmes paliers de couleur
     (CORR_BANDS) : à gauche la demi-matrice (la moitié haute répète la basse, la diagonale vaut
     toujours 1), à droite les paires classées de la plus liée à la moins liée, chacune avec sa
     valeur et son palier en clair. Le classement répond directement à « quelles lignes font
-    doublon ? » et sert de légende à la matrice."""
+    doublon ? » et sert de légende à la matrice. hover_names : noms complets (avec ticker) pour
+    l'infobulle, quand les colonnes portent déjà des noms courts."""
     from plotly.subplots import make_subplots
 
     mode = "dark" if dark else "light"
@@ -57,7 +58,8 @@ def make_correlation_heatmap(corr: pd.DataFrame, lang="fr", dark: bool = False):
         return f"{value:.2f}".replace(".", ",") if lang == "fr" else f"{value:.2f}"
 
     # Nom court sur les axes (« PSP5.PA », pas « PSP5.PA (S&P 500) ») ; nom complet en infobulle.
-    short = [str(name).split(" (")[0] for name in names]
+    short = list(names) if hover_names else [str(name).split(" (")[0] for name in names]
+    full = list(hover_names) if hover_names else names
     order = [band for band, _, _ in CORR_BANDS]
     rows, cols = short[1:], short[:-1]
     values = [[corr.iloc[i, j] if j < i else None for j in range(n - 1)] for i in range(1, n)]
@@ -68,15 +70,15 @@ def make_correlation_heatmap(corr: pd.DataFrame, lang="fr", dark: bool = False):
     for k, band in enumerate(order):
         scale += [[k / steps, colors[band]], [(k + 1) / steps, colors[band]]]
     z = [[None if v is None or pd.isna(v) else order.index(corr_band(float(v))) + 0.5 for v in row] for row in values]
-    pairs = [[f"{names[i]}<br>{names[j]}" for j in range(n - 1)] for i in range(1, n)]
+    pairs = [[f"{full[i]}<br>{full[j]}" for j in range(n - 1)] for i in range(1, n)]
 
     ranked = sorted(
         ((float(corr.iloc[i, j]), short[i], short[j]) for i in range(n) for j in range(i) if pd.notna(corr.iloc[i, j])),
         reverse=True,
     )
     # Espace entre les deux parties à la mesure du plus long nom de paire, qui sinon déborde sur la matrice.
-    longest = max((len(f"{a} · {b}") for _, a, b in ranked), default=10)
-    fig = make_subplots(rows=1, cols=2, column_widths=[0.42, 0.58], horizontal_spacing=min(0.34, 0.03 + 0.0066 * longest),
+    longest = max((len(f"{a}  /  {b}") for _, a, b in ranked), default=10)
+    fig = make_subplots(rows=1, cols=2, column_widths=[0.42, 0.58], horizontal_spacing=min(0.38, 0.04 + 0.0078 * longest),
                         subplot_titles=(L(lang, "corr_matrix_title"), L(lang, "corr_pairs_title")))
     fig.add_trace(go.Heatmap(
         z=z, x=cols, y=rows, zmin=0, zmax=steps, colorscale=scale, showscale=False, xgap=4, ygap=4,
@@ -93,7 +95,7 @@ def make_correlation_heatmap(corr: pd.DataFrame, lang="fr", dark: bool = False):
             fig.add_annotation(x=col_name, y=row_name, text=f"<b>{fmt(value)}</b>", showarrow=False, xref="x", yref="y",
                                font=dict(size=13, color=chrome["ink"] if light_cell else "#ffffff"))
 
-    labels = [f"{a} · {b}" for _, a, b in ranked]
+    labels = [f"{a}  /  {b}" for _, a, b in ranked]
     fig.add_trace(go.Bar(
         x=[v for v, _, _ in ranked], y=labels, orientation="h", width=0.62,
         marker=dict(color=[colors[corr_band(v)] for v, _, _ in ranked], cornerradius=4),
@@ -112,7 +114,23 @@ def make_correlation_heatmap(corr: pd.DataFrame, lang="fr", dark: bool = False):
     )
     # Cases carrées tenues dans leur moitié (constrain) et calées en haut à gauche : la matrice ne
     # déborde plus sur le classement et ne flotte plus en bas quand la liste de paires est longue.
-    fig.update_xaxes(showgrid=False, constrain="domain", constraintoward="left", row=1, col=1)
+    # Noms des colonnes à l'horizontale, coupés sur plusieurs lignes : inclinés, ils se chevauchaient.
+    def wrap(label: str, width: int = 8) -> str:
+        # Une ligne par partie (« S&P 500 » / « BNP »), puis coupure aux espaces au-delà de width.
+        lines = []
+        for part in str(label).split(" · "):
+            current = ""
+            for word in part.split():
+                if current and len(current) + 1 + len(word) > width:
+                    lines.append(current)
+                    current = word
+                else:
+                    current = f"{current} {word}".strip()
+            lines.append(current)
+        return "<br>".join(lines)
+
+    fig.update_xaxes(showgrid=False, constrain="domain", constraintoward="left", tickangle=0, tickvals=cols,
+                     ticktext=[wrap(c) for c in cols], row=1, col=1)
     fig.update_yaxes(showgrid=False, autorange="reversed", scaleanchor="x", constrain="domain", constraintoward="top",
                      ticklabelstandoff=6, row=1, col=1)
     lowest = min(0.0, min(v for v, _, _ in ranked))
