@@ -54,6 +54,21 @@ LOADING_PROPS = {
     "parent_className": "loading-area",
 }
 
+def empty_state(kind: str, title: str, text: str, action_label: str | None = None, action_href: str | None = None):
+    """État vide illustré (assets/empty_<kind>_light|dark.svg, selon le thème) : ce qui manque et
+    l'action qui le remplit, au lieu d'une phrase grise isolée. Recopié à l'identique dans les trois
+    outils (pas d'import croisé)."""
+    children = [
+        html.Img(src=f"/assets/empty_{kind}_light.svg", alt="", className="empty-art art-light"),
+        html.Img(src=f"/assets/empty_{kind}_dark.svg", alt="", className="empty-art art-dark"),
+        html.Div(title, className="empty-title"),
+        html.Div(text, className="empty-text"),
+    ]
+    if action_label and action_href:
+        children.append(html.A([html.I(className="bi bi-arrow-down-circle me-1", **{"aria-hidden": "true"}),
+                                action_label], href=action_href, className="btn btn-primary btn-sm mt-2"))
+    return html.Div(children, className="empty-state")
+
 
 def table_style_overrides(dark: bool):
     """(style_header, style_cell, style_data) pour un dash_table.DataTable, recopié de

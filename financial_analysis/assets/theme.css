@@ -184,3 +184,13 @@ a { color: var(--accent); }
     .app-title { font-size: 1.3rem; }
     .app-subtitle { font-size: 0.85rem; }
 }
+
+/* -------- États vides illustrés (layout.empty_state) -------- */
+.empty-state { display: flex; flex-direction: column; align-items: center; text-align: center;
+               padding: 1.5rem 1rem; border: 1px dashed var(--border-soft); border-radius: 14px; }
+.empty-art { width: 180px; max-width: 60%; height: auto; margin-bottom: 0.9rem; }
+.art-dark { display: none; }
+[data-bs-theme="dark"] .art-light { display: none; }
+[data-bs-theme="dark"] .art-dark { display: block; }
+.empty-title { font-weight: 600; font-size: 1rem; margin-bottom: 0.25rem; }
+.empty-text { color: var(--Dash-Text-Weak, #6c757d); font-size: 0.88rem; max-width: 520px; }

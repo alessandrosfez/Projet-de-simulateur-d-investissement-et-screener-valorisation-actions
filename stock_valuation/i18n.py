@@ -114,6 +114,8 @@ TRANSLATIONS = {
         "watchlist_label": "Valeurs suivies (watchlist)",
         "watchlist_placeholder": "Ajouter des valeurs à ta watchlist...",
         "watchlist_only_label": "N'afficher que ma watchlist",
+        "empty_stocks_title": "Aucune donnée chargée pour l'instant",
+        "empty_stocks_text": "Coche un ou plusieurs marchés puis clique sur « Charger / actualiser les données » : comparatif sectoriel, tableau de criblage, DCF et alertes de ta liste de suivi apparaîtront ici.",
         "watch_alerts_title": "Alertes de ta liste de suivi",
         "watch_alerts_help": "Quatre signaux, calculés sur tout l'univers chargé (indépendants des filtres du "
                               "tableau) : P/E dans les 20 % les plus bas de sa propre histoire ; cours sous la "
@@ -374,6 +376,8 @@ TRANSLATIONS = {
         "watchlist_label": "Watchlist",
         "watchlist_placeholder": "Add stocks to your watchlist...",
         "watchlist_only_label": "Show only my watchlist",
+        "empty_stocks_title": "No data loaded yet",
+        "empty_stocks_text": "Tick one or more markets then click “Load / refresh data”: sector comparison, screening table, DCF and watchlist alerts will appear here.",
         "watch_alerts_title": "Watchlist alerts",
         "watch_alerts_help": "Four signals, computed over the whole loaded universe (independent of the table "
                               "filters): P/E in the lowest 20% of its own history; price below the value implied by "

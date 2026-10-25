@@ -48,7 +48,8 @@ TRANSLATIONS = {
         "error_empty_ticker": "Saisis un ticker ou choisis une société dans la liste.",
         "error_no_data": "Aucun état financier annuel disponible pour « {ticker} » sur Yahoo Finance "
                          "(ticker erroné, société non cotée, ou service momentanément indisponible).",
-        "results_placeholder": "Les résultats s'afficheront ici après l'analyse.",
+        "results_placeholder": "Saisis un ticker ou importe des états financiers au-dessus : la qualité des résultats, le BFR, les scores d'alerte et la comparaison aux pairs s'afficheront ici.",
+        "empty_analysis_title": "Aucune société analysée pour l'instant",
         "na": "n.d.",
         "unit_billion": "Md",
         "unit_million": "M",
@@ -822,7 +823,8 @@ TRANSLATIONS = {
         "error_empty_ticker": "Enter a ticker or pick a company from the list.",
         "error_no_data": "No annual financial statements available for \"{ticker}\" on Yahoo Finance "
                          "(wrong ticker, unlisted company, or service temporarily unavailable).",
-        "results_placeholder": "Results will appear here after the analysis.",
+        "results_placeholder": "Enter a ticker or import financial statements above: earnings quality, working capital, warning scores and the peer comparison will appear here.",
+        "empty_analysis_title": "No company analysed yet",
         "na": "n/a",
         "unit_billion": "bn",
         "unit_million": "m",

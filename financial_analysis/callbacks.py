@@ -591,7 +591,7 @@ def render_analysis(store, lang, dark_mode, palette_code, saved_store):
     dark = bool(dark_mode)
     palette = chart_theme.palette_for(palette_code, dark)
     if not store:
-        return html.Div(L(lang, "results_placeholder"), className="text-muted")
+        return layout.empty_state("analysis", L(lang, "empty_analysis_title"), L(lang, "results_placeholder"))
     ctx = _load_context(store)
     if ctx is None:
         return dbc.Alert(L(lang, "error_empty_ticker"), color="warning")

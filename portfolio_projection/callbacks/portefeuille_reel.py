@@ -538,6 +538,10 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
     real_series = portfolio_engine.reconstruct_equity_curve(transactions, price_histories)
     totals_cards = build_portfolio_totals_cards(totals, lang, real_series=real_series, dark=dark,
                                                palette=chart_theme.palette_for(None, dark))
+    if transactions.empty:
+        # Portefeuille vide : état illustré qui mène au formulaire d'achat, plutôt que des tuiles à 0 €.
+        totals_cards = layout.empty_state("portfolio", L(lang, "empty_portfolio_title"), L(lang, "empty_portfolio_text"),
+                                          L(lang, "empty_portfolio_action"), "#anchor-tab3-tx")
     unpriced = [t for t in holdings["ticker"] if t not in current_values.index] if not holdings.empty else []
     if unpriced:
         # Sans cours, une ligne manque à la valeur actuelle mais pas au capital investi : la plus-value
@@ -741,7 +745,8 @@ def plan_next_contribution(_trigger, amount, lang, dark_mode, palette_code):
     empty.update_layout(template=chart_theme.template(dark), height=10, margin=dict(t=0, b=0, l=0, r=0),
                         xaxis=dict(visible=False), yaxis=dict(visible=False))
     if target_weights.empty:
-        return html.Div(L(lang, "rebalancing_no_weights_hint"), className="text-muted"), empty
+        return layout.empty_state("targets", L(lang, "empty_targets_title"), L(lang, "rebalancing_no_weights_hint"),
+                                  L(lang, "empty_targets_action"), "#anchor-tab3-weights"), empty
     if not amount or float(amount) <= 0:
         return html.Div(L(lang, "next_contribution_no_amount"), className="text-muted"), empty
 

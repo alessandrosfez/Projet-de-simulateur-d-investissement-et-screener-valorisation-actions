@@ -397,6 +397,7 @@ def _scored_frame(rows) -> pd.DataFrame:
     Output("stocks-table", "style"),
     Output("stocks-csv-store", "data"),
     Output("stocks-results-container", "style"),
+    Output("stocks-empty-state", "style"),
     Input("stocks-raw-store", "data"),
     Input("sector-filter", "value"),
     Input("filter-pe-max", "value"),
@@ -432,7 +433,8 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
             help_texts[c] = help_text
     if not rows:
         placeholder = empty_figure_with_message(L(lang, "load_hint_placeholder"), dark=dark)
-        return (placeholder, placeholder, "", placeholder, [], [], {"height": "70vh"}, "", {"display": "none"})
+        return (placeholder, placeholder, "", placeholder, [], [], {"height": "70vh"}, "", {"display": "none"},
+                {"display": "block"})
 
     df = _scored_frame(rows)
 
@@ -596,7 +598,7 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
     grid_style = {"height": f"min(70vh, {GRID_HEADER_PX + GRID_ROW_PX * max(len(table_df), 1)}px)"}
 
     return (sector_bar, sector_box, cards_row, fig, table_df.to_dict("records"), column_defs, grid_style,
-            csv_data, {"display": "block"})
+            csv_data, {"display": "block"}, {"display": "none"})
 
 
 @app.callback(
