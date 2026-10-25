@@ -19,8 +19,9 @@ def test_every_colour_rule_checks_for_a_missing_value_first():
 
 def test_numeric_columns_show_na_for_missing_values_and_company_is_pinned():
     defs = _defs()
-    assert defs["Score"]["valueFormatter"] == layout.NUMBER_FORMATTER
-    assert "'N/A'" in layout.NUMBER_FORMATTER["function"]
+    assert defs["Score"]["valueFormatter"] == layout.NUMBER_FORMATTERS["fr"]
+    assert all("'N/A'" in formatter["function"] for formatter in layout.NUMBER_FORMATTERS.values())
+    assert "replace('.', ',')" in layout.NUMBER_FORMATTERS["fr"]["function"]
     assert defs["PEG"]["headerTooltip"] == "aide PEG" and "headerTooltip" not in defs["Score"]
     assert defs["Entreprise"]["pinned"] == "left"
     assert "valueFormatter" not in defs["Capitalisation"] and defs["Capitalisation"]["type"] == "rightAligned"

@@ -25,7 +25,7 @@ from engine import (
     summarize_pe_signal_backtest,
 )
 import chart_theme
-from i18n import L, PALETTE_CODES, PALETTE_NAMES
+from i18n import L, PALETTE_CODES, PALETTE_NAMES, num
 from market_data import (
     get_dcf_inputs, get_stock_pe_history, get_stock_price_history, get_stock_quality_metrics, get_stock_valuation,
     major_currency,
@@ -70,18 +70,18 @@ def rebuild_on_language_change(lang, *state_values):
 # CALLBACKS : valorisation d'actions individuelles
 # ============================================================
 
-def _format_market_cap(value):
+def _format_market_cap(value, lang="fr"):
     """Formate une capitalisation (montant abrégé, sans devise : l'appelant ajoute la devise principale,
     voir market_data.major_currency)."""
     if not value or (isinstance(value, float) and np.isnan(value)):
         return "N/A"
     for threshold, suffix in [(1e12, "T"), (1e9, "Md"), (1e6, "M")]:
         if value >= threshold:
-            return f"{value / threshold:.1f} {suffix}"
-    return f"{value:,.0f}".replace(",", " ")
+            return f"{num(value / threshold, '.1f', lang)} {suffix}"
+    return num(value, ",.0f", lang)
 
 
-def _format_abbreviated(value):
+def _format_abbreviated(value, lang="fr"):
     """Nombre abrégé (M/Md), signe conservé, sans unité (à ajouter par l'appelant si besoin) :
     utilisé pour le détail du calcul DCF, où les montants (FCF, dette, valeur d'entreprise...)
     sont trop grands pour s'afficher lisiblement en entier."""
@@ -89,12 +89,12 @@ def _format_abbreviated(value):
     abs_value = abs(value)
     for threshold, suffix in [(1e9, "Md"), (1e6, "M")]:
         if abs_value >= threshold:
-            return f"{sign}{abs_value / threshold:.2f} {suffix}"
-    return f"{sign}{abs_value:,.0f}".replace(",", " ")
+            return f"{sign}{num(abs_value / threshold, '.2f', lang)} {suffix}"
+    return f"{sign}{num(abs_value, ',.0f', lang)}"
 
 
-def _format_dcf_amount(value, currency):
-    return f"{_format_abbreviated(value)} {currency}"
+def _format_dcf_amount(value, currency, lang="fr"):
+    return f"{_format_abbreviated(value, lang)} {currency}"
 
 
 # État de progression du chargement en cours, partagé entre load_stock_valuations (qui l'écrit,
@@ -365,6 +365,7 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
             x=sector_means.index, y=sector_means.values, marker_color=palette[1 % len(palette)],
         ))
         sector_bar.update_layout(
+            separators=L(lang, "plotly_separators"),
             template=chart_theme.template(dark),
             title=L(lang, "sector_avg_pe_title"), xaxis_title="", yaxis_title=L(lang, "axis_pe_avg"),
             margin=dict(t=60, b=100), xaxis=dict(tickangle=-45),
@@ -388,6 +389,7 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
                 hovertemplate="<b>%{text}</b><br>P/E : %{y:.1f}<extra></extra>",
             ))
         sector_box.update_layout(
+            separators=L(lang, "plotly_separators"),
             template=chart_theme.template(dark),
             title=L(lang, "sector_dist_pe_title"), showlegend=False, yaxis_title="P/E",
             # Échelle log : un seul P/E extrême (voir ci-dessus) écrase sinon visuellement toutes
@@ -426,7 +428,7 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
             (L(lang, "priciest_title"), priciest, "danger"),
         ]:
             items = [
-                html.Li(f"{row['Entreprise']} : P/E {row['P/E (trailing)']:.1f} ({row['Secteur']})")
+                html.Li(f"{row['Entreprise']} : P/E {num(row['P/E (trailing)'], '.1f', lang)} ({row['Secteur']})")
                 for _, row in subset.iterrows()
             ]
             cards.append(dbc.Col(dbc.Card(dbc.CardBody([
@@ -445,10 +447,11 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
             (L(lang, "above_history_title"), above_own_history, "danger"),
         ]:
             items = [
-                html.Li(
-                    f"{row['Entreprise']} : P/E actuel {row['P/E (trailing)']:.1f} vs moyenne 5 ans "
-                    f"{row['P/E moyen 5 ans (approx.)']:.1f} (percentile {row['Position vs historique 5 ans (percentile)']:.0f})"
-                )
+                # Libellé traduit : cette phrase restait en français dans l'interface anglaise.
+                html.Li(L(
+                    lang, "history_card_item", name=row["Entreprise"], pe=row["P/E (trailing)"],
+                    mean=row["P/E moyen 5 ans (approx.)"], pct=row["Position vs historique 5 ans (percentile)"],
+                ))
                 for _, row in subset.iterrows()
             ]
             history_cards.append(dbc.Col(dbc.Card(dbc.CardBody([
@@ -471,6 +474,7 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
             annotation_text=L(lang, "basket_avg_annotation"), annotation_position="top left",
         )
     fig.update_layout(
+        separators=L(lang, "plotly_separators"),
         template=chart_theme.template(dark),
         title=L(lang, "pe_by_stock_chart_title"),
         xaxis_title="", yaxis_title="P/E",
@@ -488,8 +492,8 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
     # Devise principale accolée : à Londres, la colonne Devise affiche GBp (cours en pence) alors que
     # la capitalisation Yahoo est en livres, ce qu'un « 221.9 Md » nu à côté de « GBp » cachait.
     table_df["Capitalisation"] = [
-        f"{_format_market_cap(cap)} {major_currency(cur)}" if _format_market_cap(cap) != "N/A" and cur not in (None, "N/A")
-        else _format_market_cap(cap)
+        f"{_format_market_cap(cap, lang)} {major_currency(cur)}" if _format_market_cap(cap, lang) != "N/A" and cur not in (None, "N/A")
+        else _format_market_cap(cap, lang)
         for cap, cur in zip(table_df["Capitalisation"], table_df["Devise"])
     ]
     for col in ["Score", "Prix", "P/E (trailing)", "P/E (prévisionnel)", "PEG", "EV/EBITDA", "P/B",
@@ -498,7 +502,7 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
     table_df = table_df.sort_values("P/E (trailing)")
 
     column_defs = layout.stocks_column_defs(
-        {c: L(lang, column_label_keys.get(c, c)) for c in table_df.columns}, help_texts,
+        {c: L(lang, column_label_keys.get(c, c)) for c in table_df.columns}, help_texts, lang,
     )
     csv_data = table_df.to_csv(index=False)
     # NaN -> None : un NaN JSON est invalide ; None s'affiche « N/A » et n'est jamais colorié.
@@ -553,6 +557,7 @@ def update_pe_history_chart(selected_rows, lang, palette_code, dark_mode, grid_r
             annotation_text=L(lang, "history_current_annotation"), annotation_position="bottom left",
         )
     fig.update_layout(
+        separators=L(lang, "plotly_separators"),
         template=chart_theme.template(dark),
         title=L(lang, "history_chart_title", name=name),
         xaxis_title="", yaxis_title="P/E", margin=dict(t=60),
@@ -614,7 +619,7 @@ def update_quality_metrics(selected_rows, lang, grid_rows):
     m = get_stock_quality_metrics(ticker)
 
     def stat(label_key, value, suffix=""):
-        text = f"{value:.1f}{suffix}" if value is not None else "N/A"
+        text = f"{num(value, '.1f', lang)}{suffix}" if value is not None else "N/A"
         return dbc.Col([
             html.Small(L(lang, label_key), className="text-muted d-block"),
             html.H6(text),
@@ -660,7 +665,7 @@ def update_track_record(selected_rows, lang, grid_rows):
         return html.Div(L(lang, "track_record_hint_default"), className="text-muted")
 
     def stat(label_key, value, suffix=""):
-        text = f"{value:.1f}{suffix}" if value is not None else "N/A"
+        text = f"{num(value, '.1f', lang)}{suffix}" if value is not None else "N/A"
         return dbc.Col([
             html.Small(L(lang, label_key), className="text-muted d-block"),
             html.H6(text),
@@ -793,17 +798,17 @@ def update_dcf(selected_rows, growth_pct, discount_pct, terminal_growth_pct, hor
         detail_children.append(html.H6("DCF", className="mt-1"))
         if inputs["fcf_history"]:
             detail_children.append(html.P(
-                L(lang, "dcf_detail_starting_fcf", fcf=_format_dcf_amount(inputs["fcf"], currency)),
+                L(lang, "dcf_detail_starting_fcf", fcf=_format_dcf_amount(inputs["fcf"], currency, lang)),
                 className="mb-1",
             ))
             history_rows = [
                 html.Tr([
                     html.Td(str(rec["year"])),
-                    html.Td(_format_dcf_amount(rec["operating_cash_flow"], currency)
+                    html.Td(_format_dcf_amount(rec["operating_cash_flow"], currency, lang)
                             if rec["operating_cash_flow"] is not None else "N/A"),
-                    html.Td(_format_dcf_amount(rec["capex"], currency)
+                    html.Td(_format_dcf_amount(rec["capex"], currency, lang)
                             if rec["capex"] is not None else "N/A"),
-                    html.Td(_format_dcf_amount(rec["fcf"], currency)),
+                    html.Td(_format_dcf_amount(rec["fcf"], currency, lang)),
                 ])
                 for rec in inputs["fcf_history"]
             ]
@@ -818,12 +823,12 @@ def update_dcf(selected_rows, growth_pct, discount_pct, terminal_growth_pct, hor
             ], bordered=False, striped=True, size="sm", className="mb-2"))
         else:
             detail_children.append(html.P(
-                L(lang, "dcf_detail_starting_fcf_ttm", fcf=_format_dcf_amount(inputs["fcf"], currency)),
+                L(lang, "dcf_detail_starting_fcf_ttm", fcf=_format_dcf_amount(inputs["fcf"], currency, lang)),
                 className="mb-2",
             ))
         year_rows = [
-            html.Tr([html.Td(str(year)), html.Td(_format_dcf_amount(fcf_y, currency)),
-                     html.Td(_format_dcf_amount(pv_y, currency))])
+            html.Tr([html.Td(str(year)), html.Td(_format_dcf_amount(fcf_y, currency, lang)),
+                     html.Td(_format_dcf_amount(pv_y, currency, lang))])
             for year, fcf_y, pv_y in zip(
                 range(1, int(horizon_years) + 1), result["projected_fcf"], result["pv_flows"],
             )
@@ -838,42 +843,42 @@ def update_dcf(selected_rows, growth_pct, discount_pct, terminal_growth_pct, hor
         ], bordered=False, striped=True, size="sm", className="mb-2"))
         detail_children.append(html.P(
             L(lang, "dcf_detail_terminal", n=int(horizon_years),
-              terminal_value=_format_dcf_amount(result["terminal_value"], currency),
-              pv_terminal_value=_format_dcf_amount(result["pv_terminal_value"], currency)),
+              terminal_value=_format_dcf_amount(result["terminal_value"], currency, lang),
+              pv_terminal_value=_format_dcf_amount(result["pv_terminal_value"], currency, lang)),
             className="mb-1",
         ))
         detail_children.append(html.P(
-            L(lang, "dcf_detail_ev", enterprise_value=_format_dcf_amount(result["enterprise_value"], currency)),
+            L(lang, "dcf_detail_ev", enterprise_value=_format_dcf_amount(result["enterprise_value"], currency, lang)),
             className="mb-1",
         ))
         detail_children.append(html.P(
-            L(lang, "dcf_detail_net_debt", net_debt=_format_dcf_amount(net_debt, currency)),
+            L(lang, "dcf_detail_net_debt", net_debt=_format_dcf_amount(net_debt, currency, lang)),
             className="mb-1",
         ))
         detail_children.append(html.P(
-            L(lang, "dcf_detail_equity", equity_value=_format_dcf_amount(result["equity_value"], currency)),
+            L(lang, "dcf_detail_equity", equity_value=_format_dcf_amount(result["equity_value"], currency, lang)),
             className="mb-1",
         ))
         detail_children.append(html.P(
-            L(lang, "dcf_detail_per_share", shares=_format_abbreviated(inputs["shares_outstanding"]),
-              fair_value=f"{fair_value:,.2f} {currency}".replace(",", " ")),
+            L(lang, "dcf_detail_per_share", shares=_format_abbreviated(inputs["shares_outstanding"], lang),
+              fair_value=f"{num(fair_value, ',.2f', lang)} {currency}"),
             className="mb-2",
         ))
     if comp_fair_value is not None:
         detail_children.append(html.H6("Comparables (P/E)", className="mt-2"))
         detail_children.append(html.P(
             L(lang, "comp_detail_formula", n=len(peer_pes),
-              price=f"{price:,.2f} {currency}".replace(",", " "),
-              peer_pe=f"{peer_median_pe:.1f}x", own_pe=f"{own_pe:.1f}x",
-              comp_fair_value=f"{comp_fair_value:,.2f} {currency}".replace(",", " ")),
+              price=f"{num(price, ',.2f', lang)} {currency}",
+              peer_pe=f"{num(peer_median_pe, '.1f', lang)}x", own_pe=f"{num(own_pe, '.1f', lang)}x",
+              comp_fair_value=f"{num(comp_fair_value, ',.2f', lang)} {currency}"),
             className="mb-0",
         ))
     if comp_ev_fair_value is not None:
         detail_children.append(html.H6("Comparables (EV/EBITDA)", className="mt-2"))
         detail_children.append(html.P(
             L(lang, "comp_ev_detail_formula", n=len(peer_ev_ebitdas),
-              peer_ev_ebitda=f"{peer_median_ev_ebitda:.1f}x", own_ev_ebitda=f"{own_ev_ebitda:.1f}x",
-              comp_ev_fair_value=f"{comp_ev_fair_value:,.2f} {currency}".replace(",", " ")),
+              peer_ev_ebitda=f"{num(peer_median_ev_ebitda, '.1f', lang)}x", own_ev_ebitda=f"{num(own_ev_ebitda, '.1f', lang)}x",
+              comp_ev_fair_value=f"{num(comp_ev_fair_value, ',.2f', lang)} {currency}"),
             className="mb-0",
         ))
 
@@ -881,41 +886,41 @@ def update_dcf(selected_rows, growth_pct, discount_pct, terminal_growth_pct, hor
     if fair_value is not None:
         stat_cols.append(dbc.Col([
             html.Small(L(lang, "dcf_fair_value_label"), className="text-muted d-block"),
-            html.H5(f"{fair_value:,.2f} {currency}".replace(",", " ")),
+            html.H5(f"{num(fair_value, ',.2f', lang)} {currency}"),
         ]))
     if bear_fv is not None:
         stat_cols.append(dbc.Col([
             html.Small(L(lang, "dcf_bear_fair_value_label"), className="text-muted d-block"),
-            html.H5(f"{bear_fv:,.2f} {currency}".replace(",", " ")),
+            html.H5(f"{num(bear_fv, ',.2f', lang)} {currency}"),
         ]))
     if bull_fv is not None:
         stat_cols.append(dbc.Col([
             html.Small(L(lang, "dcf_bull_fair_value_label"), className="text-muted d-block"),
-            html.H5(f"{bull_fv:,.2f} {currency}".replace(",", " ")),
+            html.H5(f"{num(bull_fv, ',.2f', lang)} {currency}"),
         ]))
     if weighted_fv is not None:
         stat_cols.append(dbc.Col([
             html.Small(L(lang, "dcf_weighted_fair_value_label"), className="text-muted d-block"),
-            html.H5(f"{weighted_fv:,.2f} {currency}".replace(",", " ")),
+            html.H5(f"{num(weighted_fv, ',.2f', lang)} {currency}"),
         ]))
     if comp_fair_value is not None:
         stat_cols.append(dbc.Col([
             html.Small(L(lang, "comp_fair_value_label"), className="text-muted d-block"),
-            html.H5(f"{comp_fair_value:,.2f} {currency}".replace(",", " ")),
+            html.H5(f"{num(comp_fair_value, ',.2f', lang)} {currency}"),
         ]))
     if comp_ev_fair_value is not None:
         stat_cols.append(dbc.Col([
             html.Small(L(lang, "comp_ev_fair_value_label"), className="text-muted d-block"),
-            html.H5(f"{comp_ev_fair_value:,.2f} {currency}".replace(",", " ")),
+            html.H5(f"{num(comp_ev_fair_value, ',.2f', lang)} {currency}"),
         ]))
     stat_cols.append(
         dbc.Col([html.Small(L(lang, "dcf_current_price_label"), className="text-muted d-block"),
-                 html.H5(f"{price:,.2f} {currency}".replace(",", " ") if price else "N/A")]),
+                 html.H5(f"{num(price, ',.2f', lang)} {currency}" if price else "N/A")]),
     )
     if upside_pct is not None:
         stat_cols.append(dbc.Col([
             html.Small(L(lang, "dcf_upside_label"), className="text-muted d-block"),
-            html.H5(f"{upside_pct:+.1f} %", className="text-success" if upside_pct >= 0 else "text-danger"),
+            html.H5(f"{num(upside_pct, '+.1f', lang)} %", className="text-success" if upside_pct >= 0 else "text-danger"),
         ]))
     card_children = [html.H6(name, className="card-subtitle text-muted mb-2")]
     if dcf_blocked_msg:
@@ -936,13 +941,13 @@ def update_dcf(selected_rows, growth_pct, discount_pct, terminal_growth_pct, hor
         )
         half = len(growth_values) // 2
         header = html.Thead(html.Tr(
-            [html.Th("")] + [html.Th(f"{d:.1f}%") for d in discount_values]
+            [html.Th("")] + [html.Th(f"{num(d, '.1f', lang)}%") for d in discount_values]
         ))
         body_rows = []
         for i, g in enumerate(growth_values):
-            cells = [html.Th(f"{g:.1f}%")]
+            cells = [html.Th(f"{num(g, '.1f', lang)}%")]
             for j, val in enumerate(grid[i]):
-                text = f"{val:,.2f} {currency}".replace(",", " ") if val is not None else "N/A"
+                text = f"{num(val, ',.2f', lang)} {currency}" if val is not None else "N/A"
                 is_center = i == half and j == half
                 cells.append(html.Td(text, className="fw-bold table-active" if is_center else None))
             body_rows.append(html.Tr(cells))
@@ -978,7 +983,7 @@ def update_dcf(selected_rows, growth_pct, discount_pct, terminal_growth_pct, hor
     fig = make_football_field(
         ranges, {method: L(lang, f"football_{method}") for method in FOOTBALL_FIELD_METHODS}, colors, price,
         L(lang, "dcf_current_price_label"), L(lang, "dcf_chart_title", name=name),
-        lambda value: f"{value:,.2f} {currency}".replace(",", " "),
+        lambda value: f"{num(value, ',.2f', lang)} {currency}",
         (L(lang, "football_low"), L(lang, "football_mid"), L(lang, "football_high")), dark=dark,
         separators=L(lang, "plotly_separators"),
     )

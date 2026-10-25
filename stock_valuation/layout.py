@@ -71,8 +71,11 @@ COLUMN_WIDTHS = {
     "Rendement dividende (%)": 120, "P/E moyen 5 ans (approx.)": 124, PE_PERCENTILE_COLUMN: 136,
     "Capitalisation": 140,
 }
-# Deux décimales, « N/A » pour une valeur manquante (jamais 0).
-NUMBER_FORMATTER = {"function": "params.value == null ? 'N/A' : d3.format('.2f')(params.value)"}
+# Deux décimales, « N/A » pour une valeur manquante (jamais 0), virgule décimale en français.
+NUMBER_FORMATTERS = {
+    "fr": {"function": "params.value == null ? 'N/A' : d3.format('.2f')(params.value).replace('.', ',')"},
+    "en": {"function": "params.value == null ? 'N/A' : d3.format('.2f')(params.value)"},
+}
 
 # Squelette affiché pendant un calcul : la forme du contenu à venir (titre, lignes, bloc) plutôt
 # qu'un rond qui tourne. Animation dans assets/theme.css (.skeleton), aux couleurs du mode affiché
@@ -90,7 +93,7 @@ LOADING_PROPS = {
 }
 
 
-def stocks_column_defs(labels: dict[str, str], help_texts: dict[str, str]) -> list[dict]:
+def stocks_column_defs(labels: dict[str, str], help_texts: dict[str, str], lang: str = "fr") -> list[dict]:
     """Colonnes du tableau de criblage : libellé traduit, définition en infobulle d'en-tête,
     format numérique et coloration. La première colonne (Entreprise) reste figée au défilement
     horizontal."""
@@ -100,7 +103,7 @@ def stocks_column_defs(labels: dict[str, str], help_texts: dict[str, str]) -> li
         if column in help_texts:
             col["headerTooltip"] = help_texts[column]
         if column in NUMERIC_TABLE_COLUMNS:
-            col.update(type="rightAligned", valueFormatter=NUMBER_FORMATTER)
+            col.update(type="rightAligned", valueFormatter=NUMBER_FORMATTERS.get(lang, NUMBER_FORMATTERS["fr"]))
         elif column == "Capitalisation":
             col["type"] = "rightAligned"
         if column in CELL_CLASS_RULES:

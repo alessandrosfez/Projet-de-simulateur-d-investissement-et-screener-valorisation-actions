@@ -2,6 +2,7 @@
 Traductions (FR/EN) et palettes de couleurs. Aucune dépendance sur les autres
 modules du projet.
 """
+import string
 
 PALETTES = {
     # Palette de référence validée (variante claire ; la sombre est dans chart_theme.SERIES_DARK).
@@ -152,6 +153,7 @@ TRANSLATIONS = {
         "priciest_title": "5 P/E les plus hauts (potentiellement les plus chères)",
         "below_history_title": "5 les plus décotées vs leur propre historique",
         "above_history_title": "5 les plus tendues vs leur propre historique",
+        "history_card_item": "{name} : P/E actuel {pe:.1f} vs moyenne historique {mean:.1f} (percentile {pct:.0f})",
         "axis_pe_avg": "P/E moyen",
         "sector_avg_pe_title": "P/E moyen par secteur",
         "sector_dist_pe_title": "Distribution du P/E par secteur",
@@ -393,6 +395,7 @@ TRANSLATIONS = {
         "priciest_title": "5 highest P/E (potentially most expensive)",
         "below_history_title": "5 most discounted vs their own history",
         "above_history_title": "5 most stretched vs their own history",
+        "history_card_item": "{name}: current P/E {pe:.1f} vs historical mean {mean:.1f} (percentile {pct:.0f})",
         "axis_pe_avg": "Average P/E",
         "sector_avg_pe_title": "Average P/E by sector",
         "sector_dist_pe_title": "P/E distribution by sector",
@@ -509,8 +512,38 @@ TRANSLATIONS = {
 }
 
 
+# Remplacement simultané : la virgule des milliers devient une espace, le point décimal une virgule.
+_FRENCH_DIGITS = str.maketrans({",": " ", ".": ","})
+# En anglais, seule la virgule des milliers devient une espace (convention de l'outil : « 1 234.56 »).
+_ENGLISH_DIGITS = str.maketrans({",": " "})
+
+
+def num(value, spec: str, lang: str) -> str:
+    """Nombre selon spec (« .2f », « ,.2f », « +.1f »...) aux conventions de la langue : virgule
+    décimale et espace des milliers en français (« 1 234,56 »), point décimal en anglais."""
+    return format(value, spec).translate(_FRENCH_DIGITS if lang == "fr" else _ENGLISH_DIGITS)
+
+
+class _FrenchNumberFormatter(string.Formatter):
+    """Formatage des gabarits français : un nombre passé à « {peer_pe:.1f} » sort avec une virgule
+    décimale (« 12,4x »), au lieu des conventions anglaises de .format(). Les chaînes passent
+    telles quelles."""
+
+    def format_field(self, value, format_spec):
+        text = super().format_field(value, format_spec)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            text = text.translate(_FRENCH_DIGITS)
+        return text
+
+
+_FRENCH_FORMATTER = _FrenchNumberFormatter()
+
+
 def L(lang: str, key: str, **kwargs) -> str:
     """Traduit `key` dans la langue `lang` (repli sur le français puis sur la clé elle-même).
-    Les `**kwargs` sont appliqués via .format() pour les chaînes paramétrées."""
+    Les `**kwargs` sont appliqués via .format() pour les chaînes paramétrées, avec les conventions
+    numériques françaises quand le texte est en français."""
     text = TRANSLATIONS.get(lang, TRANSLATIONS["fr"]).get(key, TRANSLATIONS["fr"].get(key, key))
-    return text.format(**kwargs) if kwargs else text
+    if not kwargs:
+        return text
+    return _FRENCH_FORMATTER.format(text, **kwargs) if lang not in TRANSLATIONS or lang == "fr" else text.format(**kwargs)
