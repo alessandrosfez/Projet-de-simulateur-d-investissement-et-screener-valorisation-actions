@@ -194,3 +194,60 @@ a { color: var(--accent); }
 [data-bs-theme="dark"] .art-dark { display: block; }
 .empty-title { font-weight: 600; font-size: 1rem; margin-bottom: 0.25rem; }
 .empty-text { color: var(--Dash-Text-Weak, #6c757d); font-size: 0.88rem; max-width: 520px; }
+
+/* -------- Impression (Ctrl+P, « Enregistrer en PDF ») -------- */
+/* Toujours en clair : le navigateur retire les fonds sombres à l'impression mais garderait le texte
+   clair prévu pour eux, d'où des titres presque invisibles sur le blanc. Les commandes (navigation,
+   réglages, barre latérale, boutons, barre d'outils Plotly) ne servent à rien sur papier. */
+@media print {
+    :root, [data-bs-theme="dark"] {
+        color-scheme: light;
+        --surface: #ffffff; --surface-2: #f1f3f9; --page-bg: #ffffff; --border-soft: #e4e7ef; --accent: #636efa;
+        --shadow-card: none;
+        --Dash-Text-Primary: #1f2433; --Dash-Text-Strong: #1f2433; --Dash-Text-Weak: #5b6275;
+        --bs-body-color: #1f2433; --bs-body-bg: #ffffff; --bs-secondary-color: #5b6275; --bs-emphasis-color: #1f2433;
+    }
+    html, body, body.dark-mode { background: #ffffff !important; color: #1f2433 !important;
+                                 -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    [data-bs-theme="dark"] body :is(h1, h2, h3, h4, h5, h6, p, small, span, div, label, li, a, td, th, summary) {
+        color: #1f2433 !important;
+    }
+    [data-bs-theme="dark"] body :is(.text-muted, .kpi-label, .kpi-sub, .app-subtitle, .empty-text, .watch-quiet) {
+        color: #5b6275 !important;
+    }
+    [data-bs-theme="dark"] body :is(.text-success, .kpi-delta.up) { color: #0b7a0b !important; }
+    [data-bs-theme="dark"] body :is(.text-danger, .kpi-delta.down) { color: #c23434 !important; }
+    /* Conteneurs au fond sombre du thème Bootstrap (cartes, onglets, champs) : fond blanc. Les pastilles,
+       barres et cases colorées gardent leur couleur, qui porte du sens. */
+    [data-bs-theme="dark"] :is(.card, .card-body, .kpi-tile, .tab-content, .accordion-item, .accordion-button,
+        .form-control, .form-select, .Select-control, .dash-dropdown, .perf-group, .verdict-tile, .watch-panel,
+        .empty-state, .alert-secondary, .alert-light, .header-controls, .sidebar-panel, input) {
+        background-color: #ffffff !important; border-color: #e4e7ef !important;
+    }
+    /* Textes des graphiques Plotly (SVG, couleur posée en ligne) : encre sombre. */
+    [data-bs-theme="dark"] .js-plotly-plot .main-svg text { fill: #1f2433 !important; }
+    /* Traits des graphiques aux couleurs du mode sombre (chart_theme.CHROME["dark"], posées en ligne dans le
+       SVG) : encre claire -> encre sombre, grille et axes sombres -> gris clairs, liserés couleur de carte
+       sombre -> blanc. Les couleurs de séries ne sont pas touchées. */
+    [data-bs-theme="dark"] .js-plotly-plot [style*="stroke: rgb(230, 232, 239)"] { stroke: #1f2433 !important; }
+    [data-bs-theme="dark"] .js-plotly-plot [style*="stroke: rgb(38, 43, 56)"] { stroke: #e9ecf3 !important; }
+    [data-bs-theme="dark"] .js-plotly-plot [style*="stroke: rgb(58, 64, 82)"] { stroke: #c9cedb !important; }
+    [data-bs-theme="dark"] .js-plotly-plot [style*="stroke: rgb(23, 26, 35)"] { stroke: #ffffff !important; }
+    [data-bs-theme="dark"] .js-plotly-plot [style*="fill: rgb(23, 26, 35)"] { fill: #ffffff !important; }
+    /* Tableaux DataTable : couleurs posées en Python pour le mode sombre. */
+    [data-bs-theme="dark"] .dash-spreadsheet :is(td, th) { color: #1f2433 !important; background-color: #ffffff !important; }
+    [data-bs-theme="dark"] .pea-grid, [data-bs-theme="dark"] .pea-grid .ag-root-wrapper {
+        --ag-foreground-color: #1f2433; --ag-header-text-color: #1f2433; --ag-chrome-background-color: #f1f3f9;
+    }
+    /* Illustrations : version claire. */
+    [data-bs-theme="dark"] :is(.header-art-light, .art-light) { display: block !important; }
+    [data-bs-theme="dark"] :is(.header-art-dark, .art-dark) { display: none !important; }
+    .quick-nav, .app-nav, .header-controls, .modebar-container, #sidebar-col, .btn, .nav-tabs,
+    .dash-debug-menu, ._dash-global-error-container { display: none !important; }
+    #main-col { flex: 0 0 100% !important; max-width: 100% !important; }
+    .tab-content { border: none !important; box-shadow: none !important; }
+    .card, .kpi-tile, .js-plotly-plot, .perf-group, .watch-panel, .verdict-tile, .empty-state, .pea-grid {
+        break-inside: avoid;
+    }
+    .section-title { break-after: avoid; }
+}
