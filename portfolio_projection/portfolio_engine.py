@@ -209,6 +209,31 @@ def allocate_contribution(target_weights: pd.DataFrame, current_values_by_ticker
     return df.reset_index(drop=True), summary
 
 
+def line_contributions(transactions: pd.DataFrame, dividends: pd.DataFrame,
+                       current_values_by_ticker: pd.Series) -> pd.DataFrame:
+    """Ce que chaque ligne a rapporté depuis son achat, en euros : valeur actuelle + dividendes
+    perçus - montant investi (frais compris). gain_pct rapporte ce gain au montant investi de la
+    ligne. Une ligne sans cours garde value_eur, gain_eur et gain_pct à NaN (jamais 0 : ce serait
+    une fausse perte totale), rangée en dernier. Colonnes ticker, cost_eur, value_eur,
+    dividends_eur, gain_eur, gain_pct ; triées du plus gros gain à la plus grosse perte."""
+    columns = ["ticker", "cost_eur", "value_eur", "dividends_eur", "gain_eur", "gain_pct"]
+    if transactions.empty:
+        return pd.DataFrame(columns=columns)
+    costs: dict[str, float] = {}
+    for _, row in transactions.iterrows():
+        costs[str(row["ticker"])] = costs.get(str(row["ticker"]), 0.0) + _purchase_cost(row)
+    received = dividends.groupby("ticker")["amount_eur"].sum() if not dividends.empty else pd.Series(dtype=float)
+    rows = []
+    for ticker, cost in costs.items():
+        value = current_values_by_ticker.get(ticker)
+        value = float(value) if value is not None and not pd.isna(value) else np.nan
+        dividends_eur = float(received.get(ticker, 0.0))
+        gain = value + dividends_eur - cost
+        rows.append((ticker, cost, value, dividends_eur, gain, gain / cost if cost > 0 else np.nan))
+    df = pd.DataFrame(rows, columns=columns)
+    return df.sort_values("gain_eur", ascending=False, na_position="last").reset_index(drop=True)
+
+
 OTHER_ALLOCATION_KEY = "__other__"
 
 

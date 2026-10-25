@@ -880,6 +880,17 @@ def build_tab3(lang):
             ], className="mt-2"),
         ]), className="mb-4"),
 
+        # Ce que chaque ligne a rapporté en euros (portfolio_engine.line_contributions) : ce qui tire
+        # la performance, que les totaux et la répartition ne montrent pas.
+        html.H5(L(lang, "section_line_contributions"), className="section-title", id="anchor-tab3-contributions"),
+        dbc.Card(dbc.CardBody([
+            html.Small(L(lang, "line_contributions_hint"), className="text-muted d-block mb-2"),
+            dcc.Loading(**LOADING_PROPS, children=[
+                dcc.Graph(id="tab3-line-contributions-graph", config=GRAPH_CONFIG),
+                html.Div(id="tab3-line-contributions-note", className="text-muted", style={"fontSize": "0.8rem"}),
+            ]),
+        ]), className="mb-4"),
+
         html.H5(L(lang, "section_pea_milestones"), className="section-title", id="anchor-tab3-milestones"),
         dbc.Card(dbc.CardBody([
             html.Div([

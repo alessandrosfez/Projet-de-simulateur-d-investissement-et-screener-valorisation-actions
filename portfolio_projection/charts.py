@@ -132,6 +132,31 @@ def make_contribution_plan_figure(labels: list, current_pct: list, after_pct: li
     return fig
 
 
+def make_line_contributions_figure(labels: list, gains: list, texts: list, hovers: list, title: str,
+                                   dark: bool = False, separators: str | None = None):
+    """Gain ou perte en euros de chaque ligne, barres horizontales partant de 0 : bleu pour un gain,
+    rouge pour une perte (paire divergente de la palette de référence ; les couleurs d'état restent
+    réservées aux états). Montant et pourcentage écrits au bout de chaque barre."""
+    series = chart_theme.SERIES_DARK if dark else chart_theme.SERIES_LIGHT
+    gain_color, loss_color = series[0], series[7]
+    chrome = chart_theme.CHROME["dark" if dark else "light"]
+    fig = go.Figure(go.Bar(
+        x=gains, y=labels, orientation="h", text=texts, textposition="outside", cliponaxis=False,
+        textfont=dict(color=chrome["ink"], size=12), customdata=hovers, hovertemplate="%{customdata}<extra></extra>",
+        marker=dict(color=[gain_color if g >= 0 else loss_color for g in gains], cornerradius=4),
+        width=0.55,
+    ))
+    span = max([abs(g) for g in gains] + [1])
+    fig.update_layout(
+        template=chart_theme.template(dark), title=dict(text=title, font=dict(size=14)), showlegend=False,
+        xaxis=dict(range=[-span * 1.45 if min(gains) < 0 else 0, span * 1.45 if max(gains) > 0 else span * 0.2],
+                   ticksuffix=" €", zeroline=True, zerolinecolor=chrome["axis"], zerolinewidth=1.5),
+        yaxis=dict(autorange="reversed", showgrid=False, ticklabelstandoff=8),
+        height=120 + 44 * len(labels), margin=dict(t=60, l=16, r=24, b=40), separators=separators,
+    )
+    return fig
+
+
 def make_band_figure(series, years_axis, title, lang="fr", palette=None, invested_capital=None,
                       phase_boundary_years=None, dark: bool = False, backtest_series=None,
                       view_mode="prevision"):

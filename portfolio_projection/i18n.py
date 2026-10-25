@@ -222,6 +222,13 @@ TRANSLATIONS = {
                                               "(ticker trop récent ou jamais coté sur la période choisie).",
         "section_real_portfolio_corr": "Corrélations entre tes lignes",
         "section_allocation": "Répartition actuelle",
+        "section_line_contributions": "Ce que chaque ligne a rapporté",
+        "line_contributions_hint": "Gain ou perte en euros depuis l'achat : valeur actuelle + dividendes perçus − "
+                                    "montant investi, frais compris. Le pourcentage rapporte ce gain au montant "
+                                    "investi dans la ligne.",
+        "line_contributions_title": "Gain ou perte par ligne (total {total:+,.0f} €)",
+        "line_contribution_text": "{gain:+,.0f} € ({pct:+.1f} %)",
+        "line_contribution_hover": "<b>{label}</b><br>Investi : {cost} · Valeur : {value} · Dividendes : {dividends}",
         "allocation_chart_title": "Répartition par indice et par ligne",
         "allocation_total": "Valeur totale du portefeuille",
         "kpi_pnl_sub": "sur {invested} investis",
@@ -786,6 +793,13 @@ TRANSLATIONS = {
                                               "too recent or never traded over the chosen period).",
         "section_real_portfolio_corr": "Correlation between your holdings",
         "section_allocation": "Current allocation",
+        "section_line_contributions": "What each line has earned",
+        "line_contributions_hint": "Gain or loss in euros since purchase: current value + dividends received − "
+                                    "amount invested, fees included. The percentage relates this gain to the "
+                                    "amount invested in the line.",
+        "line_contributions_title": "Gain or loss by line (total {total:+,.0f} €)",
+        "line_contribution_text": "{gain:+,.0f} € ({pct:+.1f}%)",
+        "line_contribution_hover": "<b>{label}</b><br>Invested: {cost} · Value: {value} · Dividends: {dividends}",
         "allocation_chart_title": "Allocation by index and by holding",
         "allocation_total": "Total portfolio value",
         "kpi_pnl_sub": "on {invested} invested",

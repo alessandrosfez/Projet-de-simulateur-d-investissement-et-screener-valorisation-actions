@@ -18,7 +18,8 @@ import portfolio_db
 import portfolio_engine
 from app_instance import app
 from charts import (
-    make_allocation_sunburst, make_contribution_plan_figure, make_correlation_heatmap, make_target_vs_actual_rings,
+    make_allocation_sunburst, make_contribution_plan_figure, make_correlation_heatmap, make_line_contributions_figure,
+    make_target_vs_actual_rings,
 )
 from constants import PEA_TAX_RATE, STOCK_INDEX_KEY, UNDERLYING_INDICES, UNKNOWN_INDEX_KEY
 from engine import (
@@ -775,6 +776,53 @@ def plan_next_contribution(_trigger, amount, lang, dark_mode, palette_code):
         chart_theme.palette_for(palette_code, dark)[0], dark=dark, separators=L(lang, "plotly_separators"),
     )
     return html.Div(summary_text, className="kpi-sub mb-1"), fig
+
+
+@app.callback(
+    Output("tab3-line-contributions-graph", "figure"),
+    Output("tab3-line-contributions-note", "children"),
+    Input("tab3-refresh-trigger", "data"),
+    Input("lang-radio", "value"),
+    Input("dark-mode-switch", "value"),
+)
+def refresh_line_contributions(_trigger, lang, dark_mode):
+    """Gain ou perte en euros de chaque ligne depuis son achat (portfolio_engine.line_contributions).
+    Une ligne sans cours n'est pas tracée, elle est nommée dans la note, jamais comptée pour 0."""
+    lang = lang or "fr"
+    dark = bool(dark_mode)
+    transactions = portfolio_db.get_transactions()
+    if transactions.empty:
+        empty = go.Figure()
+        empty.update_layout(template=chart_theme.template(dark), height=10, margin=dict(t=0, b=0, l=0, r=0),
+                            xaxis=dict(visible=False), yaxis=dict(visible=False))
+        return empty, L(lang, "performance_no_data")
+    holdings = portfolio_engine.reconstruct_holdings(transactions)
+    current_values = pd.Series(dtype=float)
+    for _, row in holdings.iterrows():
+        price = get_current_price(row["ticker"])
+        if price is not None:
+            current_values[row["ticker"]] = row["quantity"] * price
+    lines = portfolio_engine.line_contributions(transactions, portfolio_db.get_dividends(), current_values)
+    priced = lines.dropna(subset=["gain_eur"])
+    unpriced = lines.loc[lines["gain_eur"].isna(), "ticker"].tolist()
+
+    def money(value):
+        return f"{value:,.0f} €".replace(",", " ")
+
+    labels = [_ticker_display_label(t) for t in priced["ticker"]]
+    texts = [L(lang, "line_contribution_text", gain=g, pct=p * 100) for g, p in zip(priced["gain_eur"], priced["gain_pct"])]
+    hovers = [
+        L(lang, "line_contribution_hover", label=label, cost=money(r.cost_eur), value=money(r.value_eur),
+          dividends=money(r.dividends_eur))
+        for label, r in zip(labels, priced.itertuples())
+    ]
+    total = float(priced["gain_eur"].sum())
+    fig = make_line_contributions_figure(
+        labels, priced["gain_eur"].tolist(), texts, hovers,
+        L(lang, "line_contributions_title", total=total), dark=dark, separators=L(lang, "plotly_separators"),
+    )
+    note = L(lang, "allocation_unpriced", tickers=", ".join(unpriced)) if unpriced else ""
+    return fig, note
 
 
 @app.callback(

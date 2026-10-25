@@ -619,6 +619,34 @@ def test_held_line_without_target_receives_nothing_and_empty_inputs():
     assert m.allocate_contribution(_weights(A=100), pd.Series({"A": 1.0}), 0.0)[0].empty
 
 
+# ---------- contribution de chaque ligne ----------
+
+def test_line_contributions_count_dividends_and_fees():
+    transactions = pd.DataFrame([
+        _tx("AAA", "2026-08-17", 100.0, 10.0, fee_eur=1.0),
+        _tx("AAA", "2026-09-01", 100.0, 10.0, fee_eur=1.0),
+        _tx("BBB", "2026-09-01", 200.0, 20.0),
+    ])
+    dividends = pd.DataFrame([{"ticker": "AAA", "date": "2026-10-01", "amount_eur": 3.0}])
+    lines = m.line_contributions(transactions, dividends, pd.Series({"AAA": 210.0, "BBB": 190.0}))
+    by_ticker = lines.set_index("ticker")
+    # AAA : 210 + 3 - 202 = +11 € ; BBB : 190 - 200 = -10 €, rangée après.
+    assert by_ticker.loc["AAA", "gain_eur"] == pytest.approx(11.0)
+    assert by_ticker.loc["AAA", "gain_pct"] == pytest.approx(11.0 / 202.0)
+    assert by_ticker.loc["BBB", "gain_eur"] == pytest.approx(-10.0)
+    assert list(lines["ticker"]) == ["AAA", "BBB"]
+
+
+def test_line_without_price_keeps_its_gain_missing_not_zero():
+    transactions = pd.DataFrame([_tx("AAA", "2026-08-17", 100.0, 10.0), _tx("CCC", "2026-08-17", 50.0, 5.0)])
+    lines = m.line_contributions(transactions, pd.DataFrame(columns=["ticker", "date", "amount_eur"]),
+                                 pd.Series({"AAA": 90.0}))
+    assert pd.isna(lines.set_index("ticker").loc["CCC", "gain_eur"])
+    assert list(lines["ticker"]) == ["AAA", "CCC"]
+    assert m.line_contributions(pd.DataFrame(columns=["ticker", "date", "amount_eur", "price", "fee_eur"]),
+                                pd.DataFrame(), pd.Series(dtype=float)).empty
+
+
 # ---------- gain de la période (historique de moins d'un an) ----------
 
 def test_invested_cost_includes_fees_and_tolerates_missing_fee():
