@@ -309,3 +309,5 @@ a { color: var(--accent); }
    qui laisse une bande vide sous un tableau de deux lignes. */
 .pea-grid .ag-layout-auto-height .ag-center-cols-viewport,
 .pea-grid .ag-layout-auto-height .ag-center-cols-container { min-height: unset !important; }
+/* Le « ⓘ » suit le titre dans un conteneur flex, où l'espace qui le précède disparaît. */
+.perf-group-title > span[id$="-info"] { margin-left: 0.35rem; }

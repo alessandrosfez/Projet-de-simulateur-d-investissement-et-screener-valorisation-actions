@@ -373,3 +373,25 @@ def test_football_field_ranges_ignore_missing_values_and_keep_method_order():
 def test_football_field_central_value_widens_a_too_narrow_range():
     rows = m.football_field_ranges({"dcf_scenarios": ([100.0, 110.0], 130.0)})
     assert rows[0]["low"] == 100.0 and rows[0]["high"] == 130.0 and rows[0]["mid"] == 130.0
+
+
+# ---------- alertes de la liste de suivi ----------
+
+def test_watchlist_alerts_all_four_triggers_with_their_values():
+    # Cours 50, P/E 10 contre une médiane de pairs à 15 -> valeur implicite 75, soit +50 %.
+    alerts = m.watchlist_alerts(price=50.0, own_pe=10.0, pe_percentile=12.0, score=78.0,
+                                peer_pes=[14.0, 15.0, 16.0], dcf_fair_value=60.0)
+    assert set(alerts) == set(m.WATCHLIST_ALERTS)
+    assert alerts["pe_history_low"] == pytest.approx(12.0)
+    assert alerts["below_comparables"] == pytest.approx(50.0)
+    assert alerts["below_dcf"] == pytest.approx(20.0)
+    assert alerts["high_score"] == pytest.approx(78.0)
+
+
+def test_watchlist_alerts_stay_silent_on_missing_or_unfavourable_data():
+    # Trop peu de pairs, DCF sous le cours, percentile et score dans la zone neutre, données manquantes.
+    assert m.watchlist_alerts(50.0, 10.0, 45.0, 55.0, [15.0, 16.0], 40.0) == {}
+    assert m.watchlist_alerts(50.0, None, None, None, [14.0, 15.0, 16.0], None) == {}
+    assert m.watchlist_alerts(None, 10.0, np.nan, np.nan, [14.0, 15.0, 16.0], 60.0) == {}
+    # P/E au-dessus de la médiane des pairs : pas de décote par comparables.
+    assert "below_comparables" not in m.watchlist_alerts(50.0, 20.0, None, None, [14.0, 15.0, 16.0], None)

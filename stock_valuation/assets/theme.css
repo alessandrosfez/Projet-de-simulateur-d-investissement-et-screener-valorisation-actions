@@ -212,3 +212,20 @@ a { color: var(--accent); }
     .app-title { font-size: 1.3rem; }
     .app-subtitle { font-size: 0.85rem; }
 }
+
+/* -------- Alertes de la liste de suivi (callbacks.update_watchlist_alerts) -------- */
+.watch-panel { border: 1px solid var(--border-soft); border-radius: 14px; padding: 0.8rem 1rem; background: var(--surface); }
+.watch-title { font-weight: 600; font-size: 0.9rem; margin-bottom: 0.6rem; display: flex; align-items: center; }
+.watch-title .bi { color: var(--accent); }
+.watch-card { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.8rem; padding: 0.45rem 0;
+              border-top: 1px solid var(--border-soft); }
+.watch-name { font-weight: 600; font-size: 0.88rem; min-width: 200px; }
+.watch-badges { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+.watch-badge { display: inline-flex; align-items: center; font-size: 0.78rem; padding: 0.15rem 0.55rem;
+               border-radius: 999px; background: color-mix(in srgb, var(--accent) 12%, transparent);
+               border: 1px solid color-mix(in srgb, var(--accent) 28%, transparent); }
+.watch-badge .bi { color: var(--accent); }
+.watch-quiet { font-size: 0.8rem; color: var(--Dash-Text-Weak, #6c757d); padding-top: 0.45rem;
+               border-top: 1px solid var(--border-soft); }
+/* Le « ⓘ » suit le titre dans un conteneur flex, où l'espace qui le précède disparaît. */
+.watch-title > span[id$="-info"] { margin-left: 0.35rem; }

@@ -168,6 +168,40 @@ def compute_comparables_ev_ebitda_fair_value(enterprise_value: float, ev_to_ebit
 # « Football field » : fourchette de valeur par méthode, à comparer au cours
 # ============================================================
 
+# Seuils des alertes de la liste de suivi : les mêmes que les couleurs du tableau de criblage
+# (layout.CELL_CLASS_RULES), pour qu'une alerte et une case verte disent la même chose.
+WATCHLIST_PE_HISTORY_LOW_PCT = 20
+WATCHLIST_HIGH_SCORE = 70
+WATCHLIST_MIN_PEERS = 3
+WATCHLIST_ALERTS = ("pe_history_low", "below_comparables", "below_dcf", "high_score")
+
+
+def watchlist_alerts(price: float | None, own_pe: float | None, pe_percentile: float | None,
+                     score: float | None, peer_pes: list, dcf_fair_value: float | None) -> dict[str, float]:
+    """Signaux d'achat potentiels d'un titre suivi, chacun avec la valeur qui l'a déclenché :
+    - "pe_history_low" : P/E dans les 20 % les plus bas de sa propre histoire (valeur : percentile) ;
+    - "below_comparables" : cours sous la valeur implicite au P/E médian d'au moins 3 pairs du
+      secteur (valeur : potentiel en %, voir compute_comparables_fair_value) ;
+    - "below_dcf" : cours sous la valeur intrinsèque DCF aux hypothèses par défaut (valeur :
+      potentiel en %) ;
+    - "high_score" : score composite >= 70 (valeur : score).
+    Une donnée manquante ne déclenche rien : l'absence d'alerte n'est pas un signal contraire.
+    Ce sont des pistes à creuser, pas des recommandations."""
+    alerts: dict[str, float] = {}
+    if pe_percentile is not None and not np.isnan(pe_percentile) and pe_percentile < WATCHLIST_PE_HISTORY_LOW_PCT:
+        alerts["pe_history_low"] = float(pe_percentile)
+    valid_peers = [p for p in peer_pes if p is not None and p > 0]
+    if price and len(valid_peers) >= WATCHLIST_MIN_PEERS:
+        implied = compute_comparables_fair_value(price, own_pe, float(np.median(valid_peers)))
+        if implied is not None and implied > price:
+            alerts["below_comparables"] = (implied / price - 1) * 100
+    if price and dcf_fair_value is not None and dcf_fair_value > price:
+        alerts["below_dcf"] = (dcf_fair_value / price - 1) * 100
+    if score is not None and not np.isnan(score) and score >= WATCHLIST_HIGH_SCORE:
+        alerts["high_score"] = float(score)
+    return alerts
+
+
 FOOTBALL_FIELD_METHODS = ("dcf_scenarios", "dcf_sensitivity", "comparables_pe", "comparables_ev_ebitda")
 
 

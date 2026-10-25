@@ -287,7 +287,9 @@ def build_tab3(lang, v=None):
                         value=gv(v, "watchlist-only-switch", []), switch=True,
                     ), width=4, className="d-flex align-items-center",
                 ),
-            ], className="mb-3"),
+            ], className="mb-2"),
+            # Alertes des titres suivis (engine.watchlist_alerts), indépendantes des filtres du tableau.
+            dcc.Loading(**LOADING_PROPS, children=[html.Div(id="watchlist-alerts", className="mb-3")]),
 
             dcc.Loading(**LOADING_PROPS, children=[
                 html.Div(id="stocks-top-cards"),
@@ -326,10 +328,10 @@ def build_tab3(lang, v=None):
                 html.H5(L(lang, "dcf_title"), className="section-title", id="anchor-dcf"),
                 html.P(L(lang, "dcf_intro"), className="text-muted", style={"fontSize": "0.85rem"}),
                 dbc.Row([
-                    dbc.Col(slider_block(L(lang, "dcf_growth_label"), "dcf-growth-slider", -10, 30, gv(v, "dcf-growth-slider", 5), step=1, tooltip_text=L(lang, "dcf_growth_help")), width=3),
-                    dbc.Col(slider_block(L(lang, "dcf_discount_label"), "dcf-discount-slider", 4, 20, gv(v, "dcf-discount-slider", 8), step=0.5, tooltip_text=L(lang, "dcf_discount_help")), width=3),
-                    dbc.Col(slider_block(L(lang, "dcf_terminal_growth_label"), "dcf-terminal-growth-slider", 0, 5, gv(v, "dcf-terminal-growth-slider", 2), step=0.25, tooltip_text=L(lang, "dcf_terminal_growth_help")), width=3),
-                    dbc.Col(slider_block(L(lang, "dcf_horizon_label"), "dcf-horizon-slider", 3, 10, gv(v, "dcf-horizon-slider", 5), step=1, tooltip_text=L(lang, "dcf_horizon_help")), width=3),
+                    dbc.Col(slider_block(L(lang, "dcf_growth_label"), "dcf-growth-slider", -10, 30, gv(v, "dcf-growth-slider", DCF_DEFAULTS["growth_pct"]), step=1, tooltip_text=L(lang, "dcf_growth_help")), width=3),
+                    dbc.Col(slider_block(L(lang, "dcf_discount_label"), "dcf-discount-slider", 4, 20, gv(v, "dcf-discount-slider", DCF_DEFAULTS["discount_pct"]), step=0.5, tooltip_text=L(lang, "dcf_discount_help")), width=3),
+                    dbc.Col(slider_block(L(lang, "dcf_terminal_growth_label"), "dcf-terminal-growth-slider", 0, 5, gv(v, "dcf-terminal-growth-slider", DCF_DEFAULTS["terminal_growth_pct"]), step=0.25, tooltip_text=L(lang, "dcf_terminal_growth_help")), width=3),
+                    dbc.Col(slider_block(L(lang, "dcf_horizon_label"), "dcf-horizon-slider", 3, 10, gv(v, "dcf-horizon-slider", DCF_DEFAULTS["horizon_years"]), step=1, tooltip_text=L(lang, "dcf_horizon_help")), width=3),
                 ]),
                 dbc.Button(L(lang, "dcf_scenario_toggle"), id="btn-toggle-dcf-scenarios",
                            color="link", size="sm", className="p-0 mb-2"),
@@ -360,6 +362,11 @@ def build_tab3(lang, v=None):
         dcc.Download(id="download-stocks"),
         dcc.Store(id="stocks-csv-store"),
     ], className="p-3")
+
+
+# Hypothèses DCF par défaut : position initiale des curseurs ET hypothèses de l'alerte « cours sous
+# le DCF » de la liste de suivi (callbacks.update_watchlist_alerts), pour qu'elles ne divergent pas.
+DCF_DEFAULTS = {"growth_pct": 5, "discount_pct": 8, "terminal_growth_pct": 2, "horizon_years": 5}
 
 
 # Navigation entre les outils du dépôt (en-tête) : la page d'accueil est servie par run_all.py ; un

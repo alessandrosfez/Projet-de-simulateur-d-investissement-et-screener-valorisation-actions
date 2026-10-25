@@ -29,6 +29,13 @@ d'un plan d'épargne), indépendant de celui-ci.
   du même secteur, affiché en cross-check du DCF — les deux méthodes ne
   dépendent pas des mêmes données, un large écart entre elles est en
   lui-même un signal à creuser.
+- **Alertes de la liste de suivi** : pour chaque titre suivi, quatre signaux
+  calculés sur tout l'univers chargé (indépendants des filtres du
+  tableau) : P/E dans les 20 % les plus bas de sa propre histoire, cours
+  sous la valeur implicite au P/E médian d'au moins 3 pairs du secteur,
+  cours sous le DCF aux hypothèses par défaut des curseurs, score
+  composite ≥ 70. Une donnée manquante ne déclenche rien ; ce sont des
+  pistes à creuser, pas des recommandations.
 - **« Football field »** : une barre horizontale par méthode (DCF selon les
   scénarios bas/haut, DCF selon la grille de sensibilité, comparables P/E et
   VE/EBITDA du 1er au 3e quartile des pairs, médiane en valeur centrale),

@@ -114,6 +114,18 @@ TRANSLATIONS = {
         "watchlist_label": "Valeurs suivies (watchlist)",
         "watchlist_placeholder": "Ajouter des valeurs à ta watchlist...",
         "watchlist_only_label": "N'afficher que ma watchlist",
+        "watch_alerts_title": "Alertes de ta liste de suivi",
+        "watch_alerts_help": "Quatre signaux, calculés sur tout l'univers chargé (indépendants des filtres du "
+                              "tableau) : P/E dans les 20 % les plus bas de sa propre histoire ; cours sous la "
+                              "valeur implicite au P/E médian d'au moins 3 pairs du secteur ; cours sous la valeur "
+                              "intrinsèque DCF aux hypothèses par défaut (croissance {growth} %, actualisation "
+                              "{discount} %, croissance terminale {terminal} %, {horizon} ans) ; score composite ≥ 70. Une donnée manquante ne "
+                              "déclenche rien. Des pistes à creuser, pas des recommandations d'achat.",
+        "watch_alert_pe_history_low": "P/E bas vs son historique (percentile {value:.0f})",
+        "watch_alert_below_comparables": "Sous les comparables P/E (potentiel {value:+.0f} %)",
+        "watch_alert_below_dcf": "Sous le DCF par défaut (potentiel {value:+.0f} %)",
+        "watch_alert_high_score": "Score {value:.0f}",
+        "watch_alerts_quiet": "Rien à signaler pour l'instant : {names}.",
         "pe_ratio_by_stock_title": "P/E Ratio par valeur",
         "detail_title": "Détail",
         "detail_hint": "Clique sur une ligne pour voir l'évolution de son P/E historique ci-dessous.",
@@ -356,6 +368,18 @@ TRANSLATIONS = {
         "watchlist_label": "Watchlist",
         "watchlist_placeholder": "Add stocks to your watchlist...",
         "watchlist_only_label": "Show only my watchlist",
+        "watch_alerts_title": "Watchlist alerts",
+        "watch_alerts_help": "Four signals, computed over the whole loaded universe (independent of the table "
+                              "filters): P/E in the lowest 20% of its own history; price below the value implied by "
+                              "the median P/E of at least 3 sector peers; price below the DCF intrinsic value at the "
+                              "default assumptions (growth {growth}%, discount {discount}%, terminal growth {terminal}%, {horizon} years); composite "
+                              "score ≥ 70. Missing data triggers nothing. Leads to dig into, not buy "
+                              "recommendations.",
+        "watch_alert_pe_history_low": "Low P/E vs its history (percentile {value:.0f})",
+        "watch_alert_below_comparables": "Below P/E comparables (upside {value:+.0f}%)",
+        "watch_alert_below_dcf": "Below default DCF (upside {value:+.0f}%)",
+        "watch_alert_high_score": "Score {value:.0f}",
+        "watch_alerts_quiet": "Nothing to report for now: {names}.",
         "pe_ratio_by_stock_title": "P/E Ratio by stock",
         "detail_title": "Detail",
         "detail_hint": "Click a row to see its historical P/E below.",

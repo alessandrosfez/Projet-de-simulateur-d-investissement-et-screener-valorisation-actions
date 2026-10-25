@@ -5,6 +5,7 @@ fonctions ci-dessous ne sont pas appelées directement ailleurs, sauf les
 helpers réutilisés par layout.py lui-même.
 """
 import concurrent.futures
+import math
 import threading
 
 import dash
@@ -19,10 +20,10 @@ from app_instance import app
 from charts import empty_figure_with_message, make_football_field
 from constants import UNIVERSE_TICKERS
 from engine import (
-    FOOTBALL_FIELD_METHODS, annualized_return, annualized_volatility, compute_comparables_ev_ebitda_fair_value,
-    compute_comparables_fair_value, compute_dcf_sensitivity_grid, compute_scenario_dcf_fair_values,
-    football_field_ranges, max_drawdown, pe_signal_forward_returns, peer_quartile_multiples, sharpe_ratio,
-    summarize_pe_signal_backtest,
+    FOOTBALL_FIELD_METHODS, WATCHLIST_ALERTS, annualized_return, annualized_volatility,
+    compute_comparables_ev_ebitda_fair_value, compute_comparables_fair_value, compute_dcf_fair_value,
+    compute_dcf_sensitivity_grid, compute_scenario_dcf_fair_values, football_field_ranges, max_drawdown,
+    pe_signal_forward_returns, peer_quartile_multiples, sharpe_ratio, summarize_pe_signal_backtest, watchlist_alerts,
 )
 import chart_theme
 from i18n import L, PALETTE_CODES, PALETTE_NAMES, num
@@ -215,6 +216,79 @@ def update_watchlist_options(rows):
     return [{"label": f"{r['Entreprise']} ({r['Ticker']})", "value": r["Ticker"]} for r in rows]
 
 
+# Icône de chaque alerte de la liste de suivi : l'icône et le libellé portent le sens ensemble.
+WATCHLIST_ALERT_ICONS = {"pe_history_low": "graph-down-arrow", "below_comparables": "people",
+                         "below_dcf": "calculator", "high_score": "star"}
+
+
+def _default_dcf_fair_value(ticker: str):
+    """Valeur intrinsèque DCF aux hypothèses par défaut des curseurs (layout.DCF_DEFAULTS), ou None
+    quand le DCF n'a pas de sens (FCF négatif, données manquantes) : dans ce cas pas d'alerte, jamais
+    une valeur inventée."""
+    inputs = get_dcf_inputs(ticker)
+    if not inputs or inputs.get("fcf") is None or inputs["fcf"] < 0 or not inputs.get("shares_outstanding"):
+        return None
+    defaults = layout.DCF_DEFAULTS
+    result = compute_dcf_fair_value(
+        inputs["fcf"], defaults["growth_pct"], defaults["discount_pct"], defaults["terminal_growth_pct"],
+        defaults["horizon_years"], inputs["total_debt"] - inputs["total_cash"], inputs["shares_outstanding"],
+    )
+    return result["fair_value_per_share"] if result else None
+
+
+@app.callback(
+    Output("watchlist-alerts", "children"),
+    Input("stocks-raw-store", "data"),
+    Input("watchlist-dropdown", "value"),
+    Input("lang-radio", "value"),
+)
+def update_watchlist_alerts(rows, watchlist, lang):
+    """Signaux des titres suivis (engine.watchlist_alerts), calculés sur tout l'univers chargé
+    (pairs du même secteur, score) et donc indépendants des filtres du tableau. Les titres sans
+    signal sont regroupés en une ligne : l'absence d'alerte n'est pas un avis contraire."""
+    lang = lang or "fr"
+    if not rows or not watchlist:
+        return ""
+    df = _scored_frame(rows)
+    cards, quiet = [], []
+    for ticker in watchlist:
+        match = df[df["Ticker"] == ticker]
+        if match.empty:
+            continue
+        row = match.iloc[0]
+        peers = df[(df["Ticker"] != ticker) & (df["Secteur"] == row["Secteur"])]["P/E (trailing)"].dropna().tolist()
+
+        def value(column, row=row):
+            return None if column not in row or pd.isna(row[column]) else float(row[column])
+
+        alerts = watchlist_alerts(value("Prix"), value("P/E (trailing)"),
+                                  value("Position vs historique 5 ans (percentile)"), value("Score"), peers,
+                                  _default_dcf_fair_value(ticker))
+        name = f"{row['Entreprise']} ({ticker})"
+        if not alerts:
+            quiet.append(name)
+            continue
+        badges = [
+            html.Span([html.I(className=f"bi bi-{WATCHLIST_ALERT_ICONS[key]} me-1", **{"aria-hidden": "true"}),
+                       # Percentile arrondi vers le bas : « 19,6 » affiché « 20 » contredirait la règle « sous 20 ».
+                       L(lang, f"watch_alert_{key}",
+                         value=math.floor(alerts[key]) if key == "pe_history_low" else alerts[key])],
+                      className="watch-badge")
+            for key in WATCHLIST_ALERTS if key in alerts
+        ]
+        cards.append(html.Div([html.Div(name, className="watch-name"), html.Div(badges, className="watch-badges")],
+                              className="watch-card"))
+    children = [html.Div([html.I(className="bi bi-bell me-2", **{"aria-hidden": "true"}), L(lang, "watch_alerts_title")]
+                         + layout.info_tooltip("watch-alerts-info", L(
+        lang, "watch_alerts_help", growth=layout.DCF_DEFAULTS["growth_pct"],
+        discount=layout.DCF_DEFAULTS["discount_pct"], terminal=layout.DCF_DEFAULTS["terminal_growth_pct"],
+        horizon=layout.DCF_DEFAULTS["horizon_years"])), className="watch-title")]
+    children += cards
+    if quiet:
+        children.append(html.Div(L(lang, "watch_alerts_quiet", names=", ".join(quiet)), className="watch-quiet"))
+    return html.Div(children, className="watch-panel")
+
+
 @app.callback(
     Output("pe-backtest-result", "children"),
     Input("stocks-raw-store", "data"),
@@ -272,6 +346,47 @@ def render_pe_backtest(rows, lang):
 
 
 
+def _scored_frame(rows) -> pd.DataFrame:
+    """Données chargées sous les noms de colonnes du tableau, avec le score composite calculé sur
+    tout l'univers chargé. Partagé par le tableau (render_stock_views) et les alertes de la liste
+    de suivi (update_watchlist_alerts), pour qu'une alerte « score >= 70 » corresponde toujours au
+    score affiché, quels que soient les filtres."""
+    # Noms de colonnes internes gardés stables (français) : ce sont des clés de travail, pas du
+    # texte affiché : seul le libellé de colonne du tableau final ("name") est traduit plus bas.
+    df = pd.DataFrame(rows)
+    df = df.rename(columns={
+        "sector": "Secteur", "currency": "Devise", "price": "Prix",
+        "trailing_pe": "P/E (trailing)", "forward_pe": "P/E (prévisionnel)",
+        "peg_ratio": "PEG", "ev_to_ebitda": "EV/EBITDA",
+        "price_to_book": "P/B", "dividend_yield": "Rendement dividende (%)",
+        "market_cap": "Capitalisation",
+        "pe_5y_mean": "P/E moyen 5 ans (approx.)", "pe_5y_percentile": "Position vs historique 5 ans (percentile)",
+    })
+
+    # --- Score composite : calculé sur l'ensemble CHARGÉ (df), jamais sur detail_df (filtré par
+    # secteur/filtres/watchlist plus bas) -- sinon le score d'une action changerait juste parce que
+    # l'utilisateur modifie un filtre sans rapport, même principe que le comparatif sectoriel
+    # ci-dessous. Trois piliers également pondérés, chacun une moyenne de rangs percentiles (0-100,
+    # 100 = meilleur) au sein de l'univers chargé : valorisation (P/E et PEG, plus bas = meilleur,
+    # valeurs négatives/nulles exclues car elles signalent des pertes, pas une décote), qualité
+    # (ROIC et marge nette, plus haut = meilleur), track record (Sharpe réalisé, qui combine déjà
+    # rendement et risque, pas besoin de re-classer CAGR/volatilité séparément). Une action sans
+    # aucune des trois données a un score NaN -> "N/A" à l'affichage (voir plus bas).
+    pe_valid = df["P/E (trailing)"].where(df["P/E (trailing)"] > 0)
+    peg_valid = df["PEG"].where(df["PEG"] > 0) if "PEG" in df.columns else pd.Series(dtype=float, index=df.index)
+    valuation_pillar = pd.concat([
+        pe_valid.rank(pct=True, ascending=False) * 100,
+        peg_valid.rank(pct=True, ascending=False) * 100,
+    ], axis=1).mean(axis=1, skipna=True)
+    quality_pillar = pd.concat([
+        df.get("roic", pd.Series(dtype=float, index=df.index)).rank(pct=True, ascending=True) * 100,
+        df.get("profit_margin", pd.Series(dtype=float, index=df.index)).rank(pct=True, ascending=True) * 100,
+    ], axis=1).mean(axis=1, skipna=True)
+    track_record_pillar = df.get("sharpe", pd.Series(dtype=float, index=df.index)).rank(pct=True, ascending=True) * 100
+    df["Score"] = pd.concat([valuation_pillar, quality_pillar, track_record_pillar], axis=1).mean(axis=1, skipna=True)
+    return df
+
+
 @app.callback(
     Output("stocks-sector-bar", "figure"),
     Output("stocks-sector-box", "figure"),
@@ -319,39 +434,7 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
         placeholder = empty_figure_with_message(L(lang, "load_hint_placeholder"), dark=dark)
         return (placeholder, placeholder, "", placeholder, [], [], {"height": "70vh"}, "", {"display": "none"})
 
-    # Noms de colonnes internes gardés stables (français) : ce sont des clés de travail, pas du
-    # texte affiché : seul le libellé de colonne du tableau final ("name") est traduit plus bas.
-    df = pd.DataFrame(rows)
-    df = df.rename(columns={
-        "sector": "Secteur", "currency": "Devise", "price": "Prix",
-        "trailing_pe": "P/E (trailing)", "forward_pe": "P/E (prévisionnel)",
-        "peg_ratio": "PEG", "ev_to_ebitda": "EV/EBITDA",
-        "price_to_book": "P/B", "dividend_yield": "Rendement dividende (%)",
-        "market_cap": "Capitalisation",
-        "pe_5y_mean": "P/E moyen 5 ans (approx.)", "pe_5y_percentile": "Position vs historique 5 ans (percentile)",
-    })
-
-    # --- Score composite : calculé sur l'ensemble CHARGÉ (df), jamais sur detail_df (filtré par
-    # secteur/filtres/watchlist plus bas) -- sinon le score d'une action changerait juste parce que
-    # l'utilisateur modifie un filtre sans rapport, même principe que le comparatif sectoriel
-    # ci-dessous. Trois piliers également pondérés, chacun une moyenne de rangs percentiles (0-100,
-    # 100 = meilleur) au sein de l'univers chargé : valorisation (P/E et PEG, plus bas = meilleur,
-    # valeurs négatives/nulles exclues car elles signalent des pertes, pas une décote), qualité
-    # (ROIC et marge nette, plus haut = meilleur), track record (Sharpe réalisé, qui combine déjà
-    # rendement et risque, pas besoin de re-classer CAGR/volatilité séparément). Une action sans
-    # aucune des trois données a un score NaN -> "N/A" à l'affichage (voir plus bas).
-    pe_valid = df["P/E (trailing)"].where(df["P/E (trailing)"] > 0)
-    peg_valid = df["PEG"].where(df["PEG"] > 0) if "PEG" in df.columns else pd.Series(dtype=float, index=df.index)
-    valuation_pillar = pd.concat([
-        pe_valid.rank(pct=True, ascending=False) * 100,
-        peg_valid.rank(pct=True, ascending=False) * 100,
-    ], axis=1).mean(axis=1, skipna=True)
-    quality_pillar = pd.concat([
-        df.get("roic", pd.Series(dtype=float, index=df.index)).rank(pct=True, ascending=True) * 100,
-        df.get("profit_margin", pd.Series(dtype=float, index=df.index)).rank(pct=True, ascending=True) * 100,
-    ], axis=1).mean(axis=1, skipna=True)
-    track_record_pillar = df.get("sharpe", pd.Series(dtype=float, index=df.index)).rank(pct=True, ascending=True) * 100
-    df["Score"] = pd.concat([valuation_pillar, quality_pillar, track_record_pillar], axis=1).mean(axis=1, skipna=True)
+    df = _scored_frame(rows)
 
     priced_all = df.dropna(subset=["P/E (trailing)"]).copy()
     priced_all = priced_all[priced_all["P/E (trailing)"] > 0]
