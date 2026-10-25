@@ -15,16 +15,51 @@ def hex_to_rgba(hex_color: str, alpha: float) -> str:
     return f"rgba({r},{g},{b},{alpha})"
 
 
+# Paire divergente de la palette de référence : bleu (corrélation négative) <-> rouge (positive),
+# milieu gris neutre (0 = pas de lien), propre à chaque mode.
+DIVERGING = {"light": ("#2a78d6", "#f0efec", "#e34948"), "dark": ("#3987e5", "#383835", "#e66767")}
+
+
 def make_correlation_heatmap(corr: pd.DataFrame, lang="fr", dark: bool = False):
-    z = corr.values
-    fig = go.Figure(data=go.Heatmap(
-        z=z, x=list(corr.columns), y=list(corr.columns),
-        colorscale="RdBu", zmid=0, zmin=-1, zmax=1,
-        text=np.round(z, 2), texttemplate="%{text}",
+    """Corrélations entre lignes en demi-matrice (la moitié haute répète la basse, la diagonale vaut
+    toujours 1) : cases carrées séparées d'un liseré, couleur divergente centrée sur 0, valeur écrite
+    dans chaque case avec une encre qui contraste avec son fond."""
+    mode = "dark" if dark else "light"
+    chrome = chart_theme.CHROME[mode]
+    negative, neutral, positive = DIVERGING[mode]
+    names = list(corr.columns)
+    n = len(names)
+    if n < 2:
+        fig = go.Figure()
+        fig.update_layout(template=chart_theme.template(dark), title=L(lang, "corr_chart_title"))
+        return fig
+    # Axes au nom court (« PSP5.PA », pas « PSP5.PA (S&P 500) ») : les libellés longs, tournés,
+    # mangeaient la hauteur et réduisaient les cases. Le nom complet reste dans l'infobulle.
+    short = [str(name).split(" (")[0] for name in names]
+    rows, cols = short[1:], short[:-1]
+    z = [[corr.iloc[i, j] if j < i else None for j in range(n - 1)] for i in range(1, n)]
+    pairs = [[f"{names[i]}<br>{names[j]}" for j in range(n - 1)] for i in range(1, n)]
+    fig = go.Figure(go.Heatmap(
+        z=z, x=cols, y=rows, zmin=-1, zmid=0, zmax=1, xgap=3, ygap=3, hoverongaps=False, customdata=pairs,
+        colorscale=[[0, negative], [0.5, neutral], [1, positive]],
+        colorbar=dict(thickness=10, len=0.7, tickvals=[-1, 0, 1], outlinewidth=0,
+                      ticktext=["-1", "0", "+1"], tickfont=dict(color=chrome["muted"])),
+        hovertemplate="%{customdata}<br>r = %{z:.2f}<extra></extra>",
     ))
+    for i, row_name in enumerate(rows):
+        for j, col_name in enumerate(cols):
+            value = z[i][j]
+            if value is None or pd.isna(value):
+                continue
+            text = f"{value:.2f}".replace(".", ",") if lang == "fr" else f"{value:.2f}"
+            # Texte blanc sur une case très colorée, encre normale sur une case pâle.
+            fig.add_annotation(x=col_name, y=row_name, text=text, showarrow=False,
+                               font=dict(size=12, color="#ffffff" if abs(value) > 0.55 else chrome["ink"]))
     fig.update_layout(
-        template=chart_theme.template(dark),
-        title=L(lang, "corr_chart_title"), margin=dict(t=40, l=10, r=10),
+        template=chart_theme.template(dark), title=dict(text=L(lang, "corr_chart_title"), font=dict(size=14)),
+        xaxis=dict(showgrid=False, side="bottom"),
+        yaxis=dict(showgrid=False, autorange="reversed", scaleanchor="x", ticklabelstandoff=6),
+        margin=dict(t=50, l=10, r=10, b=10), height=max(300, 110 + 64 * (n - 1)), separators=L(lang, "plotly_separators"),
     )
     return fig
 
