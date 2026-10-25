@@ -85,7 +85,10 @@ qu'une simulation aurait donné.
 - **Portefeuille réel** : saisie des achats et dividendes (ou import CSV,
   dont l'export Trade Republic), courbe de valeur reconstruite jour par jour,
   totaux (capital investi, frais, dividendes, P&L), plan de rééquilibrage vers des
-  pondérations cibles, graphique « réel vs simulé », et reprise du rythme
+  pondérations cibles, répartition du prochain versement sans rien vendre
+  (les lignes les plus sous-pondérées d'abord, chacune ramenée au même
+  pourcentage de sa cible, aucune au-delà ; montant prérempli avec le rythme
+  réel), graphique « réel vs simulé », et reprise du rythme
   d'apport réel comme paramètre de simulation. Stockage SQLite local.
 - Infobulles (ⓘ) sur les concepts clés (Sharpe, drawdown, méthode de
   simulation...), interface FR/EN, export/import de configuration en JSON,

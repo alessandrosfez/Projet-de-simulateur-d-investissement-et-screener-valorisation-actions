@@ -743,6 +743,15 @@ def build_tabs(lang, v=None, active_tab="tab-par-indice"):
 # État entièrement en base (portfolio_db.py), pas dans TAB_STATE_FIELDS/CONFIG_FIELDS : un
 # changement de langue ou un import/export JSON de config ne restaure donc rien ici (il n'y a
 # rien à restaurer), le re-rendu se fait en re-interrogeant la base (voir callbacks/portefeuille_reel.py).
+def _default_next_contribution(transactions_df):
+    """Montant prérempli du prochain versement : le rythme mensuel réel moyen, arrondi à 10 €.
+    Vide sans historique, plutôt qu'un montant inventé."""
+    schedule = portfolio_engine.monthly_contribution_schedule(transactions_df)
+    if schedule.empty or schedule.mean() <= 0:
+        return None
+    return int(round(float(schedule.mean()) / 10) * 10)
+
+
 def build_tab3(lang):
     # Les 3 tableaux éditables (tx/dividendes/pondérations) sont pré-remplis avec le contenu RÉEL
     # de la base dès la construction du layout, plutôt que de laisser data vide par défaut : ce
@@ -927,6 +936,23 @@ def build_tab3(lang):
 
         html.H5(L(lang, "section_rebalancing"), className="section-title", id="anchor-tab3-rebalancing"),
         dbc.Card(dbc.CardBody([
+            # Rééquilibrage par les flux (portfolio_engine.allocate_contribution) : où placer le
+            # prochain versement, sans rien vendre. Montant prérempli avec le rythme mensuel réel.
+            html.Div([
+                html.Div([dbc.Label(L(lang, "next_contribution_label"), className="mb-0",
+                                    html_for="tab3-next-contribution-amount")]
+                         + info_tooltip("next-contribution-info", L(lang, "next_contribution_help"))),
+                dcc.Input(
+                    id="tab3-next-contribution-amount", type="number", min=0, step=10,
+                    value=_default_next_contribution(transactions_df), debounce=True,
+                    className="form-control form-control-sm", style={"maxWidth": "180px"},
+                ),
+            ], className="mb-2"),
+            dcc.Loading(**LOADING_PROPS, children=[
+                html.Div(id="tab3-next-contribution-summary"),
+                dcc.Graph(id="tab3-next-contribution-graph", config=GRAPH_CONFIG),
+            ]),
+            html.Hr(className="my-3"),
             html.Small(L(lang, "rebalancing_hint"), className="text-muted d-block mb-2"),
             html.Div(id="tab3-rebalancing-warning"),
             html.Div(id="tab3-target-container"),

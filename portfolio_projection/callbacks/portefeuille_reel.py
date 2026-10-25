@@ -17,7 +17,9 @@ import layout
 import portfolio_db
 import portfolio_engine
 from app_instance import app
-from charts import make_allocation_sunburst, make_correlation_heatmap, make_target_vs_actual_rings
+from charts import (
+    make_allocation_sunburst, make_contribution_plan_figure, make_correlation_heatmap, make_target_vs_actual_rings,
+)
 from constants import PEA_TAX_RATE, STOCK_INDEX_KEY, UNDERLYING_INDICES, UNKNOWN_INDEX_KEY
 from engine import (
     simulate_portfolio_asset_returns,
@@ -716,6 +718,63 @@ def refresh_pea_milestones(opening_date, _trigger, lang):
         milestones["is_mature"],
     )
     return build_pea_milestone_cards(milestones, cap, tax, opening_is_estimated, lang)
+
+
+@app.callback(
+    Output("tab3-next-contribution-summary", "children"),
+    Output("tab3-next-contribution-graph", "figure"),
+    Input("tab3-refresh-trigger", "data"),
+    Input("tab3-next-contribution-amount", "value"),
+    Input("lang-radio", "value"),
+    Input("dark-mode-switch", "value"),
+    Input("palette-dropdown", "value"),
+)
+def plan_next_contribution(_trigger, amount, lang, dark_mode, palette_code):
+    """Où placer le prochain versement pour se rapprocher des poids cibles sans vendre (voir
+    portfolio_engine.allocate_contribution). Une ligne sans cours rend le plan indisponible : la
+    compter pour 0 pousserait le versement vers elle à tort."""
+    lang = lang or "fr"
+    dark = bool(dark_mode)
+    target_weights = portfolio_db.get_target_weights()
+    # Figure réduite à rien quand il n'y a pas de plan : seul le message au-dessus compte, pas un
+    # grand cadre vide.
+    empty = go.Figure()
+    empty.update_layout(template=chart_theme.template(dark), height=10, margin=dict(t=0, b=0, l=0, r=0),
+                        xaxis=dict(visible=False), yaxis=dict(visible=False))
+    if target_weights.empty:
+        return html.Div(L(lang, "rebalancing_no_weights_hint"), className="text-muted"), empty
+    if not amount or float(amount) <= 0:
+        return html.Div(L(lang, "next_contribution_no_amount"), className="text-muted"), empty
+
+    holdings = portfolio_engine.reconstruct_holdings(portfolio_db.get_transactions())
+    current_values, unpriced = pd.Series(dtype=float), []
+    for _, row in holdings.iterrows():
+        price = get_current_price(row["ticker"])
+        if price is None:
+            unpriced.append(row["ticker"])
+        else:
+            current_values[row["ticker"]] = row["quantity"] * price
+    if unpriced:
+        return dbc.Alert(L(lang, "next_contribution_unpriced", tickers=", ".join(unpriced)), color="warning",
+                         className="py-2"), empty
+
+    amount = float(amount)
+    lines, summary = portfolio_engine.allocate_contribution(target_weights, current_values, amount)
+    lines = lines[(lines["target_pct"] > 0) | (lines["contribution_eur"] > 0)]
+    def money(value):
+        return f"{value:,.0f} €".replace(",", " ")
+
+    summary_text = L(lang, "next_contribution_summary", amount=money(amount),
+                     before=summary["deviation_before_pt"], after=summary["deviation_after_pt"])
+    fig = make_contribution_plan_figure(
+        [_ticker_display_label(t) for t in lines["ticker"]],
+        lines["current_pct"].tolist(), lines["after_pct"].tolist(), lines["target_pct"].tolist(),
+        [f"+{money(v)}" if v >= 0.5 else "" for v in lines["contribution_eur"]],
+        (L(lang, "next_contribution_current"), L(lang, "next_contribution_after"), L(lang, "next_contribution_target")),
+        L(lang, "next_contribution_title", amount=money(amount)),
+        chart_theme.palette_for(palette_code, dark)[0], dark=dark, separators=L(lang, "plotly_separators"),
+    )
+    return html.Div(summary_text, className="kpi-sub mb-1"), fig
 
 
 @app.callback(

@@ -146,6 +146,69 @@ def compute_rebalancing_plan(target_weights: pd.DataFrame, current_values_by_tic
     return df.sort_values("delta_eur", ascending=False).reset_index(drop=True)
 
 
+def allocate_contribution(target_weights: pd.DataFrame, current_values_by_ticker: pd.Series,
+                          amount: float) -> tuple[pd.DataFrame, dict]:
+    """Répartit un versement à venir pour se rapprocher des poids cibles SANS VENDRE (une vente en
+    PEA n'est pas neutre, voir compute_rebalancing_plan) : rééquilibrage par les flux.
+
+    Valeur cible de chaque ligne = poids cible x (portefeuille actuel + versement). Le versement
+    remonte les lignes sous-pondérées au même ratio r = valeur / valeur cible, en commençant par
+    les plus éloignées : on cherche r tel que la somme des max(0, r x cible - valeur) égale le
+    versement (dichotomie, la somme croît avec r). Comme les lignes sur-pondérées ne reçoivent rien,
+    les manques cumulés dépassent toujours le versement : r reste <= 1 et aucune ligne ne dépasse sa
+    cible. Une ligne détenue sans poids cible ne reçoit rien.
+
+    Renvoie (lignes : ticker, target_pct, current_pct, contribution_eur, after_pct, triées par
+    versement décroissant ; résumé : deviation_before_pt / deviation_after_pt = écart absolu moyen
+    aux cibles, en points). Lignes vides sans poids cible ou sans versement positif."""
+    columns = ["ticker", "target_pct", "current_pct", "contribution_eur", "after_pct"]
+    empty_summary = {"deviation_before_pt": None, "deviation_after_pt": None}
+    if target_weights.empty or amount is None or amount <= 0:
+        return pd.DataFrame(columns=columns), empty_summary
+    total_weight = float(target_weights["weight_pct"].sum())
+    if total_weight <= 0:
+        return pd.DataFrame(columns=columns), empty_summary
+    weights = {t: float(w) / total_weight for t, w in zip(target_weights["ticker"], target_weights["weight_pct"])}
+    values = {str(t): float(v) for t, v in current_values_by_ticker.dropna().items()}
+    tickers = sorted(set(weights) | set(values))
+    current_total = sum(values.values())
+    after_total = current_total + amount
+    targets = {t: weights.get(t, 0.0) * after_total for t in tickers}
+
+    def needed(ratio: float) -> float:
+        return sum(max(0.0, ratio * targets[t] - values.get(t, 0.0)) for t in tickers)
+
+    low, high = 0.0, 1.0
+    if needed(high) <= amount:
+        ratio = high
+    else:
+        for _ in range(100):
+            mid = (low + high) / 2
+            low, high = (mid, high) if needed(mid) < amount else (low, mid)
+        ratio = (low + high) / 2
+    contributions = {t: max(0.0, ratio * targets[t] - values.get(t, 0.0)) for t in tickers}
+    # Ajustement final : la dichotomie laisse un reste de quelques centimes, rendu à la plus grosse ligne.
+    leftover = amount - sum(contributions.values())
+    if abs(leftover) > 1e-9:
+        biggest = max(contributions, key=lambda t: contributions[t])
+        contributions[biggest] += leftover
+
+    rows = []
+    for t in tickers:
+        current_value = values.get(t, 0.0)
+        rows.append((
+            t, weights.get(t, 0.0) * 100,
+            current_value / current_total * 100 if current_total else 0.0,
+            contributions[t], (current_value + contributions[t]) / after_total * 100,
+        ))
+    df = pd.DataFrame(rows, columns=columns).sort_values(["contribution_eur", "target_pct"], ascending=False)
+    summary = {
+        "deviation_before_pt": float((df["current_pct"] - df["target_pct"]).abs().mean()),
+        "deviation_after_pt": float((df["after_pct"] - df["target_pct"]).abs().mean()),
+    }
+    return df.reset_index(drop=True), summary
+
+
 OTHER_ALLOCATION_KEY = "__other__"
 
 

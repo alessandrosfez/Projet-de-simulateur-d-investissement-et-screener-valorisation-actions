@@ -571,6 +571,54 @@ def test_benchmark_no_transaction_is_empty():
     assert m.benchmark_cash_flows(empty_tx, 0.0, "2024-01-01") == []
 
 
+# ---------- répartition du prochain versement (rééquilibrage sans vente) ----------
+
+def _weights(**pct):
+    return pd.DataFrame({"ticker": list(pct), "weight_pct": list(pct.values())})
+
+
+def test_contribution_goes_to_the_most_underweight_line_first():
+    # 1 000 € : A 700 (cible 50 %), B 300 (cible 50 %). Versement 200 € -> total 1 200, cible 600
+    # chacun : A est déjà au-dessus, tout va à B (300 -> 500), qui reste sous sa cible.
+    lines, summary = m.allocate_contribution(_weights(A=50, B=50), pd.Series({"A": 700.0, "B": 300.0}), 200.0)
+    by_ticker = lines.set_index("ticker")["contribution_eur"]
+    assert by_ticker["B"] == pytest.approx(200.0) and by_ticker["A"] == pytest.approx(0.0)
+    assert summary["deviation_after_pt"] < summary["deviation_before_pt"]
+
+
+def test_contribution_equalizes_relative_gaps_and_never_overshoots_targets():
+    # Total après versement 1 000 : cibles A 400, B 400, C 200. Valeurs A 400, B 100, C 0 : 500 € à
+    # placer, le ratio commun r vérifie (400r - 100) + 200r = 500, soit r = 1 -> B 300, C 200.
+    lines, _ = m.allocate_contribution(_weights(A=40, B=40, C=20), pd.Series({"A": 400.0, "B": 100.0}), 500.0)
+    by_ticker = lines.set_index("ticker")
+    assert by_ticker.loc["B", "contribution_eur"] == pytest.approx(300.0, abs=0.01)
+    assert by_ticker.loc["C", "contribution_eur"] == pytest.approx(200.0, abs=0.01)
+    assert by_ticker["contribution_eur"].sum() == pytest.approx(500.0)
+    assert (by_ticker["after_pct"] <= by_ticker["target_pct"] + 1e-6).all()
+
+
+def test_contribution_partial_fill_keeps_a_common_ratio():
+    # Cibles 50/50 sur 1 100 € (550 chacune), A 0 € et B 800 € : B est au-dessus de sa cible, les
+    # 300 € vont tous à A, qui reste sous la sienne (ratio 300 / 550).
+    lines, _ = m.allocate_contribution(_weights(A=50, B=50), pd.Series({"B": 800.0}), 300.0)
+    by_ticker = lines.set_index("ticker")["contribution_eur"]
+    assert by_ticker["A"] == pytest.approx(300.0) and by_ticker["B"] == pytest.approx(0.0)
+    # Deux lignes sous-pondérées, 300 € : cibles 30 / 30 / 40 sur 1 000 €, valeurs A 100, B 0,
+    # C 600. On cherche r : (300r - 100) + 300r = 300, soit r = 2/3 -> A 100 €, B 200 €, toutes deux
+    # à 200 € (2/3 de leur cible).
+    lines, _ = m.allocate_contribution(_weights(A=30, B=30, C=40), pd.Series({"A": 100.0, "C": 600.0}), 300.0)
+    by_ticker = lines.set_index("ticker")["contribution_eur"]
+    assert by_ticker["A"] == pytest.approx(100.0, abs=0.01) and by_ticker["B"] == pytest.approx(200.0, abs=0.01)
+    assert by_ticker["C"] == pytest.approx(0.0)
+
+
+def test_held_line_without_target_receives_nothing_and_empty_inputs():
+    lines, _ = m.allocate_contribution(_weights(A=100), pd.Series({"A": 100.0, "X": 500.0}), 50.0)
+    assert lines.set_index("ticker").loc["X", "contribution_eur"] == pytest.approx(0.0)
+    assert m.allocate_contribution(_weights(), pd.Series(dtype=float), 100.0)[0].empty
+    assert m.allocate_contribution(_weights(A=100), pd.Series({"A": 1.0}), 0.0)[0].empty
+
+
 # ---------- gain de la période (historique de moins d'un an) ----------
 
 def test_invested_cost_includes_fees_and_tolerates_missing_fee():

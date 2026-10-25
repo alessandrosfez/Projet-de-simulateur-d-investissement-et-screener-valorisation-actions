@@ -92,6 +92,46 @@ def make_target_vs_actual_rings(labels: list, actual: list, target: list, hover_
     return fig
 
 
+def make_contribution_plan_figure(labels: list, current_pct: list, after_pct: list, target_pct: list,
+                                  amount_texts: list, names: tuple[str, str, str], title: str,
+                                  color: str, dark: bool = False, separators: str | None = None):
+    """Répartition du prochain versement (portfolio_engine.allocate_contribution) : une ligne par
+    ticker, la part actuelle (point creux) reliée à la part après versement (point plein), la cible
+    en trait vertical, et le montant à verser à droite. Le chemin parcouru vers la cible se lit d'un
+    coup d'oeil, ce qu'un tableau d'écarts en euros ne montre pas. names : (actuel, après, cible)."""
+    chrome = chart_theme.CHROME["dark" if dark else "light"]
+    current_name, after_name, target_name = names
+    fig = go.Figure()
+    for label, before, after in zip(labels, current_pct, after_pct):
+        fig.add_trace(go.Scatter(x=[before, after], y=[label, label], mode="lines", showlegend=False,
+                                 hoverinfo="skip", line=dict(color=hex_to_rgba(color, 0.45), width=3)))
+    fig.add_trace(go.Scatter(
+        x=current_pct, y=labels, mode="markers", name=current_name,
+        marker=dict(symbol="circle-open", size=11, color=chrome["muted"], line=dict(width=2)),
+        hovertemplate=f"%{{y}}<br>{current_name} : %{{x:.1f}} %<extra></extra>",
+    ))
+    fig.add_trace(go.Scatter(
+        x=after_pct, y=labels, mode="markers+text", name=after_name, text=amount_texts,
+        textposition="middle right", textfont=dict(color=chrome["ink"], size=12),
+        marker=dict(size=12, color=color, line=dict(width=2, color=chart_theme.surface_color(dark))),
+        hovertemplate=f"%{{y}}<br>{after_name} : %{{x:.1f}} %<extra></extra>",
+    ))
+    fig.add_trace(go.Scatter(
+        x=target_pct, y=labels, mode="markers", name=target_name,
+        marker=dict(symbol="line-ns", size=22, line=dict(width=3, color=chrome["ink"])),
+        hovertemplate=f"%{{y}}<br>{target_name} : %{{x:.1f}} %<extra></extra>",
+    ))
+    top = max([*current_pct, *after_pct, *target_pct, 1])
+    fig.update_layout(
+        template=chart_theme.template(dark), title=dict(text=title, font=dict(size=14)),
+        xaxis=dict(range=[0, top * 1.22], ticksuffix=" %", zeroline=False),
+        yaxis=dict(type="category", autorange="reversed", showgrid=False, ticklabelstandoff=8),
+        legend=dict(orientation="h", yanchor="bottom", y=1.0, x=0),
+        height=150 + 46 * len(labels), margin=dict(t=90, l=16, r=24, b=40), separators=separators,
+    )
+    return fig
+
+
 def make_band_figure(series, years_axis, title, lang="fr", palette=None, invested_capital=None,
                       phase_boundary_years=None, dark: bool = False, backtest_series=None,
                       view_mode="prevision"):

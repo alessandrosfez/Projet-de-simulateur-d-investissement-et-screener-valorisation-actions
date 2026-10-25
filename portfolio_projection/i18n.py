@@ -243,6 +243,21 @@ TRANSLATIONS = {
         "real_portfolio_corr_no_data": "Au moins 2 tickers avec un historique suffisant sont nécessaires pour "
                                         "calculer une corrélation.",
         "section_rebalancing": "Plan de rééquilibrage",
+        "next_contribution_label": "Montant de ton prochain versement (€)",
+        "next_contribution_help": "Répartit ce versement pour te rapprocher de tes poids cibles sans rien vendre "
+                                   "(une vente en PEA n'est pas fiscalement neutre). Les lignes les plus "
+                                   "sous-pondérées passent en premier : chacune est remontée au même pourcentage "
+                                   "de sa cible, calculée sur le portefeuille après versement, et aucune ne "
+                                   "dépasse sa cible. Prérempli avec ton rythme mensuel réel moyen.",
+        "next_contribution_title": "Où placer ton prochain versement de {amount}",
+        "next_contribution_summary": "Écart moyen à tes cibles : {before:.1f} pt aujourd'hui, {after:.1f} pt "
+                                      "après ce versement.",
+        "next_contribution_current": "Part actuelle",
+        "next_contribution_after": "Après versement",
+        "next_contribution_target": "Cible",
+        "next_contribution_no_amount": "Saisis le montant de ton prochain versement pour voir où le placer.",
+        "next_contribution_unpriced": "Cours indisponible pour {tickers} : impossible de savoir où en est "
+                                       "ta répartition, donc pas de plan de versement pour l'instant.",
         "rebalancing_hint": "Delta = montant à rediriger depuis tes PROCHAINS versements vers ce ticker pour te "
                              "rapprocher de ta pondération cible — jamais une suggestion de vente (une vente en "
                              "PEA n'est pas fiscalement neutre).",
@@ -769,6 +784,21 @@ TRANSLATIONS = {
         "real_portfolio_corr_no_data": "At least 2 tickers with enough history are needed to compute a "
                                         "correlation.",
         "section_rebalancing": "Rebalancing plan",
+        "next_contribution_label": "Amount of your next contribution (€)",
+        "next_contribution_help": "Splits this contribution to bring you closer to your target weights without "
+                                   "selling anything (a PEA sale isn't tax-neutral). The most underweight lines "
+                                   "come first: each one is raised to the same percentage of its target, computed "
+                                   "on the portfolio after the contribution, and none goes past its target. "
+                                   "Prefilled with your real average monthly pace.",
+        "next_contribution_title": "Where to put your next {amount} contribution",
+        "next_contribution_summary": "Average gap to your targets: {before:.1f} pt today, {after:.1f} pt after "
+                                      "this contribution.",
+        "next_contribution_current": "Current share",
+        "next_contribution_after": "After contribution",
+        "next_contribution_target": "Target",
+        "next_contribution_no_amount": "Enter the amount of your next contribution to see where to put it.",
+        "next_contribution_unpriced": "Price unavailable for {tickers}: your current allocation is unknown, so "
+                                       "no contribution plan for now.",
         "rebalancing_hint": "Delta = amount to redirect from your NEXT contributions toward this ticker to get "
                              "closer to your target weight — never a suggestion to sell (a PEA sale isn't tax-neutral).",
         "rebalancing_weights_not_100_warning": "Target weights don't add up to 100%: automatically normalized for "
