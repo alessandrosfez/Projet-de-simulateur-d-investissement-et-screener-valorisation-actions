@@ -110,3 +110,57 @@ def make_pe_history_figure(dates, values, current_pe: float | None, low_pe: floa
         separators=separators,
     )
     return fig
+
+
+def make_sector_strip_figure(sectors: list, points: list[dict], medians: dict, color: str, highlight_color: str,
+                             title: str, median_label: str, dark: bool = False,
+                             separators: str | None = None) -> go.Figure:
+    """Comparatif sectoriel en nuage de points : une ligne par secteur (trié par P/E médian), un point
+    par action, un trait sur la médiane du secteur. Les titres de la liste de suivi (highlight) sont
+    plus gros, d'une autre couleur et nommés : on voit d'un coup où chacun se situe parmi ses pairs,
+    ce que deux graphiques séparés (moyennes, boîtes) obligeaient à recouper. Échelle logarithmique :
+    un P/E extrême écraserait sinon tous les autres. points : {"sector", "pe", "name", "highlight"}."""
+    chrome = chart_theme.CHROME["dark" if dark else "light"]
+    rank = {sector: i for i, sector in enumerate(sectors)}
+    # Décalage vertical déterministe (même nuage à chaque rendu) pour séparer les points voisins.
+    offsets: dict[str, int] = {}
+
+    def jitter(sector: str) -> float:
+        offsets[sector] = offsets.get(sector, 0) + 1
+        return ((offsets[sector] * 37) % 9 - 4) / 14
+
+    regular = [p for p in points if not p["highlight"]]
+    watched = [p for p in points if p["highlight"]]
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=[medians[s] for s in sectors], y=list(range(len(sectors))), mode="markers", name=median_label,
+        marker=dict(symbol="line-ns", size=26, line=dict(width=3, color=chrome["ink"])),
+        hovertemplate=f"{median_label} : %{{x:.1f}}<extra></extra>",
+    ))
+    for group, size, marker_color, show_text in ((regular, 9, _rgba(color, 0.6), False),
+                                                  (watched, 14, highlight_color, True)):
+        if not group:
+            continue
+        fig.add_trace(go.Scatter(
+            x=[p["pe"] for p in group], y=[rank[p["sector"]] + jitter(p["sector"]) for p in group],
+            mode="markers+text" if show_text else "markers", showlegend=False,
+            text=[p["name"] for p in group] if show_text else None, textposition="top center",
+            textfont=dict(size=11, color=chrome["ink"]), customdata=[p["name"] for p in group],
+            hovertemplate="<b>%{customdata}</b><br>P/E : %{x:.1f}<extra></extra>",
+            marker=dict(size=size, color=marker_color, line=dict(width=1.5, color=chart_theme.surface_color(dark))),
+        ))
+    fig.update_layout(
+        template=chart_theme.template(dark), title=dict(text=title, font=dict(size=14)), showlegend=False,
+        # Graduations 1-2-5 de chaque décade seulement (dtick « D2 ») : les chiffres 2 à 9 encombraient l'axe.
+        xaxis=dict(type="log", title="P/E", dtick="D2"),
+        yaxis=dict(tickvals=list(range(len(sectors))), ticktext=sectors, range=[len(sectors) - 0.4, -0.6],
+                   showgrid=False, ticklabelstandoff=8),
+        height=140 + 46 * len(sectors), margin=dict(t=60, l=16, r=24, b=50), separators=separators,
+    )
+    return fig
+
+
+def _rgba(hex_color: str, alpha: float) -> str:
+    """Couleur hexadécimale avec transparence (« rgba(...) »)."""
+    h = hex_color.lstrip("#")
+    return f"rgba({int(h[0:2], 16)}, {int(h[2:4], 16)}, {int(h[4:6], 16)}, {alpha})"

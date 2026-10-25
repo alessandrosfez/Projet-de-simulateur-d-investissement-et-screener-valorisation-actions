@@ -17,7 +17,7 @@ from dash import Input, Output, State, dcc, html
 
 import layout
 from app_instance import app
-from charts import empty_figure_with_message, make_football_field, make_pe_history_figure
+from charts import empty_figure_with_message, make_football_field, make_pe_history_figure, make_sector_strip_figure
 from constants import UNIVERSE_TICKERS
 from engine import (
     FOOTBALL_FIELD_METHODS, WATCHLIST_ALERTS, WATCHLIST_PE_HISTORY_LOW_PCT, annualized_return, annualized_volatility,
@@ -388,8 +388,7 @@ def _scored_frame(rows) -> pd.DataFrame:
 
 
 @app.callback(
-    Output("stocks-sector-bar", "figure"),
-    Output("stocks-sector-box", "figure"),
+    Output("stocks-sector-strip", "figure"),
     Output("stocks-top-cards", "children"),
     Output("stocks-pe-chart", "figure"),
     Output("stocks-table", "rowData"),
@@ -433,7 +432,7 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
             help_texts[c] = help_text
     if not rows:
         placeholder = empty_figure_with_message(L(lang, "load_hint_placeholder"), dark=dark)
-        return (placeholder, placeholder, "", placeholder, [], [], {"height": "70vh"}, "", {"display": "none"},
+        return (placeholder, "", placeholder, [], [], {"height": "70vh"}, "", {"display": "none"},
                 {"display": "block"})
 
     df = _scored_frame(rows)
@@ -442,47 +441,26 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
     priced_all = priced_all[priced_all["P/E (trailing)"] > 0]
 
     # --- Comparatif par secteur : toujours calculé sur l'ensemble chargé, pas filtré ---
-    sector_bar = go.Figure()
-    sector_box = go.Figure()
+    # Un seul nuage de points (un point par action, médiane du secteur, titres suivis nommés) à la
+    # place de l'ancien duo barres des moyennes + boîtes : tout se lit sur un même graphique.
+    sector_strip = empty_figure_with_message("", dark=dark)
     if not priced_all.empty:
-        sector_means = priced_all.groupby("Secteur")["P/E (trailing)"].mean().sort_values()
-        sector_bar.add_trace(go.Bar(
-            x=sector_means.index, y=sector_means.values, marker_color=palette[1 % len(palette)],
-        ))
-        sector_bar.update_layout(
+        medians = priced_all.groupby("Secteur")["P/E (trailing)"].median().sort_values()
+        watched = set(watchlist_tickers or [])
+        points = [
+            {"sector": r["Secteur"], "pe": float(r["P/E (trailing)"]), "name": r["Entreprise"],
+             "highlight": r["Ticker"] in watched}
+            for _, r in priced_all.iterrows() if pd.notna(r["Secteur"])
+        ]
+        # Secteur absent chez Yahoo (« N/A ») : intitulé explicite plutôt qu'un sigle.
+        unknown = L(lang, "sector_unknown")
+        for point in points:
+            point["sector"] = unknown if point["sector"] in ("N/A", "") else point["sector"]
+        medians.index = [unknown if s in ("N/A", "") else s for s in medians.index]
+        sector_strip = make_sector_strip_figure(
+            list(medians.index), points, medians.to_dict(), palette[0], palette[1 % len(palette)],
+            L(lang, "sector_strip_title"), L(lang, "sector_median_label"), dark=dark,
             separators=L(lang, "plotly_separators"),
-            template=chart_theme.template(dark),
-            title=L(lang, "sector_avg_pe_title"), xaxis_title="", yaxis_title=L(lang, "axis_pe_avg"),
-            margin=dict(t=60, b=100), xaxis=dict(tickangle=-45),
-        )
-        for i, sector in enumerate(sector_means.index):
-            sector_rows = priced_all.loc[priced_all["Secteur"] == sector]
-            # hoveron="points" (pas "boxes"/"boxes+points") : le survol de la boîte elle-même
-            # déclenche sinon un groupe de 7 bulles Plotly natives (une par statistique : min, q1,
-            # médiane, q3, max, "lower/upper fence"), DONT LE TEXTE N'EST PAS personnalisable via
-            # hovertemplate (vérifié en pratique : le hovertemplate ci-dessous est ignoré tant que
-            # "boxes" fait partie de hoveron, Plotly réaffiche son propre jargon statistique quoi
-            # qu'il arrive). En ne laissant réagir que les points individuels (une entreprise par
-            # point, boxpoints="all" pour tous les afficher, pas seulement les valeurs aberrantes),
-            # chaque survol redevient une seule bulle "Entreprise : P/E X" — la boîte reste visible
-            # comme repère visuel (quartiles), juste plus interactive pour son propre résumé.
-            sector_box.add_trace(go.Box(
-                y=sector_rows["P/E (trailing)"], name=sector, marker_color=palette[i % len(palette)],
-                boxpoints="all", pointpos=0, jitter=0.4,
-                hoveron="points",
-                text=sector_rows["Entreprise"],
-                hovertemplate="<b>%{text}</b><br>P/E : %{y:.1f}<extra></extra>",
-            ))
-        sector_box.update_layout(
-            separators=L(lang, "plotly_separators"),
-            template=chart_theme.template(dark),
-            title=L(lang, "sector_dist_pe_title"), showlegend=False, yaxis_title="P/E",
-            # Échelle log : un seul P/E extrême (voir ci-dessus) écrase sinon visuellement toutes
-            # les autres boîtes près de zéro, rendant leur survol imprécis (cible de quelques
-            # pixels). Toutes les valeurs comparées ici sont > 0 (filtré dans priced_all),
-            # condition nécessaire pour un axe log.
-            yaxis_type="log",
-            margin=dict(t=60, b=100), xaxis=dict(tickangle=-45),
         )
 
     # --- Détail (cartes, graphique, tableau) : filtré sur le secteur choisi, puis sur les
@@ -597,7 +575,7 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
     # grand cadre vide.
     grid_style = {"height": f"min(70vh, {GRID_HEADER_PX + GRID_ROW_PX * max(len(table_df), 1)}px)"}
 
-    return (sector_bar, sector_box, cards_row, fig, table_df.to_dict("records"), column_defs, grid_style,
+    return (sector_strip, cards_row, fig, table_df.to_dict("records"), column_defs, grid_style,
             csv_data, {"display": "block"}, {"display": "none"})
 
 

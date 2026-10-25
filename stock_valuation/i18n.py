@@ -174,12 +174,10 @@ TRANSLATIONS = {
         "below_history_title": "5 les plus décotées vs leur propre historique",
         "above_history_title": "5 les plus tendues vs leur propre historique",
         "history_card_item": "{name} : P/E actuel {pe:.1f} vs moyenne historique {mean:.1f} (percentile {pct:.0f})",
-        "axis_pe_avg": "P/E moyen",
-        "sector_avg_pe_title": "P/E moyen par secteur",
-        "sector_dist_pe_title": "Distribution du P/E par secteur",
-        "sector_box_caption": "À droite : chaque point est une action du secteur (survole pour son "
-                              "nom et son P/E). La boîte situe la moitié centrale des valeurs "
-                              "autour de la médiane, les traits l'étendue typique du reste.",
+        "sector_box_caption": "Chaque point est une action (survole pour son nom et son P/E), le trait vertical la médiane de son secteur, les titres de ta liste de suivi sont agrandis et nommés. Échelle logarithmique : un P/E extrême n'écrase pas les autres.",
+        "sector_strip_title": "P/E de chaque action, par secteur (trié par P/E médian)",
+        "sector_median_label": "médiane du secteur",
+        "sector_unknown": "Secteur non renseigné",
         "pe_by_stock_chart_title": "P/E Ratio (trailing) : du moins cher au plus cher",
         "basket_avg_annotation": "Moyenne du panier",
         "col_company": "Entreprise",
@@ -436,12 +434,10 @@ TRANSLATIONS = {
         "below_history_title": "5 most discounted vs their own history",
         "above_history_title": "5 most stretched vs their own history",
         "history_card_item": "{name}: current P/E {pe:.1f} vs historical mean {mean:.1f} (percentile {pct:.0f})",
-        "axis_pe_avg": "Average P/E",
-        "sector_avg_pe_title": "Average P/E by sector",
-        "sector_dist_pe_title": "P/E distribution by sector",
-        "sector_box_caption": "On the right: each dot is a stock in the sector (hover for its name "
-                              "and P/E). The box marks the central half of the values around the "
-                              "median, the whiskers the typical range of the rest.",
+        "sector_box_caption": "Each dot is a stock (hover for its name and P/E), the vertical mark the median of its sector, your watchlist stocks are enlarged and named. Log scale: an extreme P/E does not squash the others.",
+        "sector_strip_title": "P/E of each stock, by sector (sorted by median P/E)",
+        "sector_median_label": "sector median",
+        "sector_unknown": "Sector not provided",
         "pe_by_stock_chart_title": "P/E Ratio (trailing): cheapest to most expensive",
         "basket_avg_annotation": "Basket average",
         "col_company": "Company",

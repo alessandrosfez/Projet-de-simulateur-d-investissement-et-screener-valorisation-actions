@@ -229,10 +229,7 @@ def build_tab3(lang, v=None):
 
             dcc.Loading(**LOADING_PROPS, children=[
                 html.H5(L(lang, "sector_compare_title"), id="anchor-sector", className="section-title"),
-                dbc.Row([
-                    dbc.Col(dcc.Graph(id="stocks-sector-bar", config=GRAPH_CONFIG), width=6),
-                    dbc.Col(dcc.Graph(id="stocks-sector-box", config=GRAPH_CONFIG), width=6),
-                ]),
+                dcc.Graph(id="stocks-sector-strip", config=GRAPH_CONFIG),
                 html.P(L(lang, "sector_box_caption"), className="text-muted", style={"fontSize": "0.8rem"}),
             ]),
 
