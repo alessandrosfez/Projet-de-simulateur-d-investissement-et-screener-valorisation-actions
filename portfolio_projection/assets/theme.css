@@ -311,3 +311,26 @@ a { color: var(--accent); }
 .pea-grid .ag-layout-auto-height .ag-center-cols-container { min-height: unset !important; }
 /* Le « ⓘ » suit le titre dans un conteneur flex, où l'espace qui le précède disparaît. */
 .perf-group-title > span[id$="-info"] { margin-left: 0.35rem; }
+
+/* -------- Sommaire collant de l'onglet « Mon portefeuille réel » (même style que stock_valuation) -------- */
+/* Fond de la carte d'onglet (--surface) : la barre reste visible au défilement sans trancher. */
+.quick-nav {
+    position: sticky; top: 0; z-index: 1020;
+    display: flex; flex-wrap: wrap; gap: 0.25rem;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border-soft);
+    padding: 0.6rem 0; margin-bottom: 1.25rem;
+}
+.quick-nav-link {
+    padding: 0.3rem 0.75rem; border-radius: 999px; font-size: 0.8rem; font-weight: 500;
+    color: var(--Dash-Text-Weak, #6c757d); text-decoration: none; white-space: nowrap;
+    transition: background-color .15s ease, color .15s ease;
+}
+.quick-nav-link:hover, .quick-nav-link:focus-visible { background: var(--surface-2); color: var(--accent); }
+.quick-nav-link .bi { color: var(--accent); }
+/* La barre collante ne recouvre pas le titre de la section atteinte par une ancre. */
+.section-title { scroll-margin-top: 88px; }
+@media (max-width: 767.98px) {
+    .quick-nav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+    .quick-nav::-webkit-scrollbar { display: none; }
+}

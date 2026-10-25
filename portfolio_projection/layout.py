@@ -897,7 +897,21 @@ def build_tab3(lang):
     # theme.css) : titre en dehors (section-title), formulaire/tableau dans la carte -- même
     # découpage que les cartes qualité/track-record de stock_valuation, pour que cet onglet se
     # lise comme le reste de l'appli plutôt qu'une simple liste de champs à plat.
+    # Sommaire collant (assets/theme.css, .quick-nav) : l'onglet compte une douzaine de sections.
+    nav_items = [
+        ("allocation", "pie-chart"), ("contributions", "bar-chart"), ("dividends", "calendar3"),
+        ("milestones", "flag"), ("performance", "speedometer2"), ("chart", "graph-up"),
+        ("projection", "graph-up-arrow"), ("corr", "grid-3x3"), ("rebalancing", "arrow-left-right"),
+        ("weights", "bullseye"), ("tx", "cart-plus"), ("div", "cash-coin"),
+    ]
+    quick_nav = html.Nav([
+        html.A([html.I(className=f"bi bi-{icon} me-1", **{"aria-hidden": "true"}), L(lang, f"nav3_{key}")],
+               href=f"#anchor-tab3-{key}", className="quick-nav-link")
+        for key, icon in nav_items
+    ], className="quick-nav", **{"aria-label": L(lang, "nav3_label")})
+
     return html.Div([
+        quick_nav,
         html.Div(id="tab3-totals-cards"),
         html.Div([
             html.Span(id="tab3-real-pace-display", className="text-muted d-block mb-1", style={"fontSize": "0.85rem"}),
