@@ -326,9 +326,9 @@ def render_pe_backtest(rows, lang):
             color = "success" if stats["mean"] >= 0 else "danger"
             body = [
                 html.H6(L(lang, label_key), className="card-subtitle text-muted mb-1"),
-                html.H5(f"{stats['mean']:+.1%}", className=f"text-{color} mb-1"),
+                html.H5(f"{num(stats['mean'] * 100, '+.1f', lang)} %", className=f"text-{color} mb-1"),
                 html.Small(
-                    L(lang, "pe_backtest_stats_caption", median=f"{stats['median']:+.1%}", n=stats["n"]),
+                    L(lang, "pe_backtest_stats_caption", median=f"{num(stats['median'] * 100, '+.1f', lang)} %", n=stats["n"]),
                     className="text-muted",
                 ),
             ]
@@ -491,7 +491,8 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
             (L(lang, "priciest_title"), priciest, "danger"),
         ]:
             items = [
-                html.Li(f"{row['Entreprise']} : P/E {num(row['P/E (trailing)'], '.1f', lang)} ({row['Secteur']})")
+                html.Li(f"{row['Entreprise']} : P/E {num(row['P/E (trailing)'], '.1f', lang)} "
+                        f"({L(lang, 'sector_unknown') if row['Secteur'] in ('N/A', '') else row['Secteur']})")
                 for _, row in subset.iterrows()
             ]
             cards.append(dbc.Col(dbc.Card(dbc.CardBody([
@@ -527,21 +528,38 @@ def render_stock_views(rows, sector_value, pe_max, peg_max, div_min, score_min, 
     plot_df = priced.sort_values("P/E (trailing)")
     fig = go.Figure()
     if not plot_df.empty:
-        fig.add_trace(go.Bar(
-            x=plot_df["Entreprise"], y=plot_df["P/E (trailing)"],
-            marker_color=palette[0],
-            text=plot_df["Secteur"], hovertemplate="%{x}<br>P/E: %{y:.1f}<br>%{text}<extra></extra>",
+        # Points sur tige plutôt que barres : sur une échelle logarithmique une barre part d'un zéro qui
+        # n'existe pas, et Plotly en dessine mal les graduations. Échelle logarithmique nécessaire : un
+        # P/E extrême (STMicroelectronics à plus de 1 300) écrasait sinon tous les autres à zéro.
+        values = plot_df["P/E (trailing)"].astype(float).tolist()
+        names = plot_df["Entreprise"].tolist()
+        floor = min(values) / 1.5
+        stem_x, stem_y = [], []
+        for name, value in zip(names, values):
+            stem_x += [name, name, None]
+            stem_y += [floor, value, None]
+        fig.add_trace(go.Scatter(x=stem_x, y=stem_y, mode="lines", hoverinfo="skip", showlegend=False,
+                                 line=dict(color=palette[0], width=2)))
+        fig.add_trace(go.Scatter(
+            x=names, y=values, mode="markers", showlegend=False, customdata=plot_df["Secteur"],
+            marker=dict(size=10, color=palette[0], line=dict(width=2, color=chart_theme.surface_color(dark))),
+            hovertemplate="%{x}<br>P/E : %{y:.1f}<br>%{customdata}<extra></extra>",
         ))
-        fig.add_hline(
-            y=plot_df["P/E (trailing)"].mean(), line_dash="dot", line_color="gray",
-            annotation_text=L(lang, "basket_avg_annotation"), annotation_position="top left",
-        )
+        # Moyenne du panier tracée comme une courbe, pas avec add_hline : sur un axe logarithmique,
+        # Plotly lit la position d'un trait horizontal en puissance de 10 (y = 60 devenait 10^60).
+        mean_pe = float(plot_df["P/E (trailing)"].mean())
+        fig.add_trace(go.Scatter(
+            x=[names[0], names[-1]], y=[mean_pe, mean_pe], mode="lines+text", showlegend=False, hoverinfo="skip",
+            line=dict(color="gray", dash="dot", width=1.5), text=[L(lang, "basket_avg_annotation"), ""],
+            textposition="top right", textfont=dict(size=11, color="gray"),
+        ))
     fig.update_layout(
         separators=L(lang, "plotly_separators"),
         template=chart_theme.template(dark),
         title=L(lang, "pe_by_stock_chart_title"),
-        xaxis_title="", yaxis_title="P/E",
-        margin=dict(t=60, b=120), xaxis=dict(tickangle=-60),
+        xaxis=dict(title="", tickangle=-60, type="category"),
+        yaxis=dict(title="P/E", type="log", dtick="D2"),
+        margin=dict(t=60, b=120),
     )
 
     # reindex plutôt qu'un simple df[[...]] : tolère une colonne absente (ex. cache disque écrit

@@ -1051,11 +1051,15 @@ def build_tab3(lang):
                 html.Div(id="tab3-next-contribution-summary"),
                 dcc.Graph(id="tab3-next-contribution-graph", config=GRAPH_CONFIG),
             ]),
-            html.Hr(className="my-3"),
-            html.Small(L(lang, "rebalancing_hint"), className="text-muted d-block mb-2"),
-            html.Div(id="tab3-rebalancing-warning"),
-            html.Div(id="tab3-target-container"),
-            read_only_grid("tab3-rebalancing-table"),
+            # Détail du plan (écarts, anneaux, tableau), masqué sans poids cibles : l'état vide
+            # au-dessus dit déjà quoi faire, inutile de le répéter au-dessus d'un tableau vide.
+            html.Div([
+                html.Hr(className="my-3"),
+                html.Small(L(lang, "rebalancing_hint"), className="text-muted d-block mb-2"),
+                html.Div(id="tab3-rebalancing-warning"),
+                html.Div(id="tab3-target-container"),
+                read_only_grid("tab3-rebalancing-table"),
+            ], id="tab3-rebalancing-detail"),
         ]), className="mb-4"),
 
         html.H5(L(lang, "section_target_weights"), className="section-title", id="anchor-tab3-weights"),

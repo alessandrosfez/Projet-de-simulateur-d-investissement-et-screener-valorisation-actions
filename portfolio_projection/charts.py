@@ -367,6 +367,8 @@ def make_actual_vs_simulated_figure(real_dates, real_values, sim_dates, sim_medi
         template=chart_theme.template(dark),
         title=dict(text=L(lang, "real_vs_simulated_chart_title"), font=dict(size=14)),
         xaxis_title=L(lang, "date_axis"), yaxis_title=L(lang, "value_axis"),
+        # Dates au format neutre : Plotly écrirait sinon les mois en anglais (« Aug 9 ») en français.
+        xaxis_tickformat="%d/%m/%Y",
         hovermode="x unified", margin=dict(t=70),
         legend=dict(orientation="h", yanchor="bottom", y=1.0, xanchor="right", x=1, font=dict(size=11)),
     )

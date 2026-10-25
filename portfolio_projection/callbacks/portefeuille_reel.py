@@ -479,6 +479,7 @@ def delete_removed_weights(table_data):
     Output("tab3-corr-heatmap", "figure"),
     Output("tab3-rebalancing-table", "rowData"),
     Output("tab3-rebalancing-table", "columnDefs"),
+    Output("tab3-rebalancing-detail", "style"),
     Output("tab3-rebalancing-warning", "children"),
     Output("tab3-target-container", "children"),
     Output("tab3-weights-table", "data"),
@@ -560,12 +561,10 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
     rebalancing_df = portfolio_engine.compute_rebalancing_plan(target_weights, current_values)
     rebalancing_data, rebalancing_columns = build_rebalancing_table_data(rebalancing_df, lang)
     rebalancing_warning = ""
-    if target_weights.empty:
-        # Sans pondération cible, le tableau lui-même n'a ni data ni columns (voir
-        # build_rebalancing_table_data) et ne s'affiche donc pas du tout -- un texte explicite ici
-        # évite que la section ait l'air cassée/vide sans raison apparente.
-        rebalancing_warning = html.Div(L(lang, "rebalancing_no_weights_hint"), className="text-muted")
-    elif abs(target_weights["weight_pct"].sum() - 100) > 1:
+    # Sans pondération cible, tout le détail du plan est masqué : l'état vide illustré du plan de
+    # versement (plan_next_contribution) explique déjà quoi faire.
+    rebalancing_detail_style = {"display": "none"} if target_weights.empty else {}
+    if not target_weights.empty and abs(target_weights["weight_pct"].sum() - 100) > 1:
         rebalancing_warning = dbc.Alert(
             L(lang, "rebalancing_weights_not_100_warning"), color="warning", className="py-1 px-2 mb-2",
         )
@@ -651,7 +650,8 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
         totals_cards, allocation_fig, allocation_note,
         allocation_list, index_alerts, index_rows, index_dropdown, *table_styles,
         real_pace_display, real_vs_sim_fig, projection_fig, corr_fig,
-        rebalancing_data, layout.grid_columns(rebalancing_columns, rows=rebalancing_data), rebalancing_warning,
+        rebalancing_data, layout.grid_columns(rebalancing_columns, rows=rebalancing_data), rebalancing_detail_style,
+        rebalancing_warning,
         _target_vs_actual_view(current_values, target_weights, lang, dark),
         weights_data, *table_styles,
         tx_data, *table_styles,
