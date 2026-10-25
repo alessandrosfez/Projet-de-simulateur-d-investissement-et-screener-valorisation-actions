@@ -95,15 +95,15 @@ def test_detect_underlying_index(ticker, name, quote_type, expected):
 
 
 def test_exposure_by_index_groups_duplicates_and_flags_them():
-    values = pd.Series({"PSP5.PA": 420.0, "ESE.PA": 312.0, "ETZ.PA": 209.0, "APC.DE": 59.0})
+    values = pd.Series({"SPA.PA": 400.0, "SPB.PA": 300.0, "EUR.PA": 200.0, "APC.DE": 100.0})
     index_of = m.resolve_underlying_indices(
-        {"PSP5.PA": "S&P 500", "ESE.PA": "S&P 500", "ETZ.PA": "Stoxx Europe 600", "APC.DE": m.STOCK_INDEX_KEY},
+        {"SPA.PA": "S&P 500", "SPB.PA": "S&P 500", "EUR.PA": "Stoxx Europe 600", "APC.DE": m.STOCK_INDEX_KEY},
         overrides={},
     )
     exposure = m.exposure_by_index(values, index_of)
     assert list(exposure["key"]) == ["S&P 500", "Stoxx Europe 600", m.STOCK_INDEX_KEY]
-    assert exposure["share"].iloc[0] == pytest.approx(732.0 / 1000.0)
-    assert exposure["tickers"].iloc[0] == ["ESE.PA", "PSP5.PA"]
+    assert exposure["share"].iloc[0] == pytest.approx(700.0 / 1000.0)
+    assert exposure["tickers"].iloc[0] == ["SPA.PA", "SPB.PA"]
     duplicates = m.duplicate_index_exposures(exposure)
     assert list(duplicates["key"]) == ["S&P 500"]
 
