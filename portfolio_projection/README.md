@@ -88,7 +88,11 @@ qu'une simulation aurait donné.
 - **Portefeuille réel** : saisie des achats et dividendes (ou import CSV,
   dont l'export Trade Republic), courbe de valeur reconstruite jour par jour,
   totaux (capital investi, frais, dividendes, P&L), gain ou perte en euros de
-  chaque ligne depuis son achat (dividendes et frais compris), plan de rééquilibrage vers des
+  chaque ligne depuis son achat (dividendes et frais compris), calendrier des
+  dividendes (perçus sur 12 mois, estimés sur les 12 prochains : dividendes
+  par part de l'an dernier × parts actuelles, hachurés pour ne jamais les
+  confondre avec un encaissement ; les ETF de capitalisation sont nommés à
+  part), plan de rééquilibrage vers des
   pondérations cibles, répartition du prochain versement sans rien vendre
   (les lignes les plus sous-pondérées d'abord, chacune ramenée au même
   pourcentage de sa cible, aucune au-delà ; montant prérempli avec le rythme

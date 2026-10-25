@@ -18,7 +18,8 @@ import portfolio_db
 import portfolio_engine
 from app_instance import app
 from charts import (
-    make_allocation_sunburst, make_contribution_plan_figure, make_correlation_heatmap, make_line_contributions_figure,
+    make_allocation_sunburst, make_contribution_plan_figure, make_correlation_heatmap, make_dividend_calendar_figure,
+    make_line_contributions_figure,
     make_target_vs_actual_rings,
 )
 from constants import PEA_TAX_RATE, STOCK_INDEX_KEY, UNDERLYING_INDICES, UNKNOWN_INDEX_KEY
@@ -28,7 +29,7 @@ from engine import (
 import chart_theme
 from i18n import L
 from market_data import (
-    get_aligned_returns_for_tickers, get_current_price, get_instrument_profile,
+    get_aligned_returns_for_tickers, get_current_price, get_dividends_per_share_eur, get_instrument_profile,
     get_daily_price_history, get_daily_total_return_history, get_ticker_name, resolve_isin_to_ticker,
 )
 from results import (
@@ -823,6 +824,68 @@ def refresh_line_contributions(_trigger, lang, dark_mode):
     )
     note = L(lang, "allocation_unpriced", tickers=", ".join(unpriced)) if unpriced else ""
     return fig, note
+
+
+def _collapsed_figure(dark: bool):
+    """Figure réduite à rien : quand il n'y a rien à tracer, seul le message au-dessus compte."""
+    fig = go.Figure()
+    fig.update_layout(template=chart_theme.template(dark), height=10, margin=dict(t=0, b=0, l=0, r=0),
+                      xaxis=dict(visible=False), yaxis=dict(visible=False))
+    return fig
+
+
+@app.callback(
+    Output("tab3-dividend-summary", "children"),
+    Output("tab3-dividend-calendar-graph", "figure"),
+    Output("tab3-dividend-notes", "children"),
+    Input("tab3-refresh-trigger", "data"),
+    Input("lang-radio", "value"),
+    Input("dark-mode-switch", "value"),
+    Input("palette-dropdown", "value"),
+)
+def refresh_dividend_calendar(_trigger, lang, dark_mode, palette_code):
+    """Dividendes perçus sur 12 mois et estimés sur les 12 prochains (portfolio_engine.dividend_calendar).
+    Les lignes de capitalisation et celles dont Yahoo n'a pas répondu sont nommées à part : les
+    premières ne versent rien par construction, les secondes ne sont pas estimées (jamais 0 €)."""
+    lang = lang or "fr"
+    dark = bool(dark_mode)
+    transactions = portfolio_db.get_transactions()
+    dividends = portfolio_db.get_dividends()
+    holdings = portfolio_engine.reconstruct_holdings(transactions)
+    per_share, unknown, accumulating = {}, [], []
+    for ticker in holdings["ticker"] if not holdings.empty else []:
+        series = get_dividends_per_share_eur(ticker)
+        if series is None:
+            unknown.append(ticker)
+        else:
+            per_share[ticker] = series
+            if series.empty:
+                accumulating.append(ticker)
+    today = pd.Timestamp.today().normalize()
+    calendar = portfolio_engine.dividend_calendar(dividends, per_share, holdings, today)
+
+    notes = []
+    if accumulating:
+        notes.append(html.Div(L(lang, "dividends_accumulating", tickers=", ".join(accumulating))))
+    if unknown:
+        notes.append(html.Div(L(lang, "dividends_unknown", tickers=", ".join(unknown))))
+    if calendar.empty:
+        return html.Div(L(lang, "dividends_none"), className="text-muted mb-1"), _collapsed_figure(dark), notes
+
+    received = float(calendar.loc[calendar["kind"] == "received", "amount_eur"].sum())
+    estimated = float(calendar.loc[calendar["kind"] == "estimated", "amount_eur"].sum())
+    summary = html.Div(L(lang, "dividends_summary", received=received, estimated=estimated), className="kpi-sub mb-1")
+    tickers = sorted(set(holdings["ticker"]) | set(calendar["ticker"]))
+    palette = chart_theme.palette_for(palette_code, dark)
+    colors = {t: palette[i % len(palette)] for i, t in enumerate(tickers)}
+    this_month = today.replace(day=1)
+    fig = make_dividend_calendar_figure(
+        calendar, this_month - pd.DateOffset(months=11), this_month, this_month + pd.DateOffset(months=12),
+        {t: _ticker_display_label(t) for t in tickers}, colors,
+        (L(lang, "dividends_received"), L(lang, "dividends_estimated")), L(lang, "dividends_chart_title"),
+        L(lang, "dividends_today"), dark=dark, separators=L(lang, "plotly_separators"),
+    )
+    return summary, fig, notes
 
 
 @app.callback(

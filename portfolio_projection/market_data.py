@@ -356,6 +356,36 @@ def get_daily_total_return_history(ticker: str, start_date: str) -> pd.Series:
         return pd.Series(dtype=float)
 
 
+@cached_ttl(86400)
+def _fetch_dividends_per_share_eur(ticker: str) -> pd.Series:
+    """Dividendes par part versés sur les deux dernières années, en euros au change du jour de
+    détachement. Une série VIDE est une réponse valable (ETF de capitalisation, qui réinvestit ses
+    dividendes) et peut être mise en cache : la fiche du ticker est d'abord lue, et _get_ticker_info
+    lève une exception si Yahoo ne répond pas, ce qui distingue « pas de dividende » d'une panne."""
+    info = _get_ticker_info(ticker)
+    start = (pd.Timestamp.today().normalize() - pd.DateOffset(years=2)).strftime("%Y-%m-%d")
+    dividends = yf.Ticker(ticker).dividends
+    if dividends.empty:
+        return pd.Series(dtype=float)
+    dividends.index = pd.to_datetime(dividends.index)
+    if dividends.index.tz is not None:
+        dividends.index = dividends.index.tz_localize(None)
+    dividends = dividends[dividends.index >= pd.Timestamp(start)]
+    if dividends.empty:
+        return pd.Series(dtype=float)
+    return _to_portfolio_currency(dividends.astype(float), info, start)
+
+
+def get_dividends_per_share_eur(ticker: str) -> pd.Series | None:
+    """Dividendes par part récents d'un ticker, en euros (voir _fetch_dividends_per_share_eur).
+    None si Yahoo n'a pas pu répondre : l'appelant affiche alors « estimation indisponible »,
+    jamais 0 €."""
+    try:
+        return _fetch_dividends_per_share_eur(ticker)
+    except Exception:
+        return None
+
+
 def get_instrument_profile(ticker: str) -> dict:
     """Nom long et type d'instrument Yahoo (« ETF », « EQUITY »...) d'un ticker, pour deviner l'indice
     qu'il suit (voir portfolio_engine.detect_underlying_index). Valeurs None si indisponibles."""

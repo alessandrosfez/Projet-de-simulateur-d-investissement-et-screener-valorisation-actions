@@ -222,6 +222,17 @@ TRANSLATIONS = {
                                               "(ticker trop récent ou jamais coté sur la période choisie).",
         "section_real_portfolio_corr": "Corrélations entre tes lignes",
         "section_allocation": "Répartition actuelle",
+        "section_dividend_calendar": "Calendrier des dividendes",
+        "dividends_chart_title": "Dividendes par mois : perçus sur 12 mois, estimés sur les 12 prochains",
+        "dividends_received": "perçu",
+        "dividends_estimated": "estimé",
+        "dividends_today": "aujourd'hui",
+        "dividends_summary": "Perçus sur 12 mois : {received:,.2f} € · Estimés sur les 12 prochains : {estimated:,.2f} € "
+                              "(dividendes par part des 12 derniers mois × tes parts actuelles, aux mêmes mois).",
+        "dividends_none": "Aucun dividende perçu sur les 12 derniers mois ni attendu sur les 12 prochains.",
+        "dividends_accumulating": "Sans dividende versé (ETF de capitalisation, qui réinvestit ses dividendes dans "
+                                   "son cours) : {tickers}.",
+        "dividends_unknown": "Dividendes indisponibles chez Yahoo pour l'instant, donc non estimés : {tickers}.",
         "section_line_contributions": "Ce que chaque ligne a rapporté",
         "line_contributions_hint": "Gain ou perte en euros depuis l'achat : valeur actuelle + dividendes perçus − "
                                     "montant investi, frais compris. Le pourcentage rapporte ce gain au montant "
@@ -793,6 +804,17 @@ TRANSLATIONS = {
                                               "too recent or never traded over the chosen period).",
         "section_real_portfolio_corr": "Correlation between your holdings",
         "section_allocation": "Current allocation",
+        "section_dividend_calendar": "Dividend calendar",
+        "dividends_chart_title": "Dividends by month: received over 12 months, estimated over the next 12",
+        "dividends_received": "received",
+        "dividends_estimated": "estimated",
+        "dividends_today": "today",
+        "dividends_summary": "Received over 12 months: {received:,.2f} € · Estimated over the next 12: {estimated:,.2f} € "
+                              "(last 12 months' dividends per share × your current shares, in the same months).",
+        "dividends_none": "No dividend received over the last 12 months nor expected over the next 12.",
+        "dividends_accumulating": "No dividend paid (accumulating ETF, which reinvests its dividends in its "
+                                   "price): {tickers}.",
+        "dividends_unknown": "Dividends unavailable from Yahoo for now, so not estimated: {tickers}.",
         "section_line_contributions": "What each line has earned",
         "line_contributions_hint": "Gain or loss in euros since purchase: current value + dividends received − "
                                     "amount invested, fees included. The percentage relates this gain to the "

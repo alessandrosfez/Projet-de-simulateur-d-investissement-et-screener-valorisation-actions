@@ -647,6 +647,35 @@ def test_line_without_price_keeps_its_gain_missing_not_zero():
                                 pd.DataFrame(), pd.Series(dtype=float)).empty
 
 
+# ---------- calendrier des dividendes ----------
+
+def test_dividend_calendar_places_last_year_payments_on_the_same_months_times_current_shares():
+    holdings = pd.DataFrame([{"ticker": "TTE.PA", "quantity": 10.0}, {"ticker": "ACC.PA", "quantity": 12.0}])
+    per_share = {
+        # Trimestriels sur les 12 derniers mois, plus un plus ancien qui ne compte pas.
+        "TTE.PA": pd.Series([0.79, 0.85, 0.85, 0.90],
+                            index=pd.to_datetime(["2025-09-30", "2026-01-02", "2026-03-31", "2026-09-30"])),
+        "ACC.PA": pd.Series(dtype=float),  # capitalisation : rien
+    }
+    received = pd.DataFrame([{"ticker": "TTE.PA", "date": "2026-10-03", "amount_eur": 9.0}])
+    calendar = m.dividend_calendar(received, per_share, holdings, "2026-10-25")
+    estimated = calendar[calendar["kind"] == "estimated"].set_index("month")["amount_eur"]
+    assert estimated[pd.Timestamp("2027-01-01")] == pytest.approx(8.5)
+    assert estimated[pd.Timestamp("2027-03-01")] == pytest.approx(8.5)
+    assert estimated[pd.Timestamp("2027-09-01")] == pytest.approx(9.0)
+    assert pd.Timestamp("2026-09-01") not in estimated.index  # 2025-09-30 + 1 an est déjà passé
+    assert "ACC.PA" not in set(calendar["ticker"])
+    received_rows = calendar[calendar["kind"] == "received"]
+    assert received_rows["amount_eur"].tolist() == [9.0] and received_rows["month"].tolist() == [pd.Timestamp("2026-10-01")]
+
+
+def test_dividend_calendar_skips_unknown_tickers_and_handles_no_data():
+    holdings = pd.DataFrame([{"ticker": "AAA", "quantity": 5.0}])
+    empty_received = pd.DataFrame(columns=["ticker", "date", "amount_eur"])
+    assert m.dividend_calendar(empty_received, {"AAA": None}, holdings, "2026-10-25").empty
+    assert m.dividend_calendar(empty_received, {}, holdings, "2026-10-25").empty
+
+
 # ---------- gain de la période (historique de moins d'un an) ----------
 
 def test_invested_cost_includes_fees_and_tolerates_missing_fee():

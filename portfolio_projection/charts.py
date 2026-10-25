@@ -157,6 +157,51 @@ def make_line_contributions_figure(labels: list, gains: list, texts: list, hover
     return fig
 
 
+def make_dividend_calendar_figure(calendar: pd.DataFrame, first_month, this_month, last_month, labels: dict,
+                                  colors: dict, names: tuple[str, str], title: str, today_label: str,
+                                  dark: bool = False, separators: str | None = None):
+    """Dividendes par mois (portfolio_engine.dividend_calendar), empilés par ligne : perçus en plein,
+    estimés hachurés et plus clairs, pour ne jamais confondre un montant encaissé et une estimation
+    (texture en plus de la couleur). Trait vertical entre le mois en cours et le suivant. labels /
+    colors : par ticker (la couleur suit la ligne, jamais son rang). names : (perçu, estimé)."""
+    chrome = chart_theme.CHROME["dark" if dark else "light"]
+    received_name, estimated_name = names
+    fig = go.Figure()
+    for ticker in sorted(calendar["ticker"].unique()):
+        for kind, name in (("received", received_name), ("estimated", estimated_name)):
+            rows = calendar[(calendar["ticker"] == ticker) & (calendar["kind"] == kind)]
+            if rows.empty:
+                continue
+            estimated = kind == "estimated"
+            fig.add_trace(go.Bar(
+                x=rows["month"], y=rows["amount_eur"], name=labels[ticker], legendgroup=ticker,
+                # Largeur fixe (24 jours, en millisecondes sur un axe de dates) : sinon Plotly la
+                # calcule sur l'écart entre deux mois versants (un trimestre) et la barre déborde.
+                xperiod="M1", xperiodalignment="middle", width=24 * 86_400_000,
+                showlegend=not estimated or calendar[(calendar["ticker"] == ticker) & (calendar["kind"] == "received")].empty,
+                marker=dict(color=hex_to_rgba(colors[ticker], 0.55) if estimated else colors[ticker], cornerradius=3,
+                            pattern=dict(shape="/" if estimated else "", fgcolor=colors[ticker], size=6, solidity=0.3)),
+                hovertemplate=f"{labels[ticker]}<br>%{{x|%m/%Y}} · {name} : %{{y:.2f}} €<extra></extra>",
+            ))
+    # Entrée de légende qui explique la texture, indépendante des lignes.
+    fig.add_trace(go.Bar(x=[None], y=[None], name=estimated_name, hoverinfo="skip",
+                         marker=dict(color=hex_to_rgba(chrome["muted"], 0.35),
+                                     pattern=dict(shape="/", fgcolor=chrome["muted"], size=6, solidity=0.3))))
+    # Chaque barre occupe son mois (xperiod) : le trait passe à la frontière entre le mois en cours
+    # (perçu) et le suivant (estimé), sans mordre sur une barre.
+    fig.add_vline(x=pd.Timestamp(this_month) + pd.DateOffset(months=1), line_dash="dot", line_width=1.5, line_color=chrome["muted"],
+                  annotation_text=today_label, annotation_position="top", annotation_font=dict(color=chrome["muted"], size=11))
+    fig.update_layout(
+        template=chart_theme.template(dark), title=dict(text=title, font=dict(size=14)), barmode="stack",
+        bargap=0.25, xaxis=dict(type="date", tickformat="%m/%Y", dtick="M2", ticklabelmode="period",
+                                range=[pd.Timestamp(first_month), pd.Timestamp(last_month) + pd.DateOffset(months=1)]),
+        yaxis=dict(ticksuffix=" €", rangemode="tozero"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, x=0), margin=dict(t=90, b=40), height=380,
+        separators=separators,
+    )
+    return fig
+
+
 def make_band_figure(series, years_axis, title, lang="fr", palette=None, invested_capital=None,
                       phase_boundary_years=None, dark: bool = False, backtest_series=None,
                       view_mode="prevision"):

@@ -891,6 +891,17 @@ def build_tab3(lang):
             ]),
         ]), className="mb-4"),
 
+        # Calendrier des dividendes (portfolio_engine.dividend_calendar) : perçus sur 12 mois, estimés
+        # sur les 12 prochains à partir des versements par part de l'an dernier.
+        html.H5(L(lang, "section_dividend_calendar"), className="section-title", id="anchor-tab3-dividends"),
+        dbc.Card(dbc.CardBody([
+            dcc.Loading(**LOADING_PROPS, children=[
+                html.Div(id="tab3-dividend-summary"),
+                dcc.Graph(id="tab3-dividend-calendar-graph", config=GRAPH_CONFIG),
+                html.Div(id="tab3-dividend-notes", className="text-muted", style={"fontSize": "0.8rem"}),
+            ]),
+        ]), className="mb-4"),
+
         html.H5(L(lang, "section_pea_milestones"), className="section-title", id="anchor-tab3-milestones"),
         dbc.Card(dbc.CardBody([
             html.Div([

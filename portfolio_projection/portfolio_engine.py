@@ -234,6 +234,46 @@ def line_contributions(transactions: pd.DataFrame, dividends: pd.DataFrame,
     return df.sort_values("gain_eur", ascending=False, na_position="last").reset_index(drop=True)
 
 
+def dividend_calendar(received: pd.DataFrame, per_share_by_ticker: dict[str, pd.Series], holdings: pd.DataFrame,
+                      today: DateLike, months: int = 12) -> pd.DataFrame:
+    """Calendrier mensuel des dividendes : perçus sur les `months` derniers mois (saisis par
+    l'utilisateur), estimés sur les `months` prochains.
+
+    Estimation : pour chaque ligne détenue, chaque dividende par part détaché sur les 12 derniers
+    mois est supposé revenir au même mois l'an prochain, multiplié par le nombre de parts actuel
+    (convention « 12 derniers mois x parts »). Une ligne absente de per_share_by_ticker (Yahoo
+    indisponible) n'est pas estimée, plutôt qu'estimée à 0 ; une série vide (capitalisation) ne
+    produit rien. Colonnes month (1er du mois), ticker, amount_eur, kind ("received" ou "estimated")."""
+    columns = ["month", "ticker", "amount_eur", "kind"]
+    today = pd.Timestamp(today).normalize()
+    this_month = today.replace(day=1)
+    first_month = this_month - pd.DateOffset(months=months - 1)
+    horizon = this_month + pd.DateOffset(months=months + 1)
+    rows = []
+    if not received.empty:
+        past = received.assign(date=pd.to_datetime(received["date"]))
+        past = past[(past["date"] >= first_month) & (past["date"] <= today)]
+        for _, row in past.iterrows():
+            rows.append((pd.Timestamp(row["date"]).replace(day=1), str(row["ticker"]), float(row["amount_eur"]),
+                         "received"))
+    quantities = dict(zip(holdings["ticker"], holdings["quantity"])) if not holdings.empty else {}
+    for ticker, per_share in per_share_by_ticker.items():
+        quantity = float(quantities.get(ticker, 0.0))
+        if quantity <= 0 or per_share is None or per_share.empty:
+            continue
+        dates = pd.DatetimeIndex(pd.to_datetime(per_share.index))
+        recent = (dates > today - pd.DateOffset(years=1)) & (dates <= today)
+        for date, amount in zip(dates[recent], per_share.to_numpy(dtype=float)[recent]):
+            next_date = pd.Timestamp(date) + pd.DateOffset(years=1)
+            if today < next_date < horizon:
+                rows.append((next_date.replace(day=1), ticker, float(amount) * quantity, "estimated"))
+    df = pd.DataFrame(rows, columns=columns)
+    if df.empty:
+        return df
+    grouped = df.groupby(["month", "ticker", "kind"], as_index=False).agg(amount_eur=("amount_eur", "sum"))
+    return grouped[columns].sort_values(by=["month", "ticker"]).reset_index(drop=True)
+
+
 OTHER_ALLOCATION_KEY = "__other__"
 
 
