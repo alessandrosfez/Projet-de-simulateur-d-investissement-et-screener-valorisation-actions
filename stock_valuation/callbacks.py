@@ -17,10 +17,10 @@ from dash import Input, Output, State, dcc, html
 
 import layout
 from app_instance import app
-from charts import empty_figure_with_message, make_football_field
+from charts import empty_figure_with_message, make_football_field, make_pe_history_figure
 from constants import UNIVERSE_TICKERS
 from engine import (
-    FOOTBALL_FIELD_METHODS, WATCHLIST_ALERTS, annualized_return, annualized_volatility,
+    FOOTBALL_FIELD_METHODS, WATCHLIST_ALERTS, WATCHLIST_PE_HISTORY_LOW_PCT, annualized_return, annualized_volatility,
     compute_comparables_ev_ebitda_fair_value, compute_comparables_fair_value, compute_dcf_fair_value,
     compute_dcf_sensitivity_grid, compute_scenario_dcf_fair_values, football_field_ranges, max_drawdown,
     pe_signal_forward_returns, peer_quartile_multiples, sharpe_ratio, summarize_pe_signal_backtest, watchlist_alerts,
@@ -624,26 +624,21 @@ def update_pe_history_chart(selected_rows, lang, palette_code, dark_mode, grid_r
             L(lang, "history_unavailable_full", name=name),
         )
 
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(
-        x=pe_series.index, y=pe_series.values, mode="lines",
-        line=dict(color=palette[0]), name="P/E",
-    ))
-    fig.add_hline(
-        y=float(pe_series.mean()), line_dash="dot", line_color="gray",
-        annotation_text=L(lang, "history_mean_annotation"), annotation_position="top left",
-    )
+    # Zones aux 20e et 80e percentiles de l'histoire du titre (mêmes seuils que la couleur du P/E dans
+    # le tableau et que l'alerte « P/E bas vs son historique »).
+    values = pe_series.to_numpy(dtype=float)
+    low_pe = float(np.percentile(values, WATCHLIST_PE_HISTORY_LOW_PCT))
+    high_pe = float(np.percentile(values, 100 - WATCHLIST_PE_HISTORY_LOW_PCT))
     current_pe = row.get("P/E (trailing)")
-    if current_pe is not None:
-        fig.add_hline(
-            y=current_pe, line_dash="dash", line_color=palette[2 % len(palette)],
-            annotation_text=L(lang, "history_current_annotation"), annotation_position="bottom left",
-        )
-    fig.update_layout(
-        separators=L(lang, "plotly_separators"),
-        template=chart_theme.template(dark),
-        title=L(lang, "history_chart_title", name=name),
-        xaxis_title="", yaxis_title="P/E", margin=dict(t=60),
+    percentile = row.get("Position vs historique 5 ans (percentile)")
+    current_text = (L(lang, "history_current_point", pe=current_pe, pct=percentile) if percentile is not None
+                    else L(lang, "history_current_point_no_pct", pe=current_pe)) if current_pe is not None else ""
+    fig = make_pe_history_figure(
+        list(pe_series.index), list(values), current_pe, low_pe, high_pe,
+        {"low_zone": L(lang, "history_low_zone", pe=low_pe), "high_zone": L(lang, "history_high_zone", pe=high_pe),
+         "mean": L(lang, "history_mean_value", pe=float(values.mean())), "current": current_text,
+         "current_hover": L(lang, "history_current_hover")},
+        palette[0], L(lang, "history_chart_title", name=name), dark=dark, separators=L(lang, "plotly_separators"),
     )
     method_key = "history_method_current_eps" if pe_series.attrs.get("method") == "current_eps" else "history_method_annual_eps"
     return fig, L(lang, method_key)

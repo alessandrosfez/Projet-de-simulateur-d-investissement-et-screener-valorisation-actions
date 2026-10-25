@@ -1,6 +1,7 @@
 """
 Constructeurs de graphiques Plotly, indépendants de Dash (pas de callback ici).
 """
+import pandas as pd
 import plotly.graph_objects as go
 
 import chart_theme
@@ -63,5 +64,49 @@ def make_football_field(rows: list[dict], labels: dict, colors: dict, price: flo
         yaxis=dict(autorange="reversed", showgrid=False, showline=False, ticklabelstandoff=10),
         xaxis=dict(zeroline=False, range=[min(bounds) - pad, max(bounds) + pad]),
         height=150 + 72 * len(rows), margin=dict(t=80, l=16, r=90, b=40), separators=separators,
+    )
+    return fig
+
+
+def make_pe_history_figure(dates, values, current_pe: float | None, low_pe: float, high_pe: float, labels: dict,
+                           color: str, title: str, dark: bool = False, separators: str | None = None) -> go.Figure:
+    """P/E historique d'un titre posé sur ses zones : sous le 20e percentile de sa propre histoire
+    (« décoté », teinte verte), au-dessus du 80e (« tendu », teinte rouge), entre les deux rien. Même
+    règle que la couleur du P/E dans le tableau de criblage (layout.CELL_CLASS_RULES), pour que le
+    graphique et la case disent la même chose. Le P/E actuel est marqué d'un point au bout de la
+    courbe. labels : low_zone, high_zone, mean, current, current_hover (textes déjà mis en forme)."""
+    chrome = chart_theme.CHROME["dark" if dark else "light"]
+    span = max(values) - min(values) if len(values) else 1.0
+    bottom = min(min(values), current_pe or min(values)) - span * 0.06
+    top = max(max(values), current_pe or max(values)) + span * 0.06
+    fig = go.Figure()
+    for y0, y1, status, text, anchor in ((bottom, low_pe, "good", labels["low_zone"], "bottom"),
+                                         (high_pe, top, "critical", labels["high_zone"], "top")):
+        fig.add_hrect(y0=y0, y1=y1, fillcolor=chart_theme.STATUS[status], opacity=0.14 if dark else 0.1,
+                      line_width=0, layer="below")
+        fig.add_annotation(xref="paper", x=0.005, y=y0 if anchor == "bottom" else y1, yanchor=anchor, xanchor="left",
+                           showarrow=False, font=dict(size=11, color=chrome["muted"]),
+                           text=f"<span style='color:{chart_theme.STATUS[status]}'>●</span> {text}")
+    fig.add_trace(go.Scatter(x=dates, y=values, mode="lines", line=dict(color=color, width=2), name="P/E",
+                             hovertemplate="%{x|%d/%m/%Y} · P/E %{y:.1f}<extra></extra>"))
+    fig.add_hline(y=float(sum(values) / len(values)), line_dash="dot", line_width=1.5, line_color=chrome["muted"],
+                  annotation_text=labels["mean"], annotation_position="top right",
+                  annotation_font=dict(size=11, color=chrome["muted"]))
+    if current_pe is not None:
+        # Posé à la date du jour, pas sur le dernier point de la courbe : la courbe divise par le BPA
+        # annuel publié, le P/E actuel par le BPA des 12 derniers mois, d'où un léger écart possible.
+        today = pd.Timestamp.today().normalize()
+        fig.add_trace(go.Scatter(
+            x=[today], y=[current_pe], mode="markers", showlegend=False,
+            hovertemplate=f"{labels['current_hover']}<extra></extra>",
+            marker=dict(size=12, color=color, line=dict(width=3, color=chart_theme.surface_color(dark))),
+        ))
+        fig.add_annotation(x=today, y=current_pe, text=f"<b>{labels['current']}</b>", xanchor="right",
+                           xshift=-10, yshift=14, showarrow=False, font=dict(size=12, color=chrome["ink"]),
+                           bgcolor=chart_theme.surface_color(dark))
+    fig.update_layout(
+        template=chart_theme.template(dark), title=dict(text=title, font=dict(size=14)), showlegend=False,
+        xaxis=dict(title="", tickformat="%m/%Y"), yaxis=dict(title="P/E", range=[bottom, top]), margin=dict(t=60, r=24),
+        separators=separators,
     )
     return fig
