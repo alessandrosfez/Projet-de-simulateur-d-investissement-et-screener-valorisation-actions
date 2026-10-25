@@ -15,7 +15,7 @@ from engine import (
     overflow_schedule, progressive_schedule, returns_to_dca, rolling_backtest_final_values, summarize,
     summarize_historique, to_display_values, withdrawal_schedule,
 )
-from charts import make_actual_vs_simulated_figure, make_band_figure, make_sparkline
+from charts import MAX_DIRECT_LABELS, make_actual_vs_simulated_figure, make_band_figure, make_sparkline
 import chart_theme
 from i18n import L, PALETTE
 
@@ -95,6 +95,7 @@ def compute_results(items, years_axis, schedules, annual_fee_pct, apply_tax, tax
     comportement inchangé, pas de CTO complémentaire."""
     all_metrics = {}
     series_by_strategy = {name: [] for name in schedules}
+    inner_by_strategy: dict = {}
     invested_by_strategy = {}
 
     for label, monthly_returns in items:
@@ -121,6 +122,7 @@ def compute_results(items, years_axis, schedules, annual_fee_pct, apply_tax, tax
             p_low = np.percentile(portfolio_value, lower_pct, axis=0)
             p_high = np.percentile(portfolio_value, upper_pct, axis=0)
             series_by_strategy[strat_name].append((label, median, p_low, p_high))
+            inner_by_strategy.setdefault(strat_name, []).append(_inner_band(portfolio_value, lower_pct, upper_pct))
 
     backtest_series_by_strategy = {name: [] for name in schedules}
     historique_metrics = {}
@@ -147,7 +149,9 @@ def compute_results(items, years_axis, schedules, annual_fee_pct, apply_tax, tax
             title = ""
         else:
             strat_display = L(lang, f"schedule_{strat_name}")
-            subtitle = L(lang, "band_subtitle", lower=lower_pct, upper=upper_pct)
+            # Le cœur P25-P75 n'est tracé que s'il tient dans la bande et qu'il y a au plus 4 séries.
+            with_inner = len(series) <= MAX_DIRECT_LABELS and lower_pct < 25 and upper_pct > 75
+            subtitle = L(lang, "band_subtitle_inner" if with_inner else "band_subtitle", lower=lower_pct, upper=upper_pct)
             title = f"{strat_display}<br><sup>{subtitle}</sup>"
         figs[strat_name] = make_band_figure(
             series, years_axis, title,
@@ -156,9 +160,17 @@ def compute_results(items, years_axis, schedules, annual_fee_pct, apply_tax, tax
             phase_boundary_years=phase_boundary_years,
             dark=dark,
             backtest_series=backtest_series_by_strategy.get(strat_name),
-            view_mode=view_mode,
+            view_mode=view_mode, inner_bands=inner_by_strategy.get(strat_name),
         )
     return all_metrics, figs, series_by_strategy, historique_metrics
+
+
+def _inner_band(portfolio_value, lower_pct, upper_pct):
+    """Cœur de l'éventail (P25-P75), seulement s'il tient à l'intérieur de la bande choisie par
+    l'utilisateur : avec une bande P30-P70, un cœur P25-P75 déborderait et se lirait à l'envers."""
+    if lower_pct >= 25 or upper_pct <= 75:
+        return None
+    return np.percentile(portfolio_value, 25, axis=0), np.percentile(portfolio_value, 75, axis=0)
 
 
 def build_sequence_risk_series(monthly_returns, schedule, annual_fee_pct, apply_tax, tax_rate,
@@ -685,4 +697,5 @@ def build_real_portfolio_future_figure(portfolio_returns, current_value_total, m
     return make_band_figure(
         [(L(lang, "real_portfolio_projection_trace"), median, p_low, p_high)], years_axis, title,
         lang=lang, palette=palette, invested_capital=invested_capital, dark=dark,
+        inner_bands=[_inner_band(portfolio_value, lower_pct, upper_pct)],
     )

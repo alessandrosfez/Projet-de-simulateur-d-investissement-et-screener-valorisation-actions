@@ -204,7 +204,7 @@ def make_dividend_calendar_figure(calendar: pd.DataFrame, first_month, this_mont
 
 def make_band_figure(series, years_axis, title, lang="fr", palette=None, invested_capital=None,
                       phase_boundary_years=None, dark: bool = False, backtest_series=None,
-                      view_mode="prevision"):
+                      view_mode="prevision", inner_bands=None):
     """series: liste de (label, median, p_low, p_high) — bandes de percentiles Monte Carlo, tracées
     seulement en mode "prevision" (axe des x en années relatives depuis le début de l'horizon).
     backtest_series : liste optionnelle de (label, dates_bt, values_bt) : croissance brute réellement
@@ -213,9 +213,16 @@ def make_band_figure(series, years_axis, title, lang="fr", palette=None, investe
     calendaires (ex: 2008-2010), pas sur l'échelle relative de l'horizon de projection. Les deux
     modes sont mutuellement exclusifs sur ce graphique (bascule view-mode-radio) plutôt que
     superposés, pour que le graphique reste lisible et que les deux échelles d'axe (relative vs
-    calendaire) ne se mélangent jamais sur le même tracé."""
+    calendaire) ne se mélangent jamais sur le même tracé. inner_bands : liste optionnelle, alignée sur
+    series, de (p25, p75) ou None, pour le cœur plus soutenu de l'éventail."""
     palette = palette or PALETTE
+    chrome = chart_theme.CHROME["dark" if dark else "light"]
     fig = go.Figure()
+    # Étiquettes directes (valeur finale au bout de chaque courbe) jusqu'à 4 séries : au-delà, elles
+    # se chevauchent et la légende reste plus lisible.
+    direct_labels = view_mode != "historique" and 0 < len(series) <= MAX_DIRECT_LABELS
+    # Au-delà de 4 séries, les éventails superposés se brouillent : bande extérieure seule, plus légère.
+    crowded = len(series) > MAX_DIRECT_LABELS
     if view_mode == "historique":
         for i, (label, bt_dates, bt_values) in enumerate(backtest_series or []):
             color = palette[i % len(palette)]
@@ -224,19 +231,41 @@ def make_band_figure(series, years_axis, title, lang="fr", palette=None, investe
     else:
         for i, (label, median, p_low, p_high) in enumerate(series):
             color = palette[i % len(palette)]
+            # Éventail en deux épaisseurs : bande choisie (P10-P90 par défaut) claire, cœur P25-P75
+            # plus soutenu, médiane épaisse. On lit d'un coup le scénario central et sa dispersion.
             fig.add_trace(go.Scatter(x=years_axis, y=p_high, mode="lines", line=dict(width=0),
                                       showlegend=False, hoverinfo="skip"))
             fig.add_trace(go.Scatter(x=years_axis, y=p_low, mode="lines", line=dict(width=0),
-                                      fill="tonexty", fillcolor=hex_to_rgba(color, 0.15),
+                                      fill="tonexty", fillcolor=hex_to_rgba(color, 0.07 if crowded else 0.12),
                                       showlegend=False, hoverinfo="skip"))
-            fig.add_trace(go.Scatter(x=years_axis, y=median, mode="lines", name=label,
-                                      line=dict(color=color)))
+            if not crowded and inner_bands and i < len(inner_bands) and inner_bands[i] is not None:
+                q25, q75 = inner_bands[i]
+                fig.add_trace(go.Scatter(x=years_axis, y=q75, mode="lines", line=dict(width=0),
+                                          showlegend=False, hoverinfo="skip"))
+                fig.add_trace(go.Scatter(x=years_axis, y=q25, mode="lines", line=dict(width=0),
+                                          fill="tonexty", fillcolor=hex_to_rgba(color, 0.22),
+                                          showlegend=False, hoverinfo="skip"))
+            fig.add_trace(go.Scatter(
+                x=years_axis, y=median, mode="lines", name=label, line=dict(color=color, width=2.5),
+                customdata=np.column_stack([p_low, p_high]),
+                hovertemplate=f"{label} : %{{y:,.0f}} € (%{{customdata[0]:,.0f}} – %{{customdata[1]:,.0f}})<extra></extra>",
+            ))
+            if direct_labels:
+                fig.add_trace(go.Scatter(x=[years_axis[-1]], y=[median[-1]], mode="markers", showlegend=False,
+                                          hoverinfo="skip", marker=dict(size=9, color=color,
+                                                                        line=dict(width=2, color=chart_theme.surface_color(dark)))))
+                fig.add_annotation(x=years_axis[-1], y=median[-1], text=f"<b>{_compact_eur(median[-1], lang)}</b>",
+                                   xanchor="left", xshift=8, showarrow=False, font=dict(size=12, color=chrome["ink"]))
         if invested_capital is not None:
             fig.add_trace(go.Scatter(x=years_axis, y=invested_capital, mode="lines",
                                       name=L(lang, "invested_capital_trace"),
-                                      line=dict(color="gray", dash="dash")))
+                                      line=dict(color=chrome["muted"], dash="dash", width=1.5),
+                                      hovertemplate=f"{L(lang, 'invested_capital_trace')} : %{{y:,.0f}} €<extra></extra>"))
+            if direct_labels:
+                fig.add_annotation(x=years_axis[-1], y=invested_capital[-1], xanchor="left", xshift=8, showarrow=False,
+                                   text=_compact_eur(invested_capital[-1], lang), font=dict(size=11, color=chrome["muted"]))
         if phase_boundary_years is not None:
-            fig.add_vline(x=phase_boundary_years, line_dash="dot", line_color="gray",
+            fig.add_vline(x=phase_boundary_years, line_dash="dot", line_color=chrome["muted"],
                           annotation_text=L(lang, "withdrawal_start_annotation"), annotation_position="top")
     fig.update_layout(
         template=chart_theme.template(dark),
@@ -244,10 +273,22 @@ def make_band_figure(series, years_axis, title, lang="fr", palette=None, investe
         xaxis_title=L(lang, "date_axis") if view_mode == "historique" else L(lang, "years_axis"),
         yaxis_title=L(lang, "value_axis_base100") if view_mode == "historique" else L(lang, "value_axis"),
         hovermode="x unified",
-        legend=dict(font=dict(size=9)),
-        margin=dict(t=60),
+        legend=dict(font=dict(size=10), orientation="h", yanchor="top", y=-0.18, x=0),
+        margin=dict(t=60, r=96 if direct_labels else 24), separators=L(lang, "plotly_separators"),
     )
     return fig
+
+
+MAX_DIRECT_LABELS = 4
+
+
+def _compact_eur(value: float, lang: str) -> str:
+    """Montant final écrit au bout d'une courbe : « 470 k€ », « 1,2 M€ » (virgule en français)."""
+    if abs(value) >= 1e6:
+        text = f"{value / 1e6:.1f} M€"
+    else:
+        text = f"{value / 1e3:.0f} k€"
+    return text.replace(".", ",") if lang == "fr" else text
 
 
 def make_actual_vs_simulated_figure(real_dates, real_values, sim_dates, sim_median, sim_p_low, sim_p_high,
