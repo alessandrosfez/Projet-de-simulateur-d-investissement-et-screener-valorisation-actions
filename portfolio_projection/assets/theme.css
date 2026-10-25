@@ -273,3 +273,39 @@ a { color: var(--accent); }
 .verdict-tile.neutral { border-left-color: var(--border-soft); } .verdict-tile.neutral .bi { color: var(--accent); }
 .verdict-title { font-size: 1.1rem; font-weight: 700; margin: 0.15rem 0 0.25rem; }
 .verdict-details { font-size: 0.78rem; color: var(--Dash-Text-Weak, #6c757d); margin: 0; padding-left: 1.1rem; }
+
+/* -------- Tableaux en lecture seule (AG Grid, className="pea-grid", recopié de stock_valuation) -------- */
+/* Paramètres du thème Quartz d'AG Grid branchés sur les variables de la page : le tableau suit le
+   mode sombre sans couleur codée en Python. Posés sur le conteneur ET ses descendants, parce que
+   le thème redéfinit ses paramètres sur son propre élément racine (une valeur héritée du parent
+   seul serait écrasée). */
+.pea-grid, .pea-grid .ag-root-wrapper {
+    --ag-font-family: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --ag-font-size: 13px;
+    --ag-background-color: var(--surface);
+    --ag-foreground-color: #1f2433;
+    --ag-header-background-color: var(--surface-2);
+    --ag-header-text-color: #1f2433;
+    --ag-border-color: var(--border-soft);
+    --ag-row-border-color: var(--border-soft);
+    --ag-accent-color: var(--accent);
+    --ag-row-hover-color: color-mix(in srgb, var(--accent) 7%, transparent);
+    --ag-selected-row-background-color: color-mix(in srgb, var(--accent) 16%, transparent);
+    --ag-wrapper-border-radius: 10px;
+    --ag-header-font-weight: 600;
+    --ag-tooltip-background-color: var(--surface-2);
+    --ag-tooltip-text-color: #1f2433;
+}
+[data-bs-theme="dark"] .pea-grid, [data-bs-theme="dark"] .pea-grid .ag-root-wrapper {
+    --ag-foreground-color: #e9ecef;
+    --ag-header-text-color: #e9ecef;
+    --ag-tooltip-text-color: #e9ecef;
+    --ag-chrome-background-color: var(--surface-2);
+    --ag-checkbox-unchecked-border-color: #5b6275;
+}
+.pea-grid .ag-header { border-bottom: 2px solid var(--accent); }
+.pea-grid .ag-tooltip { max-width: 340px; white-space: normal; line-height: 1.4; }
+/* Hauteur ajustée aux lignes (domLayout autoHeight) : AG Grid réserve sinon une hauteur minimale,
+   qui laisse une bande vide sous un tableau de deux lignes. */
+.pea-grid .ag-layout-auto-height .ag-center-cols-viewport,
+.pea-grid .ag-layout-auto-height .ag-center-cols-container { min-height: unset !important; }

@@ -153,12 +153,8 @@ _tab2_name_inputs = [Input(f"name-p{p}", "value") for p in range(N_PORTFOLIOS_MA
     Output("tab2-graph-const", "figure"),
     Output("tab2-graph-prog", "figure"),
     Output("tab2-metric-cards", "children"),
-    Output("tab2-metrics-table", "data"),
-    Output("tab2-metrics-table", "columns"),
-    Output("tab2-metrics-table", "style_header"),
-    Output("tab2-metrics-table", "style_cell"),
-    Output("tab2-metrics-table", "style_data"),
-    Output("tab2-metrics-table", "tooltip_header"),
+    Output("tab2-metrics-table", "rowData"),
+    Output("tab2-metrics-table", "columnDefs"),
     Output("tab2-csv-store", "data"),
     Output("tab2-warning", "children"),
     Output("tab2-envelope-compare-container", "style"),
@@ -233,7 +229,6 @@ def update_tab2(n_portfolios, *args):
     lang = lang or "fr"
     dark = bool(dark_mode)
     palette = chart_theme.palette_for(palette_code, dark)
-    style_header, style_cell, style_data = layout.table_style_overrides(dark)
     trajectories_title = L(lang, "historique_trajectory_title") if view_mode == "historique" else L(lang, "trajectories_title")
     prog_container_style = {"display": "none"} if view_mode == "historique" else {"flex": "1", "minWidth": "0"}
     metrics_title = L(lang, "historique_metrics_title") if view_mode == "historique" else L(lang, "metrics_title_portfolio")
@@ -256,7 +251,7 @@ def update_tab2(n_portfolios, *args):
         portfolios.append((names[i] or L(lang, "portfolio_default_name", n=i + 1), normalized))
 
     if not portfolios:
-        return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, {}, "",
+        return (empty_fig, empty_fig, [], [], [], "",
                 dbc.Alert(L(lang, "portfolio_warning_zero"), color="warning"),
                 {"display": "none"}, empty_fig, {"display": "none"}, empty_fig, "", "",
                 trajectories_title, prog_container_style, metrics_title)
@@ -265,11 +260,11 @@ def update_tab2(n_portfolios, *args):
     try:
         aligned = get_aligned_returns(universe, lookback_years, source_key)
     except ValueError as exc:
-        return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, {}, "",
+        return (empty_fig, empty_fig, [], [], [], "",
                 dbc.Alert(str(exc), color="danger"), {"display": "none"}, empty_fig,
                 {"display": "none"}, empty_fig, "", "", trajectories_title, prog_container_style, metrics_title)
     if aligned.empty:
-        return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, {}, "",
+        return (empty_fig, empty_fig, [], [], [], "",
                 dbc.Alert(L(lang, "no_aligned_data"), color="danger"), {"display": "none"}, empty_fig,
                 {"display": "none"}, empty_fig, "", "", trajectories_title, prog_container_style, metrics_title)
 
@@ -390,7 +385,7 @@ def update_tab2(n_portfolios, *args):
     return (
         figs.get("constant", empty_fig),
         figs.get("progressive", empty_fig),
-        cards, table_data, table_columns, style_header, style_cell, style_data, table_tooltip_header, csv_data,
+        cards, table_data, layout.grid_columns(table_columns, table_tooltip_header, table_data), csv_data,
         tab2_warning_alert, compare_style, compare_fig, sequence_risk_style, sequence_risk_fig, objective_result,
         rolling_backtest_result, trajectories_title, prog_container_style, metrics_title,
     )

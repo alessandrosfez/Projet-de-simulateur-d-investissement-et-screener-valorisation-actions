@@ -5,6 +5,7 @@ l'état initial des composants) et par callbacks/shared.py, qui les enregistre c
 callbacks Dash. Ce module ne dépend jamais du paquet callbacks/ ni de l'instance
 `app` (pour éviter tout import circulaire).
 """
+import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 from dash import dash_table, dcc, html
 
@@ -46,6 +47,53 @@ LOADING_PROPS = {
     "delay_show": 200,
     "parent_className": "loading-area",
 }
+
+
+def read_only_grid(grid_id: str):
+    """Tableau en lecture seule (AG Grid, même thème que le tableau de criblage de stock_valuation,
+    voir .pea-grid dans assets/theme.css) : hauteur ajustée à ses lignes, première colonne figée,
+    définition de chaque indicateur au survol de son en-tête. Pas de tri : les cellules sont déjà
+    mises en forme en texte (« 1 234 € »), qu'un tri trierait alphabétiquement.
+    suppressFieldDotNotation : les identifiants de colonnes sont des libellés, qui peuvent contenir
+    un point (« Vol. »), qu'AG Grid lirait sinon comme un chemin vers un champ imbriqué."""
+    return dag.AgGrid(
+        id=grid_id, rowData=[], columnDefs=[], className="pea-grid",
+        defaultColDef={"sortable": False, "resizable": True, "wrapHeaderText": True, "autoHeaderHeight": True,
+                       "flex": 1},
+        dashGridOptions={"domLayout": "autoHeight", "suppressFieldDotNotation": True, "suppressCellFocus": True,
+                         "tooltipShowDelay": 0, "tooltipHideDelay": 60000},
+        style={"height": None},
+    )
+
+
+GRID_CHAR_PX, GRID_CELL_PADDING_PX = 7.6, 40
+
+
+def grid_columns(columns: list, tooltip_header: dict | None = None, rows: list | None = None) -> list:
+    """Colonnes d'un DataTable ([{"name", "id"}], comme les renvoient les fonctions de results.py)
+    traduites en colonnes AG Grid : libellé, infobulle d'en-tête (tooltip_header du DataTable),
+    première colonne (libellé de ligne) figée à gauche, valeurs alignées à droite.
+
+    Largeur minimale de chaque colonne estimée sur son plus long contenu (rows) et sur le plus long
+    mot de son en-tête, qui passe à la ligne entre les mots : sans elle, toutes les colonnes
+    prendraient la même largeur et les libellés longs (« MSCI Emerging Markets : Apport
+    progressif », « 2 138 787 € ») seraient tronqués. Le dimensionnement automatique d'AG Grid ne
+    convient pas ici : il s'exécute quand la grille est encore vide."""
+    defs = []
+    for position, column in enumerate(columns):
+        definition = {"field": column["id"], "headerName": column["name"]}
+        longest_cell = max((len(str(row.get(column["id"], ""))) for row in rows or []), default=0)
+        longest_word = max((len(word) for word in str(column["name"]).split()), default=0)
+        definition["minWidth"] = int(max(longest_cell, longest_word) * GRID_CHAR_PX + GRID_CELL_PADDING_PX)
+        tip = (tooltip_header or {}).get(column["id"])
+        if tip:
+            definition["headerTooltip"] = tip["value"] if isinstance(tip, dict) else tip
+        if position == 0:
+            definition["pinned"] = "left"
+        else:
+            definition["type"] = "rightAligned"
+        defs.append(definition)
+    return defs
 
 
 def table_style_overrides(dark: bool):
@@ -557,7 +605,7 @@ def build_tab1(lang, v=None):
             html.Div(id="tab1-objective-result", className="mt-2"),
             html.Div(id="tab1-rolling-backtest-result", className="mt-2"),
             html.H5(L(lang, "metrics_title"), id="tab1-metrics-title", className="section-title"),
-            dash_table.DataTable(id="tab1-metrics-table", style_table={"overflowX": "auto"}, style_cell={"fontSize": "0.8rem", "textAlign": "left"}, tooltip_delay=0, tooltip_duration=None),
+            read_only_grid("tab1-metrics-table"),
             html.Div([
                 html.H5(L(lang, "compare_pea_cto_title"), className="section-title"),
                 dcc.Graph(id="tab1-envelope-compare-chart", config=GRAPH_CONFIG),
@@ -675,7 +723,7 @@ def build_tab2(lang, v=None):
             html.Div(id="tab2-objective-result", className="mt-2"),
             html.Div(id="tab2-rolling-backtest-result", className="mt-2"),
             html.H5(L(lang, "metrics_title_portfolio"), id="tab2-metrics-title", className="section-title"),
-            dash_table.DataTable(id="tab2-metrics-table", style_table={"overflowX": "auto"}, style_cell={"fontSize": "0.8rem", "textAlign": "left"}, tooltip_delay=0, tooltip_duration=None),
+            read_only_grid("tab2-metrics-table"),
             html.Div([
                 html.H5(L(lang, "compare_pea_cto_title"), className="section-title"),
                 dcc.Graph(id="tab2-envelope-compare-chart", config=GRAPH_CONFIG),
@@ -978,7 +1026,7 @@ def build_tab3(lang):
             html.Small(L(lang, "rebalancing_hint"), className="text-muted d-block mb-2"),
             html.Div(id="tab3-rebalancing-warning"),
             html.Div(id="tab3-target-container"),
-            dash_table.DataTable(id="tab3-rebalancing-table", style_cell=TABLE_BASE_CELL_STYLE),
+            read_only_grid("tab3-rebalancing-table"),
         ]), className="mb-4"),
 
         html.H5(L(lang, "section_target_weights"), className="section-title", id="anchor-tab3-weights"),
@@ -1105,6 +1153,6 @@ def build_tab4(lang):
                          style={"flex": "1", "minWidth": "0"}),
             ], style={"display": "flex", "gap": "1rem", "flexWrap": "wrap"}),
             html.H5(L(lang, "validation_coverage_table_title"), className="section-title mt-2"),
-            dash_table.DataTable(id="validation-coverage-table", style_cell=TABLE_BASE_CELL_STYLE),
+            read_only_grid("validation-coverage-table"),
         ]),
     ], className="p-3")

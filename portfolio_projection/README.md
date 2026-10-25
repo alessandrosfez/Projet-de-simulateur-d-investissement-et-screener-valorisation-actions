@@ -98,6 +98,12 @@ qu'une simulation aurait donné.
   pourcentage de sa cible, aucune au-delà ; montant prérempli avec le rythme
   réel), graphique « réel vs simulé », et reprise du rythme
   d'apport réel comme paramètre de simulation. Stockage SQLite local.
+- **Tableaux de résultats en AG Grid** (`dash-ag-grid`, même thème que le
+  tableau de criblage de la valorisation) : métriques par scénario,
+  rééquilibrage, couverture de la validation. Première colonne figée,
+  colonnes assez larges pour ne rien tronquer, définition au survol des
+  en-têtes. Les tableaux qui modifient la base (achats, dividendes, poids
+  cibles, indices) restent en DataTable.
 - Infobulles (ⓘ) sur les concepts clés (Sharpe, drawdown, méthode de
   simulation...), interface FR/EN, export/import de configuration en JSON,
   cache disque des téléchargements (`yfinance`) pour limiter les appels

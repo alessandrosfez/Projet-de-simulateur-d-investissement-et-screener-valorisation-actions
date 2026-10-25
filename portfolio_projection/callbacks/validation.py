@@ -7,6 +7,7 @@ import dash_bootstrap_components as dbc
 import plotly.graph_objects as go
 from dash import Input, Output, State, html
 
+import layout
 from app_instance import app
 from charts import make_pit_histogram
 from constants import TICKERS
@@ -77,8 +78,8 @@ def _verdict_info(lang: str) -> list:
     Output("validation-verdict", "children"),
     Output("validation-pit-graph-normal", "figure"),
     Output("validation-pit-graph-bootstrap", "figure"),
-    Output("validation-coverage-table", "data"),
-    Output("validation-coverage-table", "columns"),
+    Output("validation-coverage-table", "rowData"),
+    Output("validation-coverage-table", "columnDefs"),
     Output("validation-info-caption", "children"),
     Output("validation-error", "children"),
     Input("validation-run-btn", "n_clicks"),
@@ -155,4 +156,4 @@ def run_model_validation(n_clicks, index_name, source, horizon_months, step_mont
         html.Div(L(lang, "validation_overlap_warning"), className="fst-italic mt-1"),
     ])
 
-    return verdict, fig_normal, fig_bootstrap, table_data, table_columns, info_caption, ""
+    return verdict, fig_normal, fig_bootstrap, table_data, layout.grid_columns(table_columns, rows=table_data), info_caption, ""

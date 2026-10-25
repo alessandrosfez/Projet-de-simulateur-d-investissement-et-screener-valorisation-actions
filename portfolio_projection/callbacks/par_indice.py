@@ -37,12 +37,8 @@ from results import (
     Output("tab1-graph-const", "figure"),
     Output("tab1-graph-prog", "figure"),
     Output("tab1-metric-cards", "children"),
-    Output("tab1-metrics-table", "data"),
-    Output("tab1-metrics-table", "columns"),
-    Output("tab1-metrics-table", "style_header"),
-    Output("tab1-metrics-table", "style_cell"),
-    Output("tab1-metrics-table", "style_data"),
-    Output("tab1-metrics-table", "tooltip_header"),
+    Output("tab1-metrics-table", "rowData"),
+    Output("tab1-metrics-table", "columnDefs"),
     Output("tab1-csv-store", "data"),
     Output("tab1-warning", "children"),
     Output("tab1-envelope-compare-container", "style"),
@@ -104,14 +100,13 @@ def update_tab1(indices, source, lookback_years, horizon_years, view_mode, backt
     dark = bool(dark_mode)
     palette = chart_theme.palette_for(palette_code, dark)
     view_mode = view_mode or "prevision"
-    style_header, style_cell, style_data = layout.table_style_overrides(dark)
     trajectories_title = L(lang, "historique_trajectory_title") if view_mode == "historique" else L(lang, "trajectories_title")
     prog_container_style = {"display": "none"} if view_mode == "historique" else {"flex": "1", "minWidth": "0"}
     metrics_title = L(lang, "historique_metrics_title") if view_mode == "historique" else L(lang, "metrics_title")
     empty_fig = go.Figure()
     empty_fig.update_layout(template=chart_theme.template(dark))
     if not indices:
-        return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, {}, "",
+        return (empty_fig, empty_fig, [], [], [], "",
                 dbc.Alert(L(lang, "tab1_warning_select_index"), color="warning"), {"display": "none"}, empty_fig,
                 {"display": "none"}, empty_fig, "", "", trajectories_title, prog_container_style, metrics_title)
 
@@ -175,7 +170,7 @@ def update_tab1(indices, source, lookback_years, horizon_years, view_mode, backt
 
     if not items:
         msg = " ".join(warnings) or L(lang, "tab1_no_data")
-        return (empty_fig, empty_fig, [], [], [], style_header, style_cell, style_data, {}, "",
+        return (empty_fig, empty_fig, [], [], [], "",
                 dbc.Alert(msg, color="danger"), {"display": "none"}, empty_fig,
                 {"display": "none"}, empty_fig, "", "", trajectories_title, prog_container_style, metrics_title)
 
@@ -242,7 +237,7 @@ def update_tab1(indices, source, lookback_years, horizon_years, view_mode, backt
     return (
         figs.get("constant", empty_fig),
         figs.get("progressive", empty_fig),
-        cards, table_data, table_columns, style_header, style_cell, style_data, table_tooltip_header, csv_data,
+        cards, table_data, layout.grid_columns(table_columns, table_tooltip_header, table_data), csv_data,
         warning_alert, compare_style, compare_fig, sequence_risk_style, sequence_risk_fig, objective_result,
         rolling_backtest_result, trajectories_title, prog_container_style, metrics_title,
     )

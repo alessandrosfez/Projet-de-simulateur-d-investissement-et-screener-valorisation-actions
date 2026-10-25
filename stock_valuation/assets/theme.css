@@ -117,9 +117,9 @@ h1, h2, h3, h4, h5, h6 { font-family: "Inter", sans-serif !important; font-weigh
     --ag-font-family: "Inter", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     --ag-font-size: 13px;
     --ag-background-color: var(--surface);
-    --ag-foreground-color: var(--Dash-Text-Primary, #1f2430);
+    --ag-foreground-color: #1f2433;
     --ag-header-background-color: var(--surface-2);
-    --ag-header-text-color: var(--Dash-Text-Primary, #1f2430);
+    --ag-header-text-color: #1f2433;
     --ag-border-color: var(--border-soft);
     --ag-row-border-color: var(--border-soft);
     --ag-accent-color: var(--accent);
@@ -128,7 +128,7 @@ h1, h2, h3, h4, h5, h6 { font-family: "Inter", sans-serif !important; font-weigh
     --ag-wrapper-border-radius: 10px;
     --ag-header-font-weight: 600;
     --ag-tooltip-background-color: var(--surface-2);
-    --ag-tooltip-text-color: var(--Dash-Text-Primary, #1f2430);
+    --ag-tooltip-text-color: #1f2433;
 }
 [data-bs-theme="dark"] .pea-grid, [data-bs-theme="dark"] .pea-grid .ag-root-wrapper {
     --ag-foreground-color: #e9ecef;
