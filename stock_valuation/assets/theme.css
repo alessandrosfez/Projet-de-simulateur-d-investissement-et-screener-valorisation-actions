@@ -230,6 +230,11 @@ a { color: var(--accent); }
 /* Le « ⓘ » suit le titre dans un conteneur flex, où l'espace qui le précède disparaît. */
 .watch-title > span[id$="-info"] { margin-left: 0.35rem; }
 
+/* -------- Âge des données affichées (callbacks.update_freshness) -------- */
+.freshness { display: inline-flex; align-items: center; font-size: 0.8rem; color: var(--Dash-Text-Weak, #6c757d); }
+.freshness.stale { color: #9a5b00; }
+[data-bs-theme="dark"] .freshness.stale { color: #f2b452; }
+
 /* -------- Journal d'investissement (layout.build_journal_panel, callbacks.render_journal) -------- */
 /* Mêmes pastilles et même cadre que les alertes de la liste de suivi : les deux panneaux se lisent
    comme une seule famille. Vert = cours sous la cible, ambre = revue due ; chaque pastille garde

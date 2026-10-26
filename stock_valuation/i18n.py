@@ -75,6 +75,11 @@ TRANSLATIONS = {
         "universe_smi": "SMI (Suisse, sélection)",
         "load_btn": "Charger / actualiser les données",
         "load_progress_text": "{done} / {total} chargées...",
+        "freshness_now": "Données chargées à l'instant ({when})",
+        "freshness_minutes": "Données chargées il y a {count} min ({when})",
+        "freshness_hours": "Données chargées il y a {count} h ({when})",
+        "freshness_days": "Données chargées il y a {count} j ({when})",
+        "auto_refresh_failed": "Actualisation impossible pour l'instant (Yahoo Finance injoignable ?) : les données du dernier chargement restent affichées.",
         "select_market_warning": "Sélectionne au moins un marché.",
         "no_data_fetched": "Aucune donnée récupérée. Vérifie ta connexion ou réessaie plus tard.",
         "unavailable_tickers": "Données indisponibles pour : {names} (ticker à vérifier ou données non "
@@ -363,6 +368,11 @@ TRANSLATIONS = {
         "universe_smi": "SMI (Switzerland, selection)",
         "load_btn": "Load / refresh data",
         "load_progress_text": "{done} / {total} loaded...",
+        "freshness_now": "Data loaded just now ({when})",
+        "freshness_minutes": "Data loaded {count} min ago ({when})",
+        "freshness_hours": "Data loaded {count} h ago ({when})",
+        "freshness_days": "Data loaded {count} d ago ({when})",
+        "auto_refresh_failed": "Could not refresh for now (Yahoo Finance unreachable?): the last loaded data stays on screen.",
         "select_market_warning": "Select at least one market.",
         "no_data_fetched": "No data retrieved. Check your connection or try again later.",
         "unavailable_tickers": "Data unavailable for: {names} (check the ticker or data not provided by "

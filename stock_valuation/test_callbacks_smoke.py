@@ -8,6 +8,7 @@ d'import croisé entre outils). Aucun appel réseau, aucune donnée réelle.
 Usage : pip install -r requirements-dev.txt && pytest -v
 """
 import json
+import time
 
 import dash
 import numpy as np
@@ -20,6 +21,7 @@ from dash.development.base_component import Component
 import app as app_module  # noqa: F401 - construit la mise en page (sans lancer le serveur)
 import callbacks
 import journal_db
+import last_load
 import market_data
 from app_instance import app
 
@@ -168,14 +170,18 @@ def test_every_callback_runs_with_a_loaded_universe_and_a_selected_row(offline):
     journal_db.upsert_entry("AAA.PA", "Thèse de test", 1000.0, "2020-01-01")
     journal_db.upsert_entry("BBB.PA", "", None, None)
     journal_db.upsert_entry("ZZZ.PA", "Hors univers", 12.0, "2099-01-01")
+    # Dernier chargement enregistré il y a deux heures : restauré, avec une demande de rafraîchissement.
+    last_load.save_last_load(rows, ["cac40"], saved_at=time.time() - 7200)
     called = _sweep({
+        ("stocks-loaded-at", "data"): {"at": time.time() - 7200, "universes": ["cac40"]},
+        ("stocks-auto-refresh", "data"): {"universes": ["cac40"], "requested_at": time.time()},
         ("stocks-raw-store", "data"): rows,
         ("stocks-table", "rowData"): grid_rows,
         ("stocks-table", "selectedRows"): [grid_rows[0]],
         ("watchlist-dropdown", "value"): ["AAA.PA", "CCC.PA"],
     })
     assert {"render_stock_views", "update_dcf", "update_pe_history_chart", "update_watchlist_alerts",
-            "render_journal"} <= called
+            "render_journal", "restore_last_load", "update_freshness"} <= called
 
 
 def _sweep_render(rows) -> list[dict]:
@@ -212,3 +218,30 @@ def test_journal_icon_buttons_act_on_the_clicked_entry_only():
     assert click(callbacks.edit_journal_entry, "edit", "BBB.PA", [0, 1]) == "BBB.PA"
     assert click(callbacks.delete_journal_entry, "delete", "AAA.PA", [1, 0], 3) == 4
     assert [e["ticker"] for e in journal_db.get_entries()] == ["BBB.PA"]
+
+
+def test_restore_shows_saved_rows_and_asks_a_refresh_only_when_stale(offline):
+    rows = [{"Ticker": "AAA.PA", "Entreprise": "Alpha", "price": 10.0}]
+    with pytest.raises(dash.exceptions.PreventUpdate):
+        callbacks.restore_last_load(0)  # rien d'enregistré : écran vide comme avant
+    last_load.save_last_load(rows, ["cac40"])
+    restored, loaded_at, universes, refresh = callbacks.restore_last_load(0)
+    assert restored == rows and universes == ["cac40"] and loaded_at["universes"] == ["cac40"]
+    assert refresh is dash.no_update  # moins d'une heure : le cache renverrait les mêmes données
+    last_load.save_last_load(rows, ["cac40"], saved_at=time.time() - 2 * last_load.STALE_AFTER_SECONDS)
+    assert callbacks.restore_last_load(0)[3]["universes"] == ["cac40"]
+
+
+def test_failed_automatic_refresh_keeps_the_rows_on_screen(offline, monkeypatch):
+    def unavailable(ticker):
+        raise ConnectionError("Yahoo injoignable")
+
+    monkeypatch.setattr(callbacks, "get_stock_valuation", unavailable)
+    token = context_value.set(AttributeDict(
+        triggered_inputs=[{"prop_id": "stocks-auto-refresh.data", "value": {}}],
+        inputs_list=[], states_list=[], outputs_list=[], inputs={}, states={}))
+    try:
+        rows, warning, loaded_at = callbacks.load_stock_valuations(None, {"universes": ["cac40"]}, ["cac40"], "fr")
+    finally:
+        context_value.reset(token)
+    assert rows is dash.no_update and loaded_at is dash.no_update and warning

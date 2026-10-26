@@ -247,6 +247,16 @@ def build_tab3(lang, v=None):
         dcc.Interval(id="load-progress-interval", interval=500, n_intervals=0),
         html.Div(id="stocks-warning"),
         dcc.Store(id="stocks-raw-store"),
+        # Chargement instantané (last_load.py, callbacks.restore_last_load) : à l'ouverture, les
+        # lignes du dernier chargement s'affichent tout de suite ; « stocks-freshness » dit leur âge
+        # et un rechargement part en arrière-plan quand elles ont plus d'une heure. stocks-restore
+        # ne sert qu'à déclencher la restauration à chaque construction de l'écran (ouverture de la
+        # page, changement de langue, qui sinon viderait le tableau).
+        html.Div(id="stocks-freshness", className="freshness-line mb-1"),
+        dcc.Store(id="stocks-restore", data=0),
+        dcc.Store(id="stocks-loaded-at"),
+        dcc.Store(id="stocks-auto-refresh"),
+        dcc.Interval(id="freshness-interval", interval=60_000, n_intervals=0),
 
         # État vide illustré tant qu'aucune donnée n'est chargée (masqué ensuite par render_stock_views).
         html.Div(empty_state("stocks", L(lang, "empty_stocks_title"), L(lang, "empty_stocks_text")),

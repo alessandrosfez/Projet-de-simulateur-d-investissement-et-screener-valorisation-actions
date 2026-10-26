@@ -7,6 +7,8 @@ helpers réutilisés par layout.py lui-même.
 import concurrent.futures
 import math
 import threading
+import time
+from datetime import datetime
 
 import dash
 import dash_bootstrap_components as dbc
@@ -16,6 +18,7 @@ import plotly.graph_objects as go
 from dash import ALL, Input, Output, State, ctx, dcc, html
 
 import journal_db
+import last_load
 import layout
 from app_instance import app
 from charts import empty_figure_with_message, make_football_field, make_pe_history_figure, make_sector_strip_figure
@@ -23,7 +26,8 @@ from constants import UNIVERSE_TICKERS
 from engine import (
     FOOTBALL_FIELD_METHODS, WATCHLIST_ALERTS, WATCHLIST_PE_HISTORY_LOW_PCT, annualized_return, annualized_volatility,
     compute_comparables_ev_ebitda_fair_value, compute_comparables_fair_value, compute_dcf_fair_value,
-    compute_dcf_sensitivity_grid, compute_scenario_dcf_fair_values, football_field_ranges, gap_to_target_pct,
+    compute_dcf_sensitivity_grid, compute_scenario_dcf_fair_values, elapsed_unit, football_field_ranges,
+    gap_to_target_pct,
     max_drawdown, pe_signal_forward_returns, peer_quartile_multiples, reviews_due, sharpe_ratio,
     summarize_pe_signal_backtest, watchlist_alerts,
 )
@@ -140,15 +144,26 @@ def _load_full_stock_data(ticker):
 @app.callback(
     Output("stocks-raw-store", "data"),
     Output("stocks-warning", "children"),
+    Output("stocks-loaded-at", "data"),
     Input("btn-load-stocks", "n_clicks"),
+    Input("stocks-auto-refresh", "data"),
     State("universe-checklist", "value"),
     State("lang-radio", "value"),
     prevent_initial_call=True,
 )
-def load_stock_valuations(n_clicks, universes, lang):
+def load_stock_valuations(n_clicks, auto_refresh, universes, lang):
+    """Charge les marchés cochés (bouton) ou rafraîchit en arrière-plan ceux du dernier chargement
+    (auto_refresh, posé par restore_last_load quand les lignes affichées ont plus d'une heure).
+    Chaque chargement réussi est enregistré (last_load.py) pour l'ouverture suivante. Un
+    rafraîchissement automatique qui échoue laisse les lignes déjà affichées en place."""
     lang = lang or "fr"
+    automatic = ctx.triggered_id == "stocks-auto-refresh"
+    if automatic:
+        if not auto_refresh:
+            raise dash.exceptions.PreventUpdate
+        universes = auto_refresh["universes"]
     if not universes:
-        return [], dbc.Alert(L(lang, "select_market_warning"), color="warning")
+        return [], dbc.Alert(L(lang, "select_market_warning"), color="warning"), dash.no_update
 
     tickers = {}
     for code in universes:
@@ -183,8 +198,54 @@ def load_stock_valuations(n_clicks, universes, lang):
     if failures:
         warning = dbc.Alert(L(lang, "unavailable_tickers", names=", ".join(sorted(failures))), color="warning")
     if not rows:
-        warning = dbc.Alert(L(lang, "no_data_fetched"), color="danger")
-    return rows, warning
+        if automatic:
+            return dash.no_update, dbc.Alert(L(lang, "auto_refresh_failed"), color="warning"), dash.no_update
+        return rows, dbc.Alert(L(lang, "no_data_fetched"), color="danger"), dash.no_update
+    saved_at = last_load.save_last_load(rows, universes)
+    return rows, warning, {"at": saved_at, "universes": sorted(universes)}
+
+
+@app.callback(
+    Output("stocks-raw-store", "data", allow_duplicate=True),
+    Output("stocks-loaded-at", "data", allow_duplicate=True),
+    Output("universe-checklist", "value"),
+    Output("stocks-auto-refresh", "data"),
+    Input("stocks-restore", "data"),
+    prevent_initial_call="initial_duplicate",
+)
+def restore_last_load(_restore):
+    """À chaque construction de l'écran (ouverture de la page, changement de langue) : affiche tout
+    de suite les lignes du dernier chargement et recoche ses marchés. Au-delà d'une heure, demande
+    en plus un rafraîchissement en arrière-plan (load_stock_valuations), sauf si un chargement est
+    déjà en cours. Sans chargement enregistré, l'écran reste vide comme avant."""
+    saved = last_load.read_last_load()
+    if saved is None:
+        raise dash.exceptions.PreventUpdate
+    with _load_progress_lock:
+        loading = _load_progress["total"] > 0
+    stale = time.time() - saved["saved_at"] > last_load.STALE_AFTER_SECONDS
+    refresh = {"universes": saved["universes"], "requested_at": time.time()} if stale and not loading else dash.no_update
+    return saved["rows"], {"at": saved["saved_at"], "universes": saved["universes"]}, saved["universes"], refresh
+
+
+@app.callback(
+    Output("stocks-freshness", "children"),
+    Input("stocks-loaded-at", "data"),
+    Input("freshness-interval", "n_intervals"),
+    Input("lang-radio", "value"),
+)
+def update_freshness(loaded_at, _n_intervals, lang):
+    """Âge des lignes affichées (« données chargées il y a 3 h, le 26/10 à 14:02 »), recalculé
+    chaque minute. Au-delà d'un jour, la ligne passe en ambre (icône et texte inchangés)."""
+    lang = lang or "fr"
+    if not loaded_at:
+        return ""
+    unit, count = elapsed_unit(time.time() - loaded_at["at"])
+    # Heure locale de la machine, comme l'horloge de l'utilisateur.
+    when = datetime.fromtimestamp(loaded_at["at"]).strftime("%d/%m à %H:%M" if lang == "fr" else "%b %d, %H:%M")
+    return html.Span([html.I(className="bi bi-clock-history me-1", **{"aria-hidden": "true"}),
+                      L(lang, f"freshness_{unit}", count=count, when=when)],
+                     className="freshness stale" if unit == "days" else "freshness")
 
 
 @app.callback(

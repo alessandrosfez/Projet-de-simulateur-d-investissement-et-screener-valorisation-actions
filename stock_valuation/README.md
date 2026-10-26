@@ -37,6 +37,14 @@ d'un plan d'épargne), indépendant de celui-ci.
   cours sous le DCF aux hypothèses par défaut des curseurs, score
   composite ≥ 70. Une donnée manquante ne déclenche rien ; ce sont des
   pistes à creuser, pas des recommandations.
+- **Chargement instantané** : chaque chargement réussi est gardé dans un
+  fichier local (`.stock_valuation_last_load.pkl`, ignoré par git). À
+  l'ouverture de la page, ou après un changement de langue qui vidait
+  auparavant le tableau, ces lignes s'affichent tout de suite et leurs
+  marchés sont recochés. Une ligne sous le bouton indique leur âge
+  (« données chargées il y a 3 h »). Au-delà d'une heure, durée du cache
+  des appels Yahoo, un rechargement part en arrière-plan et les remplace
+  quand il a fini ; s'il échoue, les lignes affichées restent en place.
 - **Journal d'investissement** : pour chaque titre, une thèse, un prix cible
   (dans la devise de cotation du titre) et une date de revue. Chaque fiche
   montre l'écart du cours à la cible ; les revues dont la date est passée
@@ -160,6 +168,7 @@ L'application est servie sur [http://localhost:8051](http://localhost:8051)
 - `engine.py` : moteur de calcul pur (DCF, valorisation par comparables).
   Aucune dépendance Dash/réseau.
 - `journal_db.py` : journal d'investissement (SQLite local).
+- `last_load.py` : dernier chargement réussi, pour l'affichage instantané.
 - `charts.py` : constructeur de graphique Plotly (état "pas encore de données").
 - `layout.py` : construction de l'écran unique (pas de sidebar : un seul
   outil, tous ses contrôles sont dans le corps de la page) et colonnes du

@@ -216,6 +216,20 @@ def reviews_due(entries: list[dict], today) -> list[dict]:
     return sorted(due, key=lambda e: str(e["review_date"]))
 
 
+def elapsed_unit(seconds: float) -> tuple[str, int]:
+    """Âge arrondi vers le bas dans l'unité la plus lisible : ("now", 0) sous une minute, puis
+    minutes, heures et jours. Arrondi vers le bas : « il y a 1 h » pour 1 h 59 ne vieillit jamais
+    les données."""
+    seconds = max(0.0, float(seconds))
+    if seconds < 60:
+        return "now", 0
+    if seconds < 3600:
+        return "minutes", int(seconds // 60)
+    if seconds < 86400:
+        return "hours", int(seconds // 3600)
+    return "days", int(seconds // 86400)
+
+
 def gap_to_target_pct(price: float | None, target_price: float | None) -> float | None:
     """Écart du cours au prix cible, en % du prix cible : négatif sous la cible, positif au-dessus.
     None si l'un des deux manque (jamais 0 à la place)."""

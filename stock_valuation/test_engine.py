@@ -419,3 +419,12 @@ def test_gap_to_target_pct_signs_and_missing_values():
     assert m.gap_to_target_pct(None, 50.0) is None
     assert m.gap_to_target_pct(45.0, None) is None
     assert m.gap_to_target_pct(float("nan"), 50.0) is None
+
+
+def test_elapsed_unit_rounds_down_in_the_most_readable_unit():
+    assert m.elapsed_unit(-5) == ("now", 0)
+    assert m.elapsed_unit(59) == ("now", 0)
+    assert m.elapsed_unit(60) == ("minutes", 1)
+    assert m.elapsed_unit(3599) == ("minutes", 59)
+    assert m.elapsed_unit(2 * 3600 - 1) == ("hours", 1)
+    assert m.elapsed_unit(3 * 86400 + 10) == ("days", 3)

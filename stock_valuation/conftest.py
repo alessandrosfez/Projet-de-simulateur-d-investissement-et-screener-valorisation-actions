@@ -7,6 +7,7 @@ selon l'ordre d'exécution. Même isolement pour le journal d'investissement (jo
 import pytest
 
 import journal_db
+import last_load
 import market_data
 
 
@@ -22,3 +23,10 @@ def isolate_journal(monkeypatch, tmp_path):
     journal de l'utilisateur (.stock_valuation_journal.db)."""
     monkeypatch.setattr(journal_db, "DB_FILE", tmp_path / "journal.db")
     journal_db.init_db()
+
+
+@pytest.fixture(autouse=True)
+def isolate_last_load(monkeypatch, tmp_path):
+    """Dernier chargement dans un fichier temporaire, absent au départ : aucun test ne lit les
+    données réellement chargées sur cette machine (.stock_valuation_last_load.pkl)."""
+    monkeypatch.setattr(last_load, "LAST_LOAD_FILE", tmp_path / "last_load.pkl")
