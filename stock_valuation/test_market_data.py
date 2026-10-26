@@ -240,3 +240,11 @@ def test_unknown_accounts_currency_falls_back_on_empirical_factor(monkeypatch):
     # Pas de cours pour USDGBP=X : repli sur le facteur empirique (x 100), comme avant.
     monkeypatch.setattr(md.yf, "Ticker", _ticker_factory(info, {"USDGBP=X": float("nan")}))
     assert md.get_dcf_inputs("FAKE")["fcf"] == pytest.approx(200.0 * 100)
+
+
+def test_missing_yahoo_sector_uses_the_documented_fallback(monkeypatch):
+    # Fiche sans secteur (cas réel de Michelin chez Yahoo) : secteur de secours documenté, sinon N/A.
+    monkeypatch.setattr(md, "_get_ticker_info", lambda ticker: {"shortName": "Société", "currentPrice": 30.0})
+    monkeypatch.setattr(md, "get_stock_pe_history", lambda ticker: pd.Series(dtype=float))
+    assert md.get_stock_valuation("ML.PA")["sector"] == "Consumer Cyclical"
+    assert md.get_stock_valuation("XYZ.PA")["sector"] == "N/A"

@@ -13,6 +13,7 @@ import pandas as pd
 import yfinance as yf
 
 import engine
+from constants import SECTOR_FALLBACK
 
 # ============================================================
 # CACHE (mémoire + disque)
@@ -257,7 +258,7 @@ def get_stock_valuation(ticker: str) -> dict:
 
     return {
         "name": info.get("shortName") or info.get("longName") or ticker,
-        "sector": info.get("sector") or "N/A",
+        "sector": info.get("sector") or SECTOR_FALLBACK.get(ticker, {}).get("sector") or "N/A",
         "currency": info.get("currency") or "N/A",
         "price": info.get("currentPrice") or info.get("regularMarketPrice"),
         "trailing_pe": trailing_pe,

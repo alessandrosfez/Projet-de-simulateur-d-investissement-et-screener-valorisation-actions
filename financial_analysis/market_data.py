@@ -14,6 +14,8 @@ from pathlib import Path
 import pandas as pd
 import yfinance as yf
 
+from constants import SECTOR_FALLBACK
+
 # ============================================================
 # CACHE (mémoire + disque)
 # ============================================================
@@ -101,8 +103,8 @@ def get_company_profile(ticker: str) -> dict:
     info = _get_ticker_info(ticker)
     return {
         "name": info.get("shortName") or info.get("longName") or ticker,
-        "sector": info.get("sector"),
-        "industry": info.get("industry"),
+        "sector": info.get("sector") or SECTOR_FALLBACK.get(ticker, {}).get("sector"),
+        "industry": info.get("industry") or SECTOR_FALLBACK.get(ticker, {}).get("industry"),
         "quote_currency": info.get("currency"),
         "reporting_currency": info.get("financialCurrency"),
         "price": info.get("currentPrice") or info.get("regularMarketPrice"),

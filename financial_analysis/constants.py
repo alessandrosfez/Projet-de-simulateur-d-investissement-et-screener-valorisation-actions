@@ -86,3 +86,14 @@ MINOR_CURRENCY_UNITS = {
 # Nombre d'exercices annuels que yfinance fournit en pratique (souvent un 5e partiellement vide) :
 # sert au message d'avertissement de l'interface, pas à tronquer les données.
 TYPICAL_YFINANCE_YEARS = 4
+
+
+# Secteur et industrie de secours quand Yahoo ne les fournit pas du tout (fiche sans « sector » ni
+# « industry », sur toutes les cotations du titre) : sans eux, la société tombe dans « Secteur non
+# renseigné » et perd ses comparables sectoriels. Valeurs prises dans la taxonomie de Yahoo elle-même,
+# celle qu'il applique aux sociétés du même métier, jamais devinées. Complétée au fil des trous constatés.
+# - ML.PA (Michelin) : fabricant de pneumatiques, classé comme Goodyear, Continental, Bridgestone et
+#   Pirelli (vérifié sur Yahoo le 26/10/2026).
+SECTOR_FALLBACK = {
+    "ML.PA": {"sector": "Consumer Cyclical", "industry": "Auto Parts"},
+}
