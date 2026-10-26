@@ -428,3 +428,15 @@ def test_elapsed_unit_rounds_down_in_the_most_readable_unit():
     assert m.elapsed_unit(3599) == ("minutes", 59)
     assert m.elapsed_unit(2 * 3600 - 1) == ("hours", 1)
     assert m.elapsed_unit(3 * 86400 + 10) == ("days", 3)
+
+
+def test_gauge_positions_share_one_scale_and_skip_missing_values():
+    pos = m.gauge_positions({"price": 100.0, "target": 150.0, "dcf": None, "comparables": -5.0})
+    assert set(pos) == {"price", "target"}
+    # Étendue 50, marge 6 de chaque côté : 100 -> 6/62, 150 -> 56/62.
+    assert pos["price"] == pytest.approx(6 / 62 * 100)
+    assert pos["target"] == pytest.approx(56 / 62 * 100)
+    assert m.gauge_positions({"price": 100.0}) is None
+    assert m.gauge_positions({"target": 100.0, "dcf": 120.0}) is None
+    same = m.gauge_positions({"price": 80.0, "target": 80.0})
+    assert same["price"] == pytest.approx(50.0)

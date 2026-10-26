@@ -279,6 +279,34 @@ a { color: var(--accent); }
 .journal-chip.muted { color: var(--Dash-Text-Weak, #6c757d); border-style: dashed; background: transparent; }
 .journal-thesis { font-size: 0.85rem; white-space: pre-wrap; margin-top: 0.45rem; max-width: 80ch;
                   color: var(--Dash-Text-Primary, inherit); }
+/* Jauge cours / cible (callbacks._journal_gauge). --j-dcf et --j-comps posés en ligne : couleurs du
+   « football field ». Le cours est le seul point plein, entouré de la couleur de la carte pour rester
+   lisible quand il chevauche un autre marqueur. */
+.jgauge { --j-ink: #1f2433; --j-ring: var(--surface); margin-top: 0.55rem; max-width: 620px; }
+[data-bs-theme="dark"] .jgauge { --j-ink: #e6e8ef; }
+.jgauge-track { position: relative; height: 26px; }
+.jgauge-track::before { content: ""; position: absolute; left: 0; right: 0; top: 12px; height: 2px; border-radius: 1px;
+                        background: var(--border-soft); }
+.jgauge-gap { position: absolute; top: 9px; height: 8px; border-radius: 4px;
+              background: color-mix(in srgb, var(--Dash-Text-Weak, #6c757d) 22%, transparent); }
+.jgauge-gap.good { background: color-mix(in srgb, var(--good) 30%, transparent); }
+.jm { position: absolute; transform: translateX(-50%); }
+.jm.price { top: 6px; width: 14px; height: 14px; border-radius: 50%; background: var(--j-ink); box-shadow: 0 0 0 2px var(--j-ring); }
+.jm.target { top: 1px; width: 3px; height: 24px; border-radius: 2px; background: var(--j-ink); box-shadow: 0 0 0 2px var(--j-ring); }
+.jm.dcf { top: 8px; width: 10px; height: 10px; background: var(--j-dcf); transform: translateX(-50%) rotate(45deg);
+          box-shadow: 0 0 0 2px var(--j-ring); }
+.jm.comparables { top: 6px; width: 13px; height: 12px; background: var(--j-comps);
+                  clip-path: polygon(50% 0, 100% 100%, 0 100%); }
+.jgauge-legend { display: flex; flex-wrap: wrap; gap: 0.2rem 1.1rem; margin-top: 0.15rem; font-size: 0.76rem;
+                 color: var(--Dash-Text-Weak, #6c757d); }
+.jgauge-legend > span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.jgauge-legend strong { color: var(--Dash-Text-Primary, inherit); font-weight: 600; font-variant-numeric: tabular-nums; }
+.jm.static { position: relative; top: auto; left: auto; transform: none; flex: none; }
+.jm.static.target { height: 12px; }
+.jm.static.price { width: 10px; height: 10px; }
+.jm.static.dcf { width: 8px; height: 8px; transform: rotate(45deg); }
+.jm.static.comparables { width: 11px; height: 10px; }
+
 .journal-empty { font-size: 0.8rem; color: var(--Dash-Text-Weak, #6c757d); padding-top: 0.5rem;
                  border-top: 1px solid var(--border-soft); }
 .journal-due-banner { display: flex; align-items: center; font-size: 0.85rem; font-weight: 500; color: var(--due);

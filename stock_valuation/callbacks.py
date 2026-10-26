@@ -27,7 +27,7 @@ from engine import (
     FOOTBALL_FIELD_METHODS, WATCHLIST_ALERTS, WATCHLIST_PE_HISTORY_LOW_PCT, annualized_return, annualized_volatility,
     compute_comparables_ev_ebitda_fair_value, compute_comparables_fair_value, compute_dcf_fair_value,
     compute_dcf_sensitivity_grid, compute_scenario_dcf_fair_values, elapsed_unit, football_field_ranges,
-    gap_to_target_pct,
+    gap_to_target_pct, gauge_positions,
     max_drawdown, pe_signal_forward_returns, peer_quartile_multiples, reviews_due, sharpe_ratio,
     summarize_pe_signal_backtest, watchlist_alerts,
 )
@@ -1257,9 +1257,10 @@ def _icon(name: str):
     return html.I(className=f"bi bi-{name} me-1", **{"aria-hidden": "true"})
 
 
-def _journal_chips(entry: dict, row: dict, is_due: bool, lang: str) -> list:
+def _journal_chips(entry: dict, row: dict, is_due: bool, lang: str, with_gauge: bool = False) -> list:
     """Pastilles d'une fiche : date de revue, prix cible, cours et écart à la cible. Chaque pastille
-    porte une icône et un texte : la couleur seule ne dit jamais rien."""
+    porte une icône et un texte : la couleur seule ne dit jamais rien. Avec la jauge (with_gauge), le
+    prix cible et le cours sont dans sa légende : seules la revue et l'écart restent en pastille."""
     currency, price, target = row.get("currency"), row.get("price"), entry["target_price"]
     chips = []
     if entry["review_date"]:
@@ -1268,10 +1269,11 @@ def _journal_chips(entry: dict, row: dict, is_due: bool, lang: str) -> list:
              L(lang, "journal_review_due" if is_due else "journal_review_on",
                day=_format_day(entry["review_date"], lang))],
             className="journal-chip due" if is_due else "journal-chip"))
-    if target is not None:
+    if target is not None and not with_gauge:
         chips.append(html.Span([_icon("bullseye"),
                                 L(lang, "journal_target_chip", target=_format_price(target, currency, lang))],
                                className="journal-chip"))
+    if target is not None:
         gap = gap_to_target_pct(price, target)
         if gap is None:
             chips.append(html.Span(L(lang, "journal_price_missing"), className="journal-chip muted"))
@@ -1288,14 +1290,70 @@ def _journal_chips(entry: dict, row: dict, is_due: bool, lang: str) -> list:
     return chips
 
 
+# Ordre des marqueurs de la jauge, du fond vers l'avant : le cours, seul point plein, toujours au-dessus.
+JOURNAL_GAUGE_MARKERS = ("comparables", "dcf", "target", "price")
+
+
+def _comparables_value(df: pd.DataFrame, ticker: str) -> float | None:
+    """Valeur implicite au P/E médian d'au moins 3 pairs du secteur (mêmes règles que l'alerte
+    « sous les comparables », engine.watchlist_alerts), ou None."""
+    match = df[df["Ticker"] == ticker]
+    if match.empty:
+        return None
+    row = match.iloc[0]
+    price, own_pe = row.get("Prix"), row.get("P/E (trailing)")
+    if pd.isna(price) or pd.isna(own_pe):
+        return None
+    peers = df[(df["Ticker"] != ticker) & (df["Secteur"] == row["Secteur"])]["P/E (trailing)"]
+    peers = [p for p in peers.dropna().tolist() if p > 0]
+    if len(peers) < 3:
+        return None
+    return compute_comparables_fair_value(float(price), float(own_pe), float(np.median(peers)))
+
+
+def _journal_gauge(entry: dict, row: dict, others: dict, palette: list, lang: str):
+    """Jauge d'une fiche : cours (point), prix cible (trait), DCF par défaut (losange) et comparables
+    P/E (triangle) sur une même piste, aux couleurs du « football field » pour DCF et comparables.
+    Le segment cours -> cible est teinté quand le cours est sous la cible. Les valeurs sont dans la
+    légende plutôt qu'en étiquettes sur la piste, qui se chevaucheraient. None sans cours."""
+    currency = row.get("currency")
+    values = {"price": row.get("price"), "target": entry["target_price"], **others}
+    positions = gauge_positions(values)
+    if positions is None:
+        return None
+    labels = {"price": L(lang, "journal_gauge_price"), "target": L(lang, "journal_gauge_target"),
+              "dcf": L(lang, "journal_gauge_dcf"), "comparables": L(lang, "journal_gauge_comparables")}
+    track = []
+    if "target" in positions:
+        left, right = sorted((positions["price"], positions["target"]))
+        below = values["price"] <= values["target"]
+        track.append(html.Div(className="jgauge-gap good" if below else "jgauge-gap",
+                              style={"left": f"{left:.2f}%", "width": f"{right - left:.2f}%"}))
+    for key in JOURNAL_GAUGE_MARKERS:
+        if key in positions:
+            text = f"{labels[key]} {_format_price(values[key], currency, lang)}"
+            track.append(html.Span(className=f"jm {key}", style={"left": f"{positions[key]:.2f}%"}, title=text))
+    legend = [html.Span([html.Span(className=f"jm {key} static", **{"aria-hidden": "true"}),
+                         labels[key], " ", html.Strong(_format_price(values[key], currency, lang))])
+              for key in ("price", "target", "dcf", "comparables") if key in positions]
+    summary = ", ".join(f"{labels[k]} {_format_price(values[k], currency, lang)}"
+                        for k in ("price", "target", "dcf", "comparables") if k in positions)
+    return html.Div([
+        html.Div(track, className="jgauge-track", role="img", **{"aria-label": summary}),
+        html.Div(legend, className="jgauge-legend"),
+    ], className="jgauge", style={"--j-dcf": palette[0], "--j-comps": palette[1 % len(palette)]})
+
+
 @app.callback(
     Output("journal-entries", "children"),
     Output("journal-reviews-due", "children"),
     Input("journal-refresh-trigger", "data"),
     Input("stocks-raw-store", "data"),
     Input("lang-radio", "value"),
+    Input("palette-dropdown", "value"),
+    Input("dark-mode-switch", "value"),
 )
-def render_journal(_trigger, rows, lang):
+def render_journal(_trigger, rows, lang, palette_code=None, dark_mode=True):
     """Fiches du journal (thèse, prix cible et écart au cours, date de revue) et rappel des revues
     dues. Le cours vient des données chargées : avant chargement, il est indiqué comme absent,
     jamais remplacé par 0."""
@@ -1304,6 +1362,8 @@ def render_journal(_trigger, rows, lang):
     if not entries:
         return html.Div(L(lang, "journal_empty"), className="journal-empty"), ""
     loaded = {r["Ticker"]: r for r in rows or []}
+    scored = _scored_frame(rows) if rows else None
+    palette = chart_theme.palette_for(palette_code, bool(dark_mode))
     due = reviews_due(entries, pd.Timestamp.today().normalize())
     due_tickers = {e["ticker"] for e in due}
 
@@ -1323,11 +1383,17 @@ def render_journal(_trigger, rows, lang):
                         **{"aria-label": f"{L(lang, f'journal_{kind}_btn')} {ticker}"})
             for kind, icon in (("edit", "pencil"), ("delete", "trash"))
         ]
+        row = loaded.get(ticker, {})
+        gauge = None
+        if row.get("price") is not None:
+            others = {"dcf": _default_dcf_fair_value(ticker), "comparables": _comparables_value(scored, ticker)}
+            gauge = _journal_gauge(entry, row, others, palette, lang)
         cards.append(html.Div([
             html.Div([html.Div(display_name(ticker), className="watch-name"),
                       html.Div(actions, className="journal-actions")], className="journal-card-head"),
-            html.Div(_journal_chips(entry, loaded.get(ticker, {}), ticker in due_tickers, lang),
+            html.Div(_journal_chips(entry, row, ticker in due_tickers, lang, with_gauge=gauge is not None),
                      className="watch-badges"),
+            gauge,
             html.Div(entry["thesis"], className="journal-thesis") if entry["thesis"] else None,
         ], className="journal-card due" if ticker in due_tickers else "journal-card"))
 

@@ -216,6 +216,20 @@ def reviews_due(entries: list[dict], today) -> list[dict]:
     return sorted(due, key=lambda e: str(e["review_date"]))
 
 
+def gauge_positions(values: dict[str, float | None]) -> dict[str, float] | None:
+    """Position (0-100 %) de chaque valeur sur une piste commune : cours, prix cible, DCF,
+    comparables... Une valeur manquante, nulle ou négative est écartée, jamais placée à 0. Marge de
+    12 % de l'étendue de chaque côté, pour qu'aucun marqueur ne colle au bord. None sans cours ou
+    avec moins de deux valeurs : une jauge à un seul point ne dit rien."""
+    valid = {k: float(v) for k, v in values.items() if v is not None and np.isfinite(v) and v > 0}
+    if "price" not in valid or len(valid) < 2:
+        return None
+    low, high = min(valid.values()), max(valid.values())
+    pad = (high - low) * 0.12 if high > low else high * 0.05
+    span = high - low + 2 * pad
+    return {k: (v - low + pad) / span * 100 for k, v in valid.items()}
+
+
 def elapsed_unit(seconds: float) -> tuple[str, int]:
     """Âge arrondi vers le bas dans l'unité la plus lisible : ("now", 0) sous une minute, puis
     minutes, heures et jours. Arrondi vers le bas : « il y a 1 h » pour 1 h 59 ne vieillit jamais
