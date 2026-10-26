@@ -412,3 +412,47 @@ a { color: var(--accent); }
     }
     .section-title { break-after: avoid; }
 }
+
+
+/* -------- Alerte de dérive en barres d'écart (callbacks/portefeuille_reel.refresh_drift_alert) -------- */
+/* Couleurs des barres posées en ligne par le callback (--drift-under / --drift-over : deux premières
+   couleurs de la palette des graphiques). Le texte reste aux couleurs du texte, jamais à celle des
+   barres. */
+.drift-panel { --drift-warn: #9a5b00; border: 1px solid var(--border-soft); border-left: 3px solid var(--drift-warn);
+               border-radius: 14px; padding: 0.8rem 1rem 0.7rem; background: var(--surface); box-shadow: var(--shadow-card); }
+[data-bs-theme="dark"] .drift-panel { --drift-warn: #f2b452; }
+.drift-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.4rem 1rem;
+              margin-bottom: 0.35rem; }
+.drift-title { font-weight: 600; font-size: 0.92rem; display: flex; align-items: center; }
+.drift-title .bi { color: var(--drift-warn); }
+.drift-link { font-size: 0.82rem; font-weight: 500; text-decoration: none; display: inline-flex; align-items: center; }
+.drift-link:hover { text-decoration: underline; }
+.drift-row { display: grid; grid-template-columns: minmax(130px, 190px) minmax(160px, 1fr) minmax(190px, 260px);
+             align-items: center; gap: 0.35rem 1rem; padding: 0.5rem 0; border-top: 1px solid var(--border-soft); }
+.drift-name { font-weight: 600; font-size: 0.86rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.drift-track { position: relative; height: 22px; }
+.drift-zone { position: absolute; top: 2px; bottom: 2px; border-radius: 4px;
+              background: color-mix(in srgb, var(--Dash-Text-Weak, #6c757d) 14%, transparent); }
+.drift-target { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; border-radius: 1px;
+                background: var(--Dash-Text-Primary, #1f2433); }
+[data-bs-theme="dark"] .drift-target { background: #e6e8ef; }
+/* Bout de données arrondi, côté opposé à la cible : la barre « part » du trait central. */
+.drift-bar { position: absolute; top: 5px; height: 12px; min-width: 3px; }
+.drift-bar.under { background: var(--drift-under); border-radius: 4px 0 0 4px; }
+.drift-bar.over { background: var(--drift-over); border-radius: 0 4px 4px 0; }
+.drift-gap { font-weight: 600; font-size: 0.84rem; font-variant-numeric: tabular-nums; display: flex; align-items: center; }
+.drift-gap .bi { font-size: 1.1rem; margin-right: 0.1rem; }
+.drift-sub { font-size: 0.76rem; color: var(--Dash-Text-Weak, #6c757d); }
+.drift-legend { display: flex; flex-wrap: wrap; gap: 0.3rem 1.1rem; padding-top: 0.55rem; border-top: 1px solid var(--border-soft);
+                font-size: 0.75rem; color: var(--Dash-Text-Weak, #6c757d); }
+.drift-legend > span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.drift-swatch { width: 14px; height: 9px; border-radius: 2px; display: inline-block; }
+.drift-swatch.under { background: var(--drift-under); }
+.drift-swatch.over { background: var(--drift-over); }
+.drift-swatch.zone { background: color-mix(in srgb, var(--Dash-Text-Weak, #6c757d) 22%, transparent); }
+@media (max-width: 720px) {
+    .drift-row { grid-template-columns: 1fr; }
+}
+@media print {
+    .drift-panel { break-inside: avoid; }
+}

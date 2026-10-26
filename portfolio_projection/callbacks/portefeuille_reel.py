@@ -866,11 +866,18 @@ def refresh_line_contributions(_trigger, lang, dark_mode):
     Input("tab3-refresh-trigger", "data"),
     Input("tab3-drift-threshold", "value"),
     Input("lang-radio", "value"),
+    Input("dark-mode-switch", "value"),
 )
-def refresh_drift_alert(_trigger, threshold, lang):
+def refresh_drift_alert(_trigger, threshold, lang, dark_mode):
     """Lignes qui s'écartent de leur poids cible de plus du seuil réglé (portfolio_engine.drift_alerts),
     en haut de l'onglet pour être vues sans aller jusqu'au rééquilibrage. Rien sans poids cibles, ni
-    si une ligne n'a pas de cours (la répartition serait fausse)."""
+    si une ligne n'a pas de cours (la répartition serait fausse).
+
+    Une barre par ligne, partant de la cible (trait central) : vers la gauche sous la cible, vers la
+    droite au-dessus, à la même échelle pour toutes (portfolio_engine.drift_bar_scale). La bande
+    claire autour du centre est la zone tolérée (± seuil). Le sens se lit aussi au texte, à la flèche
+    et à la position, jamais à la seule couleur ; la phrase complète reste lisible au survol et par
+    les lecteurs d'écran."""
     lang = lang or "fr"
     target_weights = portfolio_db.get_target_weights()
     if target_weights.empty or not threshold:
@@ -891,18 +898,56 @@ def refresh_drift_alert(_trigger, threshold, lang):
     def pct(value):
         return f"{value:.1f}".replace(".", "," if lang == "fr" else ".")
 
-    items = [
-        html.Li(L(lang, "drift_line_under" if r.gap_pt < 0 else "drift_line_over", name=names[r.ticker],
-                  current=pct(r.current_pct), target=pct(r.target_pct), gap=pct(abs(r.gap_pt)),
-                  amount=f"{abs(r.delta_eur):,.0f} €".replace(",", " ")))
-        for r in alerts.itertuples()
-    ]
-    return dbc.Alert([
-        html.Div([html.I(className="bi bi-exclamation-triangle me-2", **{"aria-hidden": "true"}),
-                  L(lang, "drift_title", threshold=pct(float(threshold)))], className="fw-semibold mb-1"),
-        html.Ul(items, className="mb-1"),
-        html.A(L(lang, "drift_link"), href="#anchor-tab3-rebalancing"),
-    ], color="warning", className="py-2 mb-3")
+    threshold = float(threshold)
+    scale = portfolio_engine.drift_bar_scale(alerts["gap_pt"].tolist(), threshold)
+    under_color, over_color = chart_theme.palette_for(None, bool(dark_mode))[:2]
+    zone_half_pct = threshold / scale * 50
+
+    rows = []
+    for r in alerts.itertuples():
+        under = r.gap_pt < 0
+        amount = f"{abs(r.delta_eur):,.0f} €".replace(",", " ")
+        sentence = L(lang, "drift_line_under" if under else "drift_line_over", name=names[r.ticker],
+                     current=pct(r.current_pct), target=pct(r.target_pct), gap=pct(abs(r.gap_pt)), amount=amount)
+        width = abs(r.gap_pt) / scale * 50
+        bar_style = {"width": f"{width:.2f}%", ("right" if under else "left"): "50%"}
+        rows.append(html.Div([
+            html.Div(names[r.ticker], className="drift-name"),
+            html.Div([
+                html.Div(className="drift-zone", style={"left": f"{50 - zone_half_pct:.2f}%",
+                                                        "width": f"{2 * zone_half_pct:.2f}%"}),
+                html.Div(className=f"drift-bar {'under' if under else 'over'}", style=bar_style),
+                html.Div(className="drift-target"),
+            ], className="drift-track", role="img", **{"aria-label": sentence}),
+            html.Div([
+                html.Div([html.I(className=f"bi bi-arrow-{'left' if under else 'right'}-short",
+                                 **{"aria-hidden": "true"}),
+                          L(lang, "drift_gap_under" if under else "drift_gap_over", gap=pct(abs(r.gap_pt)))],
+                         className="drift-gap"),
+                html.Div(L(lang, "drift_detail", current=pct(r.current_pct), target=pct(r.target_pct))
+                         + " · " + (L(lang, "drift_action_under", amount=amount) if under
+                                    else L(lang, "drift_action_over")), className="drift-sub"),
+            ], className="drift-detail"),
+        ], className="drift-row", title=sentence))
+
+    def swatch(kind):
+        return html.Span(className=f"drift-swatch {kind}", **{"aria-hidden": "true"})
+
+    legend = html.Div([
+        html.Span([swatch("under"), L(lang, "drift_legend_under")]),
+        html.Span([swatch("over"), L(lang, "drift_legend_over")]),
+        html.Span([swatch("zone"), L(lang, "drift_legend_zone", threshold=pct(threshold))]),
+    ], className="drift-legend")
+    return html.Div([
+        html.Div([
+            html.Div([html.I(className="bi bi-exclamation-triangle me-2", **{"aria-hidden": "true"}),
+                      L(lang, "drift_title", threshold=pct(threshold))], className="drift-title"),
+            html.A([L(lang, "drift_link"), html.I(className="bi bi-arrow-down-short", **{"aria-hidden": "true"})],
+                   href="#anchor-tab3-rebalancing", className="drift-link"),
+        ], className="drift-head"),
+        *rows,
+        legend,
+    ], className="drift-panel mb-3", style={"--drift-under": under_color, "--drift-over": over_color})
 
 
 def _collapsed_figure(dark: bool):

@@ -815,6 +815,15 @@ def drift_alerts(plan: pd.DataFrame, threshold_pt: float) -> pd.DataFrame:
     return flagged.loc[order, columns].reset_index(drop=True)
 
 
+def drift_bar_scale(gaps_pt: list[float], threshold_pt: float) -> float:
+    """Demi-largeur, en points, de la piste des barres d'écart (cible au centre) : le plus grand écart
+    affiché, ou le seuil s'il est plus grand, plus 8 % de marge pour que la plus longue barre ne touche
+    jamais le bord. Toutes les lignes partagent cette échelle : deux barres de même longueur sont deux
+    écarts égaux."""
+    largest = max([abs(float(g)) for g in gaps_pt] + [abs(float(threshold_pt)), 1.0])
+    return largest * 1.08
+
+
 def since_last_visit(snapshots: pd.DataFrame, today: DateLike, current_value: float,
                      current_invested: float) -> dict | None:
     """Évolution depuis le dernier relevé d'un jour ANTÉRIEUR à today (voir

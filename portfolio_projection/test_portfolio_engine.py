@@ -845,3 +845,10 @@ def test_drift_alerts_flag_lines_beyond_the_threshold_largest_gap_first():
     assert alerts.iloc[0]["delta_eur"] == pytest.approx(200.0)
     assert m.drift_alerts(plan, 25.0).empty
     assert m.drift_alerts(m.compute_rebalancing_plan(_weights(), pd.Series(dtype=float)), 5.0).empty
+
+
+def test_drift_bar_scale_fits_the_largest_gap_or_the_threshold():
+    assert m.drift_bar_scale([-38.5, 17.2], 5.0) == pytest.approx(38.5 * 1.08)
+    # Écarts tous sous le seuil (ne devrait pas arriver, mais la zone tolérée doit rester visible).
+    assert m.drift_bar_scale([2.0], 5.0) == pytest.approx(5.0 * 1.08)
+    assert m.drift_bar_scale([], 0.0) == pytest.approx(1.08)
