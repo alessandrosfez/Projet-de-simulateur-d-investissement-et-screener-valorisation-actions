@@ -1,0 +1,24 @@
+# Mises à jour proposées automatiquement par GitHub (pull requests), une fois par semaine : dépendances
+# Python de chaque outil et actions de la CI. Chaque proposition passe par la CI (ruff, tests, dont les
+# tests de démarrage des écrans, mypy, docker build) avant d'être acceptée ou non.
+version: 2
+updates:
+  - package-ecosystem: "pip"
+    directory: "/portfolio_projection"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+  - package-ecosystem: "pip"
+    directory: "/stock_valuation"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+  - package-ecosystem: "pip"
+    directory: "/financial_analysis"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
