@@ -15,6 +15,9 @@ import market_data
 def isolate_market_data_cache(monkeypatch):
     monkeypatch.setattr(market_data, "_cache", {})
     monkeypatch.setattr(market_data, "_save_cache_to_disk", lambda: None)
+    # Aucune écriture programmée : un minuteur lancé pendant un test pourrait sinon écrire après la
+    # fin du test, une fois le vrai cache restauré.
+    monkeypatch.setattr(market_data, "_schedule_save", lambda: None)
 
 
 @pytest.fixture(autouse=True)

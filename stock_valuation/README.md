@@ -68,7 +68,11 @@ d'un plan d'épargne), indépendant de celui-ci.
   terminale, dette nette, et formule des comparables — pour que "pourquoi
   ce chiffre ?" se réponde en dépliant plutôt qu'en devant redemander.
 - Infobulles (ⓘ) sur les hypothèses du DCF, interface FR/EN, cache disque
-  des téléchargements (`yfinance`) pour limiter les appels réseau.
+  des téléchargements (`yfinance`) pour limiter les appels réseau : une
+  heure pour ce qui suit le cours, un jour pour les comptes annuels. Le
+  fichier est écrit au plus une fois toutes les 2 s (et non après chaque
+  appel), sans les entrées périmées : un marché chargé à froid passe
+  d'environ 15 s à 6-7 s, avec 2 écritures au lieu de près de 300.
 
 ## Notes de conception
 

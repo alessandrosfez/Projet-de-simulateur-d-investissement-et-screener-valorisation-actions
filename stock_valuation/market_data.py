@@ -3,6 +3,7 @@ Récupération des données de marché via yfinance, avec cache disque (équival
 minimal de st.cache_data(ttl=...)) pour éviter de retélécharger à chaque
 redémarrage tant que les données ont moins d'1h.
 """
+import atexit
 import functools
 import pickle
 import threading
@@ -22,6 +23,22 @@ from constants import SECTOR_FALLBACK
 CACHE_FILE = Path(__file__).with_name(".pea_forecast_cache.pkl")
 _cache_lock = threading.Lock()
 
+# Durées de cache : une heure pour tout ce qui suit le cours (fiche Yahoo, historiques de prix),
+# un jour pour les comptes annuels (BPA, flux de trésorerie, compte de résultat, bilan), qui ne
+# changent qu'à la publication des résultats. Les retélécharger chaque heure coûtait environ un
+# tiers du temps de chargement d'un titre pour des chiffres identiques.
+PRICE_TTL_SECONDS = 3600
+STATEMENTS_TTL_SECONDS = 86400
+# Une entrée plus vieille que la plus longue durée de cache ne sera plus jamais servie : elle est
+# écartée à l'écriture, sinon le fichier grossit sans fin d'un chargement à l'autre.
+MAX_ENTRY_AGE_SECONDS = 2 * STATEMENTS_TTL_SECONDS
+# Écriture sur disque regroupée : au plus une toutes les SAVE_DELAY_SECONDS. Réécrire tout le fichier
+# (plusieurs Mo) après chaque appel faisait près de 300 écritures par chargement d'un marché et en
+# doublait la durée.
+SAVE_DELAY_SECONDS = 2.0
+_save_timer: threading.Timer | None = None
+_timer_lock = threading.Lock()
+
 
 def _load_cache_from_disk() -> dict:
     if CACHE_FILE.exists():
@@ -37,14 +54,50 @@ _cache: dict = _load_cache_from_disk()
 
 
 def _save_cache_to_disk():
+    """Écrit une copie figée du cache (les autres fils continuent d'y ajouter des entrées pendant
+    l'écriture : sérialiser le dictionnaire vivant pouvait échouer), sans les entrées périmées."""
     with _cache_lock:
+        now = time.time()
+        snapshot = {key: entry for key, entry in list(_cache.items()) if now - entry[1] < MAX_ENTRY_AGE_SECONDS}
         try:
             tmp_path = CACHE_FILE.with_suffix(".tmp")
             with open(tmp_path, "wb") as f:
-                pickle.dump(_cache, f)
+                pickle.dump(snapshot, f)
             tmp_path.replace(CACHE_FILE)
         except Exception:
             pass
+
+
+def _schedule_save():
+    """Programme une écriture dans SAVE_DELAY_SECONDS, sauf si une écriture est déjà programmée :
+    toutes les entrées ajoutées entre-temps partent dans la même écriture."""
+    global _save_timer
+    with _timer_lock:
+        if _save_timer is not None:
+            return
+
+        def run():
+            global _save_timer
+            with _timer_lock:
+                _save_timer = None
+            _save_cache_to_disk()
+
+        _save_timer = threading.Timer(SAVE_DELAY_SECONDS, run)
+        _save_timer.daemon = True
+        _save_timer.start()
+
+
+def _flush_pending_save():
+    """À l'arrêt du processus : écrit tout de suite une écriture encore en attente."""
+    global _save_timer
+    with _timer_lock:
+        pending, _save_timer = _save_timer, None
+    if pending is not None:
+        pending.cancel()
+        _save_cache_to_disk()
+
+
+atexit.register(_flush_pending_save)
 
 
 def cached_ttl(ttl_seconds: int):
@@ -61,13 +114,13 @@ def cached_ttl(ttl_seconds: int):
                     return value
             value = func(*args)
             _cache[key] = (value, now)
-            _save_cache_to_disk()
+            _schedule_save()
             return value
         return wrapper
     return decorator
 
 
-@cached_ttl(3600)
+@cached_ttl(PRICE_TTL_SECONDS)
 def _fetch_ticker_info(ticker: str) -> dict:
     info = yf.Ticker(ticker).get_info()
     if not info or not any(info.get(k) for k in ("shortName", "longName", "quoteType", "currency")):
@@ -108,7 +161,7 @@ def _price_scale_factor(trailing_pe, trailing_eps, current_price) -> float:
 MINOR_CURRENCY_UNITS = {"GBp": ("GBP", 100), "GBX": ("GBP", 100), "ZAc": ("ZAR", 100), "ILA": ("ILS", 100)}
 
 
-@cached_ttl(3600)
+@cached_ttl(PRICE_TTL_SECONDS)
 def _fetch_fx_rate(from_currency: str, to_currency: str) -> float:
     """Dernière clôture de la paire Yahoo "XXXYYY=X" (1 XXX en YYY). Lève une exception si la paire
     n'a pas de cours, pour qu'un échec ne soit pas mis en cache."""
@@ -158,7 +211,7 @@ def major_currency(code: str | None) -> str | None:
     return MINOR_CURRENCY_UNITS.get(code, (code, 1))[0]
 
 
-@cached_ttl(3600)
+@cached_ttl(STATEMENTS_TTL_SECONDS)
 def _get_annual_eps(ticker: str) -> pd.Series:
     """BPA dilué (repli : de base) de chaque exercice clos, par date de clôture, dans la devise des
     comptes. Série vide si Yahoo ne le fournit pas."""
@@ -177,7 +230,7 @@ def _get_annual_eps(ticker: str) -> pd.Series:
     return pd.Series(dtype=float)
 
 
-@cached_ttl(3600)
+@cached_ttl(PRICE_TTL_SECONDS)
 def get_stock_pe_history(ticker: str) -> pd.Series:
     """Série de P/E historique hebdomadaire, sur les 5 dernières années au plus : cours de chaque
     semaine / BPA du dernier exercice PUBLIÉ à cette date (clôture + 3 mois, voir
@@ -221,7 +274,7 @@ def get_stock_pe_history(ticker: str) -> pd.Series:
     return implied_pe
 
 
-@cached_ttl(3600)
+@cached_ttl(PRICE_TTL_SECONDS)
 def get_stock_price_history(ticker: str, period: str = "5y", interval: str = "1mo") -> pd.Series:
     """Série de prix de clôture, corrigée du même décalage d'échelle prix/BPA que
     get_stock_pe_history (voir _price_scale_factor), mais sans exiger de BPA positif :
@@ -241,7 +294,7 @@ def get_stock_price_history(ticker: str, period: str = "5y", interval: str = "1m
     return hist / price_scale
 
 
-@cached_ttl(3600)
+@cached_ttl(PRICE_TTL_SECONDS)
 def get_stock_valuation(ticker: str) -> dict:
     """Prix et ratios de valorisation courants d'une action (P/E, PEG, P/B, rendement du
     dividende), plus sa position par rapport à son propre P/E historique sur 5 ans
@@ -280,7 +333,7 @@ def get_stock_valuation(ticker: str) -> dict:
 DCF_FCF_AVERAGING_YEARS = 3
 
 
-@cached_ttl(3600)
+@cached_ttl(STATEMENTS_TTL_SECONDS)
 def _get_annual_fcf_history(ticker: str) -> pd.DataFrame:
     """FCF annuel et ses deux composantes (flux de trésorerie d'exploitation, capex) quand Yahoo
     Finance les fournit, un exercice clos par ligne, le plus récent en premier. DataFrame vide si
@@ -297,7 +350,7 @@ def _get_annual_fcf_history(ticker: str) -> pd.DataFrame:
     return cf.loc[rows].T.dropna(subset=["Free Cash Flow"])
 
 
-@cached_ttl(3600)
+@cached_ttl(STATEMENTS_TTL_SECONDS)
 def _get_annual_income_statement(ticker: str) -> pd.DataFrame:
     """Compte de résultat annuel (Ticker.financials transposé, un exercice clos par ligne, le plus
     récent en premier), limité aux lignes utiles au calcul du ROIC. DataFrame vide si l'appel
@@ -314,7 +367,7 @@ def _get_annual_income_statement(ticker: str) -> pd.DataFrame:
     return fin.loc[rows].T
 
 
-@cached_ttl(3600)
+@cached_ttl(STATEMENTS_TTL_SECONDS)
 def _get_annual_balance_sheet(ticker: str) -> pd.DataFrame:
     """Bilan annuel (Ticker.balance_sheet transposé), même convention que
     _get_annual_income_statement, limité aux lignes utiles au calcul du ROIC."""
