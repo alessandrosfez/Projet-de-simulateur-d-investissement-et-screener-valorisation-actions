@@ -431,6 +431,11 @@ ruff check .
 pytest -v
 ```
 
+`test_callbacks_smoke.py` appelle chaque callback de l'écran avec les valeurs initiales de ses
+entrées, sans société analysée puis sur l'exemple Wirecard importé, y compris les callbacks des composants créés par l'analyse, données de marché simulées (aucun appel réseau). Il échoue si un
+callback lève une erreur ou renvoie un nombre de valeurs différent de ses sorties déclarées,
+des erreurs qui n'apparaissaient sinon qu'à l'écran.
+
 Les tests couvrent le moteur pur (normalisation sur des DataFrames
 synthétiques, postes manquants, identités comptables, classement
 sectoriel, devises, ratios de qualité des résultats et de BFR sur des cas

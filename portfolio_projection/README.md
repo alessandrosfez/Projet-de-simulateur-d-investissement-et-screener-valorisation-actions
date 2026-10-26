@@ -306,6 +306,11 @@ pytest -v
 mypy --disallow-untyped-defs --disallow-incomplete-defs engine.py portfolio_engine.py
 ```
 
+`test_callbacks_smoke.py` appelle chaque callback de l'écran avec les valeurs initiales de ses
+entrées, sur une base vide puis sur une base remplie de lignes fictives, données de marché simulées (aucun appel réseau). Il échoue si un
+callback lève une erreur ou renvoie un nombre de valeurs différent de ses sorties déclarées,
+des erreurs qui n'apparaissaient sinon qu'à l'écran.
+
 Les deux moteurs de calcul purs sont entièrement annotés et vérifiés par
 mypy en CI (avec `pandas-stubs`, sans quoi pandas serait vu comme non
 typé). `--disallow-untyped-defs` est indispensable : sans lui, mypy ignore
