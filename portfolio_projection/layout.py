@@ -8,6 +8,7 @@ callbacks Dash. Ce module ne dépend jamais du paquet callbacks/ ni de l'instanc
 import dash_ag_grid as dag
 import dash_bootstrap_components as dbc
 from dash import dash_table, dcc, html
+from dash.dash_table.Format import Format, Group, Scheme, Trim
 
 import portfolio_db
 import portfolio_engine
@@ -111,17 +112,37 @@ def grid_columns(columns: list, tooltip_header: dict | None = None, rows: list |
     return defs
 
 
+def _numeric_column(name: str, column_id: str, lang: str, decimals: int, trim: bool = False) -> dict:
+    """Colonne numérique d'un tableau de saisie, formatée à l'affichage seulement (la valeur gardée par le
+    tableau, qui sert à retrouver la ligne en base lors d'une suppression, reste intacte) : décimales
+    fixes, espace des milliers, virgule décimale en français. trim : retire les zéros finaux inutiles
+    (un cours à 4 décimales n'affiche pas « 60,4300 »)."""
+    fmt = Format(precision=decimals, scheme=Scheme.fixed, group=Group.yes, groups=3, group_delimiter=" ",
+                 decimal_delimiter="," if lang == "fr" else ".", trim=Trim.yes if trim else Trim.no)
+    return {"name": name, "id": column_id, "type": "numeric", "format": fmt}
+
+
 def table_style_overrides(dark: bool):
     """(style_header, style_cell, style_data) pour un dash_table.DataTable.
     dash_table applique ses propres couleurs par défaut (JS injecté à l'exécution,
     non couvert par le thème Bootstrap) : passer explicitement ces props est le
-    seul moyen fiable de le rendre lisible en mode sombre."""
-    if not dark:
-        return {}, TABLE_BASE_CELL_STYLE, {}
+    seul moyen fiable de le rendre lisible en mode sombre.
+
+    Même apparence que les tableaux AG Grid (.pea-grid, assets/theme.css) : police Inter, en-tête
+    teinté souligné de l'accent, filets horizontaux fins plutôt qu'un quadrillage, mêmes couleurs
+    de surface que les cartes. Les tableaux de saisie (achats, dividendes, poids, indices) restent
+    des DataTable pour leur suppression de ligne, mais se lisent comme les autres."""
+    if dark:
+        header_bg, ink, cell_bg, border, accent = "#1f2330", "#e6e8ef", "#171a23", "#2a2f3d", "#7b84ff"
+    else:
+        header_bg, ink, cell_bg, border, accent = "#f1f3f9", "#1f2433", "#ffffff", "#e4e7ef", "#636efa"
+    font = {"fontFamily": "Inter, -apple-system, Segoe UI, Roboto, sans-serif", "fontSize": "13px"}
     return (
-        {"backgroundColor": "#2b2b2b", "color": "#e9ecef", "border": "1px solid #444"},
-        {**TABLE_BASE_CELL_STYLE, "backgroundColor": "#1e1e1e", "color": "#e9ecef", "border": "1px solid #444"},
-        {"backgroundColor": "#1e1e1e", "color": "#e9ecef"},
+        {**font, "backgroundColor": header_bg, "color": ink, "fontWeight": "600", "padding": "0.6rem 0.8rem",
+         "border": "none", "borderBottom": f"2px solid {accent}"},
+        {**TABLE_BASE_CELL_STYLE, **font, "backgroundColor": cell_bg, "color": ink, "padding": "0.55rem 0.8rem",
+         "border": "none", "borderBottom": f"1px solid {border}"},
+        {"backgroundColor": cell_bg, "color": ink},
     )
 
 CONFIG_FIELDS = [
@@ -1071,7 +1092,7 @@ def build_tab3(lang):
                 data=weights_data,
                 columns=[
                     {"name": L(lang, "weight_ticker_label"), "id": "ticker"},
-                    {"name": L(lang, "weight_pct_label"), "id": "weight_pct"},
+                    _numeric_column(L(lang, "weight_pct_label"), "weight_pct", lang, 2, trim=True),
                 ],
             ),
         ]), className="mb-4"),
@@ -1087,9 +1108,9 @@ def build_tab3(lang):
                 columns=[
                     {"name": L(lang, "tx_col_ticker"), "id": "ticker"},
                     {"name": L(lang, "tx_col_date"), "id": "date"},
-                    {"name": L(lang, "tx_col_amount"), "id": "amount_eur"},
-                    {"name": L(lang, "tx_col_price"), "id": "price"},
-                    {"name": L(lang, "tx_col_fee"), "id": "fee_eur"},
+                    _numeric_column(L(lang, "tx_col_amount"), "amount_eur", lang, 2),
+                    _numeric_column(L(lang, "tx_col_price"), "price", lang, 4, trim=True),
+                    _numeric_column(L(lang, "tx_col_fee"), "fee_eur", lang, 2),
                 ],
             ),
         ]), className="mb-4"),
@@ -1104,7 +1125,7 @@ def build_tab3(lang):
                 columns=[
                     {"name": L(lang, "div_col_ticker"), "id": "ticker"},
                     {"name": L(lang, "div_col_date"), "id": "date"},
-                    {"name": L(lang, "div_col_amount"), "id": "amount_eur"},
+                    _numeric_column(L(lang, "div_col_amount"), "amount_eur", lang, 2),
                 ],
             ),
         ]), className="mb-4"),

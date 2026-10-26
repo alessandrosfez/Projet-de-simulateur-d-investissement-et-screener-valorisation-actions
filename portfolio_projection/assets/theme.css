@@ -112,6 +112,17 @@ h1, h2, h3, h4, h5, h6 { font-family: "Inter", sans-serif !important; font-weigh
     overflow: hidden;
     border: 1px solid var(--border-soft);
 }
+/* Même lecture que les tableaux AG Grid : survol de ligne teinté, croix de suppression discrète qui
+   ne s'affirme qu'au survol (elle efface une ligne de la base). */
+.dash-spreadsheet-container .dash-spreadsheet-inner tr:hover td {
+    background-color: color-mix(in srgb, var(--accent) 7%, var(--surface)) !important;
+}
+.dash-spreadsheet-container .dash-delete-cell {
+    color: var(--Dash-Text-Weak, #6c757d) !important; border: none !important;
+    border-bottom: 1px solid var(--border-soft) !important; background-color: var(--surface) !important;
+}
+.dash-spreadsheet-container .dash-delete-cell:hover { color: #d03b3b !important; }
+.dash-spreadsheet-container .dash-delete-header { border: none !important; background-color: var(--surface-2) !important; }
 
 /* -------- Classement des lignes (à côté du graphique soleil) -------- */
 .alloc-ranking { width: 100%; display: flex; flex-direction: column; gap: 0.85rem; }

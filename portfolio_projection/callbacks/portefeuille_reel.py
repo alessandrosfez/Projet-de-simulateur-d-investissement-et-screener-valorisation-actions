@@ -105,6 +105,7 @@ def _allocation_view(current_values: pd.Series, total: float, unpriced: list, in
     ids, labels, parents, values, colors, hover = (["root"], [L(lang, "allocation_center", total=total_text)], [""],
                                                    [float(exposure["value"].sum())], [surface], [L(lang, "allocation_total")])
     line_color = {}
+    readable = _readable_names(list(current_values.dropna().index))
     for _, group in exposure.iterrows():
         key, base = group["key"], index_color[group["key"]]
         ids.append(f"index:{key}"), labels.append(_index_label(key, lang)), parents.append("root")
@@ -115,7 +116,11 @@ def _allocation_view(current_values: pd.Series, total: float, unpriced: list, in
             # visiblement de la même famille.
             shade = chart_theme.blend(base, surface, 0.18 + 0.22 * rank / max(len(members), 1))
             line_color[ticker] = shade
-            ids.append(f"line:{ticker}"), labels.append(ticker.split(".")[0]), parents.append(f"index:{key}")
+            # L'indice est déjà écrit dans l'anneau intérieur : l'anneau extérieur nomme l'émetteur
+            # (« Amundi », « BNP ») pour un ETF, la société pour une action, plutôt qu'un ticker.
+            ring_label = (portfolio_engine.fund_issuer(get_ticker_name(ticker)) if key in UNDERLYING_INDICES
+                          else None) or readable.get(ticker, ticker.split(".")[0])
+            ids.append(f"line:{ticker}"), labels.append(ring_label), parents.append(f"index:{key}")
             values.append(float(current_values[ticker])), colors.append(shade), hover.append(_ticker_display_label(ticker))
     fig = make_allocation_sunburst(ids, labels, parents, values, colors, hover, L(lang, "allocation_chart_title"), "€",
                                    dark=dark, separators=L(lang, "plotly_separators"))
@@ -202,7 +207,9 @@ def _index_view(current_values: pd.Series, held_tickers: list, lang: str):
     alerts = []
     for _, dup in portfolio_engine.duplicate_index_exposures(exposure).iterrows():
         share = f"{dup['share'] * 100:.0f}"
-        names = list(dup["tickers"])
+        # « Amundi (XXX.PA) » plutôt que le ticker seul : l'émetteur dit de quel fonds il s'agit.
+        names = [f"{issuer} ({t})" if (issuer := portfolio_engine.fund_issuer(get_ticker_name(t))) else t
+                 for t in dup["tickers"]]
         tickers_text = f"{', '.join(names[:-1])} {L(lang, 'and_word')} {names[-1]}"
         alerts.append(dbc.Alert(L(lang, "index_duplicate_alert", tickers=tickers_text,
                                   index=_index_label(dup["key"], lang), share=share),

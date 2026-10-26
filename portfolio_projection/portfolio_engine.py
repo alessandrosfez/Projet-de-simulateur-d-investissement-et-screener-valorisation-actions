@@ -801,7 +801,7 @@ def known_tickers(transactions: pd.DataFrame, dividends: pd.DataFrame, target_we
 READABLE_NAME_MAX_CHARS = 24
 
 
-def _issuer(fund_name: str | None) -> str | None:
+def fund_issuer(fund_name: str | None) -> str | None:
     """Émetteur d'un ETF : premier mot de son nom (« AMUNDI PEA S&P 500 » -> « Amundi », « BNP Paribas
     Easy... » -> « BNP »). Sigle court gardé en majuscules."""
     if not fund_name or not fund_name.split():
@@ -837,7 +837,7 @@ def readable_line_names(index_of: dict[str, str], fund_names: dict[str, str | No
         same = [t for t in base if base[t] == label]
         if len(same) < 2:
             continue
-        issuers = {t: _issuer(fund_names.get(t)) for t in same}
+        issuers = {t: fund_issuer(fund_names.get(t)) for t in same}
         distinct = len({issuers[t] for t in same}) == len(same) and all(issuers.values())
         for t in same:
             names[t] = f"{label} · {issuers[t] if distinct else root(t)}"
