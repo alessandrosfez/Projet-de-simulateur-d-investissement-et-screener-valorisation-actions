@@ -24,4 +24,6 @@ def test_numeric_columns_show_na_for_missing_values_and_company_is_pinned():
     assert "replace('.', ',')" in layout.NUMBER_FORMATTERS["fr"]["function"]
     assert defs["PEG"]["headerTooltip"] == "aide PEG" and "headerTooltip" not in defs["Score"]
     assert defs["Entreprise"]["pinned"] == "left"
+    # Score : barre 0-100 dessinée par le rendu ScoreBar, plus de couleur de cellule.
+    assert defs["Score"]["cellRenderer"] == "ScoreBar" and "cellClassRules" not in defs["Score"]
     assert "valueFormatter" not in defs["Capitalisation"] and defs["Capitalisation"]["type"] == "rightAligned"

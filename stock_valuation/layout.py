@@ -40,7 +40,8 @@ PE_PERCENTILE_COLUMN = "Position vs historique 5 ans (percentile)"
 # manquants par 50 dans des colonnes techniques ; AG Grid évalue une vraie expression).
 # - PEG : < 1 croissance pas chère payée, 1-2 neutre, > 2 chère payée ; un PEG négatif ou nul
 #   (croissance estimée négative) n'a pas de sens et reste non colorié.
-# - Score composite : >= 70 haut du classement, 40-70 neutre, < 40 bas du classement.
+# - Score composite : pas de couleur de cellule, une barre 0-100 dessinée par le rendu « ScoreBar »
+#   (assets/dashAgGridComponentFunctions.js), verte >= 70, ambre 40-70, rouge < 40.
 # - P/E (trailing) : coloré selon le percentile du titre dans SA PROPRE histoire, jamais un seuil
 #   générique (un P/E bas ou haut dans l'absolu ne veut rien dire, voir « intro3 » dans i18n.py) :
 #   < 20 décoté, > 80 tendu, entre les deux volontairement neutre. Voir la section « Validité du
@@ -52,11 +53,6 @@ CELL_CLASS_RULES = {
         "cell-warn": "params.value != null && params.value >= 1 && params.value <= 2",
         "cell-bad": "params.value != null && params.value > 2",
     },
-    "Score": {
-        "cell-good": "params.value != null && params.value >= 70",
-        "cell-warn": "params.value != null && params.value >= 40 && params.value < 70",
-        "cell-bad": "params.value != null && params.value < 40",
-    },
     "P/E (trailing)": {
         "cell-good": f"{_PCT} != null && {_PCT} < 20",
         "cell-bad": f"{_PCT} != null && {_PCT} > 80",
@@ -66,7 +62,7 @@ CELL_CLASS_RULES = {
 # quand la grille est encore vide (données chargées plus tard par callback) et laisserait toutes
 # les colonnes à 200 px. Les en-têtes longs passent sur plusieurs lignes.
 COLUMN_WIDTHS = {
-    "Entreprise": 180, "Ticker": 100, "Score": 88, "Secteur": 170, "Devise": 84, "Prix": 92,
+    "Entreprise": 180, "Ticker": 100, "Score": 116, "Secteur": 170, "Devise": 84, "Prix": 92,
     "P/E (trailing)": 100, "P/E (prévisionnel)": 132, "PEG": 80, "EV/EBITDA": 104, "P/B": 76,
     "Rendement dividende (%)": 120, "P/E moyen 5 ans (approx.)": 124, PE_PERCENTILE_COLUMN: 136,
     "Capitalisation": 140,
@@ -123,6 +119,10 @@ def stocks_column_defs(labels: dict[str, str], help_texts: dict[str, str], lang:
             col["type"] = "rightAligned"
         if column in CELL_CLASS_RULES:
             col["cellClassRules"] = CELL_CLASS_RULES[column]
+        if column == "Score":
+            # Chiffre arrondi et barre 0-100 (assets/dashAgGridComponentFunctions.js). Le tri reste
+            # sur la valeur exacte, le rendu ne change que l'affichage.
+            col["cellRenderer"] = "ScoreBar"
         if column == "Entreprise":
             col["pinned"] = "left"
         defs.append(col)

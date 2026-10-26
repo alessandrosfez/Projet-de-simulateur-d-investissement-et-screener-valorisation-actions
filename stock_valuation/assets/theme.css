@@ -148,6 +148,19 @@ h1, h2, h3, h4, h5, h6 { font-family: "Inter", sans-serif !important; font-weigh
 [data-bs-theme="dark"] .pea-grid .cell-good { background-color: #173a24; color: #8fd19e; }
 [data-bs-theme="dark"] .pea-grid .cell-warn { background-color: #3a2f12; color: #e0c46c; }
 [data-bs-theme="dark"] .pea-grid .cell-bad  { background-color: #3a1616; color: #e88a8a; }
+/* Barre du score composite (rendu ScoreBar, assets/dashAgGridComponentFunctions.js) : chiffre à gauche,
+   piste pleine largeur à droite, bout arrondi. Mêmes trois niveaux que les cellules colorées. */
+.pea-grid { --score-good: #0b8a0b; --score-warn: #d99a00; --score-bad: #d03b3b; }
+[data-bs-theme="dark"] .pea-grid { --score-good: #3fbf3f; --score-warn: #f2b452; --score-bad: #ff6b6b; }
+.pea-grid .score-cell { display: flex; align-items: center; gap: 0.5rem; height: 100%; }
+.pea-grid .score-value { min-width: 1.6rem; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
+.pea-grid .score-track { flex: 1; height: 6px; border-radius: 3px; overflow: hidden;
+                         background: color-mix(in srgb, var(--ag-foreground-color, #1f2433) 10%, transparent); }
+.pea-grid .score-fill { display: block; height: 100%; border-radius: 3px; }
+.pea-grid .score-fill.good { background: var(--score-good); }
+.pea-grid .score-fill.warn { background: var(--score-warn); }
+.pea-grid .score-fill.bad { background: var(--score-bad); }
+.pea-grid .score-na { color: var(--Dash-Text-Weak, #6c757d); }
 
 /* -------- Liens -------- */
 a { color: var(--accent); }
