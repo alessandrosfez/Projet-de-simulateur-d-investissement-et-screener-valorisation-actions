@@ -553,13 +553,21 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
     current_value_total = float(current_values.sum()) if not current_values.empty else 0.0
     totals = portfolio_engine.compute_totals(transactions, dividends, current_value_total)
     real_series = portfolio_engine.reconstruct_equity_curve(transactions, price_histories)
+    unpriced = [t for t in holdings["ticker"] if t not in current_values.index] if not holdings.empty else []
+    since = None
+    if not transactions.empty and not unpriced:
+        # Relevé du jour, seulement quand toutes les lignes ont un cours : une ligne manquante ferait
+        # enregistrer une fausse baisse. Lu AVANT d'écrire le relevé du jour.
+        today = pd.Timestamp.today().normalize()
+        cost = portfolio_engine.invested_cost(transactions)
+        since = portfolio_engine.since_last_visit(portfolio_db.get_value_snapshots(), today, current_value_total, cost)
+        portfolio_db.record_value_snapshot(today.strftime("%Y-%m-%d"), current_value_total, cost)
     totals_cards = build_portfolio_totals_cards(totals, lang, real_series=real_series, dark=dark,
-                                               palette=chart_theme.palette_for(None, dark))
+                                               palette=chart_theme.palette_for(None, dark), since=since)
     if transactions.empty:
         # Portefeuille vide : état illustré qui mène au formulaire d'achat, plutôt que des tuiles à 0 €.
         totals_cards = layout.empty_state("portfolio", L(lang, "empty_portfolio_title"), L(lang, "empty_portfolio_text"),
                                           L(lang, "empty_portfolio_action"), "#anchor-tab3-tx")
-    unpriced = [t for t in holdings["ticker"] if t not in current_values.index] if not holdings.empty else []
     if unpriced:
         # Sans cours, une ligne manque à la valeur actuelle mais pas au capital investi : la plus-value
         # affichée serait une fausse perte. Avertissement AU-DESSUS des totaux, pas en note de bas de graphique.
@@ -851,6 +859,50 @@ def refresh_line_contributions(_trigger, lang, dark_mode):
     )
     note = L(lang, "allocation_unpriced", tickers=", ".join(unpriced)) if unpriced else ""
     return fig, note
+
+
+@app.callback(
+    Output("tab3-drift-alert", "children"),
+    Input("tab3-refresh-trigger", "data"),
+    Input("tab3-drift-threshold", "value"),
+    Input("lang-radio", "value"),
+)
+def refresh_drift_alert(_trigger, threshold, lang):
+    """Lignes qui s'écartent de leur poids cible de plus du seuil réglé (portfolio_engine.drift_alerts),
+    en haut de l'onglet pour être vues sans aller jusqu'au rééquilibrage. Rien sans poids cibles, ni
+    si une ligne n'a pas de cours (la répartition serait fausse)."""
+    lang = lang or "fr"
+    target_weights = portfolio_db.get_target_weights()
+    if target_weights.empty or not threshold:
+        return ""
+    holdings = portfolio_engine.reconstruct_holdings(portfolio_db.get_transactions())
+    current_values = pd.Series(dtype=float)
+    for _, row in holdings.iterrows():
+        price = get_current_price(row["ticker"])
+        if price is None:
+            return ""
+        current_values[row["ticker"]] = row["quantity"] * price
+    alerts = portfolio_engine.drift_alerts(portfolio_engine.compute_rebalancing_plan(target_weights, current_values),
+                                           float(threshold))
+    if alerts.empty:
+        return ""
+    names = _readable_names(alerts["ticker"])
+
+    def pct(value):
+        return f"{value:.1f}".replace(".", "," if lang == "fr" else ".")
+
+    items = [
+        html.Li(L(lang, "drift_line_under" if r.gap_pt < 0 else "drift_line_over", name=names[r.ticker],
+                  current=pct(r.current_pct), target=pct(r.target_pct), gap=pct(abs(r.gap_pt)),
+                  amount=f"{abs(r.delta_eur):,.0f} €".replace(",", " ")))
+        for r in alerts.itertuples()
+    ]
+    return dbc.Alert([
+        html.Div([html.I(className="bi bi-exclamation-triangle me-2", **{"aria-hidden": "true"}),
+                  L(lang, "drift_title", threshold=pct(float(threshold)))], className="fw-semibold mb-1"),
+        html.Ul(items, className="mb-1"),
+        html.A(L(lang, "drift_link"), href="#anchor-tab3-rebalancing"),
+    ], color="warning", className="py-2 mb-3")
 
 
 def _collapsed_figure(dark: bool):

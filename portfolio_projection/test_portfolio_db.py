@@ -140,3 +140,12 @@ def test_index_override_roundtrip_and_clear():
     assert db.get_index_overrides() == {"ESE.PA": "Nasdaq-100"}
     db.set_index_override("ESE.PA", None)
     assert db.get_index_overrides() == {}
+
+
+def test_value_snapshot_is_one_row_per_day_and_keeps_the_latest_value():
+    db.record_value_snapshot("2026-10-25", 100.0, 90.0)
+    db.record_value_snapshot("2026-10-26", 105.0, 95.0)
+    db.record_value_snapshot("2026-10-26", 107.0, 95.0)
+    snapshots = db.get_value_snapshots()
+    assert list(snapshots["day"]) == ["2026-10-25", "2026-10-26"]
+    assert snapshots.iloc[-1]["value_eur"] == 107.0

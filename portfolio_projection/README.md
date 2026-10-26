@@ -31,6 +31,17 @@ qu'une simulation aurait donné.
   plus-value une pastille ▲/▼ (flèche, signe et couleur : jamais la couleur
   seule). Sur la courbe de valeur, un point marque chaque jour d'achat,
   proportionnel au montant, et le capital investi est tracé en escalier.
+- **Depuis ta dernière visite** : chaque ouverture de l'onglet enregistre la
+  valeur et le capital investi du jour (table `value_snapshots`, migration
+  v3, une ligne par jour). Sous la valeur actuelle, l'écart avec le dernier
+  relevé d'un jour précédent, et la part due au marché (l'écart moins les
+  versements faits entre-temps). Aucun relevé n'est pris tant qu'une ligne
+  n'a pas de cours, pour ne pas enregistrer une fausse baisse.
+- **Alerte de dérive** : sous les tuiles, les lignes éloignées de leur
+  pondération cible de plus d'un seuil réglable (5 points par défaut), avec
+  le sens de l'écart et un lien vers le prochain versement. Une ligne
+  au-dessus de sa cible est à laisser de côté dans les versements suivants :
+  aucune vente n'est proposée.
 - **Répartition actuelle** : un graphique « soleil » avec le total au
   centre, les indices suivis sur l'anneau intérieur et les lignes autour,
   chacune dans une nuance de la couleur de son indice. À côté, les lignes

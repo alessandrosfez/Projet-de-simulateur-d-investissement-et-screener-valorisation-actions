@@ -798,6 +798,44 @@ def known_tickers(transactions: pd.DataFrame, dividends: pd.DataFrame, target_we
     return sorted(tickers)
 
 
+DEFAULT_DRIFT_THRESHOLD_PT = 5.0
+
+
+def drift_alerts(plan: pd.DataFrame, threshold_pt: float) -> pd.DataFrame:
+    """Lignes dont la part actuelle s'écarte de leur cible de plus de threshold_pt points (plan : voir
+    compute_rebalancing_plan), de la plus éloignée à la moins éloignée, avec gap_pt (actuel - cible,
+    en points) et delta_eur (montant à y diriger, négatif pour une ligne au-dessus de sa cible, que
+    les prochains versements doivent alors ignorer : aucune vente proposée)."""
+    columns = ["ticker", "current_pct", "target_pct", "gap_pt", "delta_eur"]
+    if plan.empty or threshold_pt is None:
+        return pd.DataFrame(columns=columns)
+    gaps = plan.assign(gap_pt=plan["current_pct"] - plan["target_pct"])
+    flagged = gaps[gaps["gap_pt"].abs() > float(threshold_pt)]
+    order = flagged["gap_pt"].abs().sort_values(ascending=False).index
+    return flagged.loc[order, columns].reset_index(drop=True)
+
+
+def since_last_visit(snapshots: pd.DataFrame, today: DateLike, current_value: float,
+                     current_invested: float) -> dict | None:
+    """Évolution depuis le dernier relevé d'un jour ANTÉRIEUR à today (voir
+    portfolio_db.record_value_snapshot) : {"day", "value_delta", "market_delta"}. value_delta est la
+    variation de valeur, versements compris ; market_delta la part due au marché seul, c'est-à-dire
+    la variation de la plus-value (valeur - montant investi). None sans relevé antérieur."""
+    if snapshots.empty:
+        return None
+    today_str = pd.Timestamp(today).strftime("%Y-%m-%d")
+    earlier = snapshots[snapshots["day"] < today_str]
+    if earlier.empty:
+        return None
+    last = earlier.iloc[-1]
+    return {
+        "day": pd.Timestamp(str(last["day"])),
+        "value_delta": float(current_value) - float(last["value_eur"]),
+        "market_delta": (float(current_value) - float(current_invested))
+        - (float(last["value_eur"]) - float(last["invested_eur"])),
+    }
+
+
 READABLE_NAME_MAX_CHARS = 24
 
 

@@ -33,6 +33,11 @@ _MIGRATIONS = [
     # v2 : indice suivi corrigé à la main pour une ligne (voir portfolio_engine.detect_underlying_index).
     # Seules les corrections sont stockées : la détection automatique reste recalculée.
     "CREATE TABLE IF NOT EXISTS index_overrides (ticker TEXT PRIMARY KEY, index_key TEXT NOT NULL);",
+    # v3 : valeur du portefeuille relevée une fois par jour d'ouverture de l'onglet (voir
+    # record_value_snapshot) : « depuis ta dernière visite » et un historique qui ne dépend plus de
+    # Yahoo pour le passé.
+    "CREATE TABLE IF NOT EXISTS value_snapshots (day TEXT PRIMARY KEY, value_eur REAL NOT NULL, "
+    "invested_eur REAL NOT NULL);",
 ]
 
 
@@ -286,3 +291,26 @@ def get_target_weights() -> pd.DataFrame:
 
 
 init_db()
+
+
+def record_value_snapshot(day: str, value_eur: float, invested_eur: float):
+    """Relevé du jour (une ligne par jour, la dernière valeur du jour remplace les précédentes)."""
+    conn = _get_connection()
+    try:
+        conn.execute(
+            "INSERT INTO value_snapshots (day, value_eur, invested_eur) VALUES (?, ?, ?) "
+            "ON CONFLICT(day) DO UPDATE SET value_eur = excluded.value_eur, invested_eur = excluded.invested_eur",
+            (day, float(value_eur), float(invested_eur)),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_value_snapshots() -> pd.DataFrame:
+    """Relevés quotidiens, du plus ancien au plus récent (colonnes day, value_eur, invested_eur)."""
+    conn = _get_connection()
+    try:
+        return pd.read_sql_query("SELECT day, value_eur, invested_eur FROM value_snapshots ORDER BY day", conn)
+    finally:
+        conn.close()

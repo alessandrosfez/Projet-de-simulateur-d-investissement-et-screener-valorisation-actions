@@ -810,3 +810,38 @@ def test_readable_names_fall_back_to_ticker_root_when_issuers_collide_or_names_m
     assert names["XYZ.PA"] == "XYZ"
     long_name = m.readable_line_names({"ABC.PA": m.STOCK_INDEX_KEY}, {"ABC.PA": "Une Société Au Nom Vraiment Très Long"})
     assert len(long_name["ABC.PA"]) <= m.READABLE_NAME_MAX_CHARS and long_name["ABC.PA"].endswith("…")
+
+
+# ---------- depuis ta dernière visite ----------
+
+def test_since_last_visit_separates_market_effect_from_new_contributions():
+    snapshots = pd.DataFrame([
+        {"day": "2026-10-20", "value_eur": 1000.0, "invested_eur": 950.0},
+        {"day": "2026-10-22", "value_eur": 1010.0, "invested_eur": 950.0},
+        {"day": "2026-10-26", "value_eur": 1500.0, "invested_eur": 1450.0},  # relevé du jour : ignoré
+    ])
+    # Aujourd'hui : 1 520 € pour 1 450 € investis. Depuis le 22/10 : +510 € dont 500 € versés, +10 € de marché.
+    result = m.since_last_visit(snapshots, "2026-10-26", 1520.0, 1450.0)
+    assert result["day"] == pd.Timestamp("2026-10-22")
+    assert result["value_delta"] == pytest.approx(510.0)
+    assert result["market_delta"] == pytest.approx(10.0)
+
+
+def test_since_last_visit_without_an_earlier_snapshot():
+    empty = pd.DataFrame(columns=["day", "value_eur", "invested_eur"])
+    assert m.since_last_visit(empty, "2026-10-26", 100.0, 100.0) is None
+    only_today = pd.DataFrame([{"day": "2026-10-26", "value_eur": 100.0, "invested_eur": 100.0}])
+    assert m.since_last_visit(only_today, "2026-10-26", 100.0, 100.0) is None
+
+
+# ---------- alerte de dérive ----------
+
+def test_drift_alerts_flag_lines_beyond_the_threshold_largest_gap_first():
+    plan = m.compute_rebalancing_plan(_weights(A=50, B=30, C=20), pd.Series({"A": 300.0, "B": 400.0, "C": 300.0}))
+    # Actuel : A 30 %, B 40 %, C 30 % ; écarts -20, +10, +10 pt.
+    alerts = m.drift_alerts(plan, 5.0)
+    assert alerts.iloc[0]["ticker"] == "A" and set(alerts["ticker"][1:]) == {"B", "C"}  # B et C à égalité
+    assert alerts.iloc[0]["gap_pt"] == pytest.approx(-20.0)
+    assert alerts.iloc[0]["delta_eur"] == pytest.approx(200.0)
+    assert m.drift_alerts(plan, 25.0).empty
+    assert m.drift_alerts(m.compute_rebalancing_plan(_weights(), pd.Series(dtype=float)), 5.0).empty

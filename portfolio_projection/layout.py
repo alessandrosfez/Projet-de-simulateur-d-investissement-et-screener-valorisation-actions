@@ -949,6 +949,7 @@ def build_tab3(lang):
     return html.Div([
         quick_nav,
         html.Div(id="tab3-totals-cards"),
+        html.Div(id="tab3-drift-alert"),
         html.Div([
             html.Span(id="tab3-real-pace-display", className="text-muted d-block mb-1", style={"fontSize": "0.85rem"}),
             dbc.Button(L(lang, "btn_use_real_pace"), id="tab3-btn-use-real-pace", color="link", size="sm",
@@ -1066,6 +1067,16 @@ def build_tab3(lang):
                     id="tab3-next-contribution-amount", type="number", min=0, step=10,
                     value=_default_next_contribution(transactions_df), debounce=True,
                     className="form-control form-control-sm", style={"maxWidth": "180px"},
+                ),
+                # Seuil de l'alerte de dérive affichée en haut de l'onglet (portfolio_engine.drift_alerts),
+                # gardé d'une session à l'autre.
+                html.Div([dbc.Label(L(lang, "drift_threshold_label"), className="mb-0 mt-2",
+                                    html_for="tab3-drift-threshold")]
+                         + info_tooltip("drift-threshold-info", L(lang, "drift_threshold_help"))),
+                dcc.Input(
+                    id="tab3-drift-threshold", type="number", min=1, max=50, step=1,
+                    value=portfolio_engine.DEFAULT_DRIFT_THRESHOLD_PT, debounce=True, persistence=True,
+                    persistence_type="local", className="form-control form-control-sm", style={"maxWidth": "120px"},
                 ),
             ], className="mb-2"),
             dcc.Loading(**LOADING_PROPS, children=[

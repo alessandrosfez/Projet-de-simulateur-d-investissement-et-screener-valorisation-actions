@@ -234,6 +234,16 @@ TRANSLATIONS = {
         "nav3_weights": "Poids cibles",
         "nav3_tx": "Achats",
         "nav3_div": "Saisie dividendes",
+        "since_last_visit_sub": "{delta} depuis le {day} (dont {market} de marché)",
+        "drift_threshold_label": "Seuil d'alerte de dérive (points)",
+        "drift_threshold_help": "Une ligne dont la part actuelle s'écarte de sa cible de plus de ce nombre de "
+                                 "points est signalée en haut de l'onglet. 5 points par défaut.",
+        "drift_title": "Lignes à plus de {threshold} points de leur cible",
+        "drift_line_under": "{name} : {current} % pour une cible de {target} % ({gap} pt en dessous), {amount} à y "
+                            "diriger depuis tes prochains versements",
+        "drift_line_over": "{name} : {current} % pour une cible de {target} % ({gap} pt au-dessus), à laisser de côté "
+                           "dans tes prochains versements (aucune vente proposée)",
+        "drift_link": "Voir où placer ton prochain versement",
         "section_allocation": "Répartition actuelle",
         "empty_portfolio_title": "Ton portefeuille réel est vide",
         "empty_portfolio_text": "Ajoute ton premier achat, ou importe un export CSV (Trade Republic ou le modèle de l'outil) : valeur, gains, répartition et performance se calculeront automatiquement.",
@@ -841,6 +851,16 @@ TRANSLATIONS = {
         "nav3_weights": "Target weights",
         "nav3_tx": "Purchases",
         "nav3_div": "Log dividends",
+        "since_last_visit_sub": "{delta} since {day} ({market} from the market)",
+        "drift_threshold_label": "Drift alert threshold (points)",
+        "drift_threshold_help": "A line whose current share is more than this many points away from its target is "
+                                 "flagged at the top of the tab. 5 points by default.",
+        "drift_title": "Lines more than {threshold} points from their target",
+        "drift_line_under": "{name}: {current}% for a {target}% target ({gap} pt below), {amount} to direct to it "
+                            "from your next contributions",
+        "drift_line_over": "{name}: {current}% for a {target}% target ({gap} pt above), to leave aside in your next "
+                           "contributions (no sale suggested)",
+        "drift_link": "See where to put your next contribution",
         "section_allocation": "Current allocation",
         "empty_portfolio_title": "Your real portfolio is empty",
         "empty_portfolio_text": "Add your first purchase, or import a CSV export (Trade Republic or the tool's template): value, gains, allocation and performance will be computed automatically.",
