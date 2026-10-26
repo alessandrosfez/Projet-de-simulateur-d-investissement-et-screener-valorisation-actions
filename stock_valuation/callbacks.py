@@ -280,11 +280,46 @@ def update_sector_filter_options(rows, lang):
 @app.callback(
     Output("watchlist-dropdown", "options"),
     Input("stocks-raw-store", "data"),
+    Input("watchlist-dropdown", "value"),
 )
-def update_watchlist_options(rows):
-    if not rows:
-        return []
-    return [{"label": f"{r['Entreprise']} ({r['Ticker']})", "value": r["Ticker"]} for r in rows]
+def update_watchlist_options(rows, selected):
+    """Titres chargés, plus ceux déjà suivis qui n'y sont pas (marché décoché, données pas encore
+    restaurées) : une valeur choisie a toujours son option, et la liste déroulante ne la retire
+    jamais d'elle-même avant le chargement des données."""
+    options = [{"label": f"{r['Entreprise']} ({r['Ticker']})", "value": r["Ticker"]} for r in rows or []]
+    known = {o["value"] for o in options}
+    followed = list(dict.fromkeys(list(selected or []) + journal_db.get_watchlist()))
+    return options + [{"label": t, "value": t} for t in followed if t not in known]
+
+
+@app.callback(
+    Output("watchlist-dropdown", "options", allow_duplicate=True),
+    Output("watchlist-dropdown", "value"),
+    Input("stocks-restore", "data"),
+    State("stocks-raw-store", "data"),
+    prevent_initial_call="initial_duplicate",
+)
+def restore_watchlist(_restore, rows):
+    """À chaque construction de l'écran (ouverture de la page, changement de langue) : remet la liste
+    de suivi enregistrée (journal_db.get_watchlist), avec ses options DANS LE MÊME envoi. La liste
+    déroulante de Dash efface d'elle-même une valeur absente de ses options : une valeur arrivée avant
+    ses options était effacée, et cet effacement enregistré, selon l'ordre d'arrivée. C'est ce qui
+    vidait la liste au rechargement, avec la persistance du navigateur comme avec un stockage serveur
+    restauré sans ses options."""
+    saved = journal_db.get_watchlist()
+    return update_watchlist_options(rows, saved), saved
+
+
+@app.callback(
+    Output("watchlist-saved", "data"),
+    Input("watchlist-dropdown", "value"),
+    prevent_initial_call=True,
+)
+def save_watchlist(tickers):
+    """Enregistre la liste à chaque modification. Pas d'appel au premier affichage : la valeur vide
+    de la mise en page initiale effacerait sinon la liste enregistrée avant sa restauration."""
+    journal_db.set_watchlist(list(tickers or []))
+    return len(tickers or [])
 
 
 # Icône de chaque alerte de la liste de suivi : l'icône et le libellé portent le sens ensemble.

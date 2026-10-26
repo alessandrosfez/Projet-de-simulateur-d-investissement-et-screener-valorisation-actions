@@ -31,3 +31,11 @@ def test_migrations_are_applied_once():
     journal_db.init_db(conn)
     journal_db.init_db(conn)
     assert conn.execute("PRAGMA user_version").fetchone()[0] == len(journal_db._MIGRATIONS)
+
+
+def test_watchlist_keeps_order_and_drops_duplicates():
+    assert journal_db.get_watchlist() == []
+    journal_db.set_watchlist(["BBB.PA", "AAA.PA", "BBB.PA", ""])
+    assert journal_db.get_watchlist() == ["BBB.PA", "AAA.PA"]
+    journal_db.set_watchlist([])
+    assert journal_db.get_watchlist() == []

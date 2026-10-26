@@ -245,3 +245,14 @@ def test_failed_automatic_refresh_keeps_the_rows_on_screen(offline, monkeypatch)
     finally:
         context_value.reset(token)
     assert rows is dash.no_update and loaded_at is dash.no_update and warning
+
+
+def test_watchlist_is_restored_together_with_its_options():
+    """La liste déroulante efface une valeur absente de ses options : la liste restaurée doit arriver
+    avec une option pour chacun de ses titres, même avant tout chargement de données."""
+    journal_db.set_watchlist(["AAA.PA", "ZZZ.PA"])
+    options, value = callbacks.restore_watchlist(0, [{"Ticker": "AAA.PA", "Entreprise": "Alpha"}])
+    assert value == ["AAA.PA", "ZZZ.PA"]
+    assert {o["value"] for o in options} >= set(value)
+    options, value = callbacks.restore_watchlist(0, None)
+    assert {o["value"] for o in options} == {"AAA.PA", "ZZZ.PA"}

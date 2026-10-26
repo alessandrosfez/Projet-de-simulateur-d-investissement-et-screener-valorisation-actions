@@ -4,9 +4,9 @@ cible et une date de revue. Une ligne par titre, stockée en SQLite (stdlib) dan
 ignoré par git (.stock_valuation_journal.db) : ces notes sont personnelles et ne doivent jamais
 arriver dans le dépôt.
 
-C'est aussi le seul stockage durable de cet outil : la liste de suivi (watchlist-dropdown) ne survit
-pas au rechargement de la page (voir layout.py), alors que les titres du journal, si. Ils sont donc
-toujours pris en compte par les alertes, qu'ils soient dans la liste de suivi ou non.
+Le même fichier garde la liste de suivi (table watchlist) : stockée côté serveur plutôt que dans le
+navigateur, elle survit au rechargement de la page (voir callbacks.restore_watchlist). Les titres du
+journal sont pris en compte par les alertes, qu'ils soient dans la liste de suivi ou non.
 
 Le prix cible est exprimé dans la devise de cotation du titre (celle de la colonne « Prix »), jamais
 converti : comparer un cours en pence à une cible en livres fausserait l'alerte.
@@ -25,6 +25,8 @@ _MIGRATIONS = [
     # chiffrée reste utile) ; review_date au format AAAA-MM-JJ, comparable comme du texte.
     "CREATE TABLE IF NOT EXISTS journal (ticker TEXT PRIMARY KEY, thesis TEXT NOT NULL DEFAULT '', "
     "target_price REAL, review_date TEXT, updated_at TEXT NOT NULL);",
+    # v2 : liste de suivi, dans l'ordre où les titres ont été ajoutés.
+    "CREATE TABLE IF NOT EXISTS watchlist (ticker TEXT PRIMARY KEY, position INTEGER NOT NULL);",
 ]
 
 
@@ -82,6 +84,28 @@ def get_entries() -> list[dict]:
             "ORDER BY review_date IS NULL, review_date, ticker")
         columns = [c[0] for c in cursor.description]
         return [dict(zip(columns, row)) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+
+def get_watchlist() -> list[str]:
+    """Tickers de la liste de suivi, dans l'ordre d'ajout."""
+    conn = _get_connection()
+    try:
+        return [row[0] for row in conn.execute("SELECT ticker FROM watchlist ORDER BY position")]
+    finally:
+        conn.close()
+
+
+def set_watchlist(tickers: list[str]):
+    """Remplace la liste de suivi (doublons écartés, ordre gardé)."""
+    unique = list(dict.fromkeys(t for t in tickers if t))
+    conn = _get_connection()
+    try:
+        conn.execute("DELETE FROM watchlist")
+        conn.executemany("INSERT INTO watchlist (ticker, position) VALUES (?, ?)",
+                         [(t, i) for i, t in enumerate(unique)])
+        conn.commit()
     finally:
         conn.close()
 

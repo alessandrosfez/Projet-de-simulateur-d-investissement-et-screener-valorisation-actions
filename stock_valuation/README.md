@@ -50,9 +50,14 @@ d'un plan d'épargne), indépendant de celui-ci.
   montre l'écart du cours à la cible ; les revues dont la date est passée
   sont rappelées en tête. Stocké dans un fichier SQLite local
   (`.stock_valuation_journal.db`, ignoré par git, migrations versionnées).
-  C'est le seul stockage durable de l'outil : les titres du journal restent
-  suivis par les alertes même quand la liste de suivi, qui ne survit pas au
-  rechargement de la page, est vide.
+  Chaque fiche porte une jauge : cours, prix cible, DCF par défaut et
+  comparables P/E sur une même piste. Les titres du journal sont suivis par
+  les alertes, qu'ils soient dans la liste de suivi ou non.
+- **Liste de suivi durable** : enregistrée dans le même fichier local et
+  restaurée à chaque ouverture de la page ou changement de langue. La valeur
+  et ses options sont envoyées ensemble : la liste déroulante efface d'elle-même
+  une valeur absente de ses options, ce qui vidait la liste au rechargement
+  quand la valeur arrivait la première.
 - **« Football field »** : une barre horizontale par méthode (DCF selon les
   scénarios bas/haut, DCF selon la grille de sensibilité, comparables P/E et
   VE/EBITDA du 1er au 3e quartile des pairs, médiane en valeur centrale),

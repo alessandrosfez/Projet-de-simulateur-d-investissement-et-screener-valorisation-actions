@@ -137,9 +137,9 @@ def stocks_column_defs(labels: dict[str, str], help_texts: dict[str, str], lang:
 # Champs dont la valeur doit survivre à un changement de langue (voir gv() et
 # callbacks.rebuild_on_language_change) : pas d'export/import JSON dans ce
 # projet (contrairement à portfolio_projection), juste la persistance de
-# session normale. La watchlist (watchlist-dropdown) n'a PAS de persistance navigateur — testé et
-# abandonné, voir le commentaire sur sa définition plus bas — mais reste ici pour survivre au
-# moins à un changement de langue en cours de session, comme le reste de ces champs.
+# session normale. La watchlist (watchlist-dropdown) est enregistrée côté serveur (journal_db,
+# callbacks.restore_watchlist / save_watchlist) ; elle reste ici pour garder sa valeur exacte
+# pendant la reconstruction de l'écran au changement de langue.
 TAB_STATE_FIELDS = [
     ("universe-checklist", "value"), ("sector-filter", "value"),
     ("filter-pe-max", "value"), ("filter-peg-max", "value"), ("filter-div-min", "value"), ("filter-score-min", "value"),
@@ -254,6 +254,7 @@ def build_tab3(lang, v=None):
         # page, changement de langue, qui sinon viderait le tableau).
         html.Div(id="stocks-freshness", className="freshness-line mb-1"),
         dcc.Store(id="stocks-restore", data=0),
+        dcc.Store(id="watchlist-saved"),
         dcc.Store(id="stocks-loaded-at"),
         dcc.Store(id="stocks-auto-refresh"),
         dcc.Interval(id="freshness-interval", interval=60_000, n_intervals=0),
@@ -327,16 +328,11 @@ def build_tab3(lang, v=None):
             dbc.Label(L(lang, "watchlist_label"), className="mb-1"),
             dbc.Row([
                 dbc.Col(
-                    # Volontairement sans persistence navigateur : la watchlist ne survit qu'à la
-                    # session en cours (retour à vide au rechargement de la page). Testé avec
-                    # persistence=True (natif) et avec un dcc.Store dédié storage_type="local" :
-                    # les deux se sont heurtés au même comportement erratique au rechargement
-                    # (le storage repassait à [] avant que la restauration n'ait pu s'appliquer,
-                    # course entre l'hydratation cliente du storage et le premier aller-retour de
-                    # callback) sans qu'une cause précise n'ait pu être isolée. Pas bloquant pour
-                    # l'usage (choisir des valeurs, filtrer dessus pendant qu'on explore le
-                    # tableau), donc pas retenté pour l'instant plutôt que de perdre plus de temps
-                    # dessus.
+                    # Sans persistance navigateur : testée (persistence=True, puis dcc.Store local),
+                    # elle repassait parfois à [] au rechargement avant que la restauration ne
+                    # s'applique. La liste est donc enregistrée côté serveur (journal_db) et remise
+                    # par callbacks.restore_watchlist ; ses titres gardent toujours leur option
+                    # (update_watchlist_options), même avant le chargement des données.
                     dcc.Dropdown(
                         id="watchlist-dropdown", options=[], value=gv(v, "watchlist-dropdown", []), multi=True,
                         placeholder=L(lang, "watchlist_placeholder"),
