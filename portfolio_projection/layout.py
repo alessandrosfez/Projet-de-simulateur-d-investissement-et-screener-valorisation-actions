@@ -871,14 +871,16 @@ def build_tab3(lang):
     # Col width="auto" sans largeur propre se réduit sinon à quasi rien (l'input n'a aucun contenu
     # intrinsèque pour calculer la largeur de sa colonne "auto" -- bug constaté en pratique, le
     # placeholder devenait illisible, tronqué à son seul premier caractère).
+    # Largeurs des champs : assez pour lire leur indication en entier (« Montant investi (€) »,
+    # « Price per share (€) »), qui sert de libellé.
     tx_form = dbc.Row([
         dbc.Col(ticker_dropdown("tab3-tx-ticker-input", L(lang, "tx_ticker_label")), width="auto"),
         dbc.Col(dcc.DatePickerSingle(id="tab3-tx-date-input", display_format="YYYY-MM-DD",
                                       placeholder=L(lang, "tx_date_label")), width="auto"),
         dbc.Col(dcc.Input(id="tab3-tx-amount-input", type="number", placeholder=L(lang, "tx_amount_label"),
-                           className="form-control form-control-sm", style={"width": "110px"}), width="auto"),
+                           className="form-control form-control-sm", style={"width": "160px"}), width="auto"),
         dbc.Col(dcc.Input(id="tab3-tx-price-input", type="number", placeholder=L(lang, "tx_price_label"),
-                           className="form-control form-control-sm", style={"width": "110px"}), width="auto"),
+                           className="form-control form-control-sm", style={"width": "150px"}), width="auto"),
         dbc.Col(dcc.Input(id="tab3-tx-fee-input", type="number", placeholder=L(lang, "tx_fee_label"),
                            className="form-control form-control-sm", style={"width": "90px"}), width="auto"),
         dbc.Col(dbc.Button(icon_label("plus-lg", L(lang, "btn_add_transaction")), id="tab3-btn-add-tx", color="primary", size="sm"),
@@ -890,7 +892,7 @@ def build_tab3(lang):
         dbc.Col(dcc.DatePickerSingle(id="tab3-div-date-input", display_format="YYYY-MM-DD",
                                       placeholder=L(lang, "div_date_label")), width="auto"),
         dbc.Col(dcc.Input(id="tab3-div-amount-input", type="number", placeholder=L(lang, "div_amount_label"),
-                           className="form-control form-control-sm", style={"width": "110px"}), width="auto"),
+                           className="form-control form-control-sm", style={"width": "140px"}), width="auto"),
         dbc.Col(dbc.Button(icon_label("plus-lg", L(lang, "btn_add_dividend")), id="tab3-btn-add-div", color="primary", size="sm"),
                 width="auto"),
     ], className="mb-2 gx-2 align-items-center")

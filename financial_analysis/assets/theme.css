@@ -251,3 +251,17 @@ a { color: var(--accent); }
     }
     .section-title { break-after: avoid; }
 }
+
+
+/* -------- dcc.Input avec la classe .form-control (Dash 4) -------- */
+/* Recopié de stock_valuation/assets/theme.css (aucun import croisé entre outils). Le champ réel et ses
+   boutons +/- sont dans un conteneur que .form-control fait passer en display: block : les boutons
+   tombaient sous le champ, et le champ restait blanc en mode sombre. Le champ remplit le cadre, prend
+   le fond du cadre, et les boutons sont masqués : montants et seuils se tapent au clavier. */
+.dash-input-container.form-control { display: flex; align-items: center; }
+.dash-input-container.form-control .dash-input-element { flex: 1; min-width: 0; background: transparent;
+                                                          color: inherit; border: 0; outline: none; padding: 0; }
+.dash-input-container.form-control .dash-input-stepper { display: none; }
+[data-bs-theme="dark"] .dash-input-container.form-control {
+    background-color: var(--surface-2); border-color: var(--border-soft); color: var(--Dash-Text-Primary, #e9ecef);
+}
