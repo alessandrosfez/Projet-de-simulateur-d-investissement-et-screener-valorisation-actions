@@ -88,6 +88,29 @@
     .status.down { color: var(--bad); }
     .open { color: var(--accent); font-weight: 600; white-space: nowrap; }
     .port { color: var(--muted); font-variant-numeric: tabular-nums; }
+    /* Chiffres en direct de chaque outil (/api/summary, voir summary_api.py dans chaque dossier) :
+       masqués tant que l'outil n'a pas répondu, jamais remplacés par des zéros. */
+    .live { display: flex; flex-direction: column; gap: 0.4rem; margin: -0.25rem 0 1.1rem; padding: 0.75rem 0.85rem;
+            background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; font-size: 0.85rem;
+            animation: fade-in 0.35s ease both; }
+    .live[hidden] { display: none; }
+    .live-label { color: var(--muted); font-size: 0.72rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; }
+    .live-kpi { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0.5rem; }
+    .live-value { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+    .live-name { font-size: 1rem; font-weight: 600; }
+    .live-sub { color: var(--muted); font-size: 0.8rem; line-height: 1.45; }
+    .pill { display: inline-flex; align-items: center; gap: 0.25rem; padding: 0.1rem 0.5rem; border-radius: 999px;
+            font-size: 0.78rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+    .pill.up { color: var(--good); background: color-mix(in srgb, var(--good) 13%, transparent); }
+    .pill.down { color: var(--bad); background: color-mix(in srgb, var(--bad) 13%, transparent); }
+    .chips { display: flex; flex-wrap: wrap; gap: 0.35rem; }
+    .chip { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.12rem 0.55rem; border-radius: 999px;
+            border: 1px solid var(--border); background: var(--surface); font-size: 0.78rem; }
+    .chip strong { font-variant-numeric: tabular-nums; }
+    .chip.warn { color: var(--pending); border-color: color-mix(in srgb, var(--pending) 45%, transparent); }
+    .chip.good { color: var(--good); border-color: color-mix(in srgb, var(--good) 45%, transparent); }
+    .live svg { width: 0.8rem; height: 0.8rem; flex: none; }
+
     footer { margin-top: 3rem; color: var(--muted); font-size: 0.8rem; text-align: center; max-width: 640px; line-height: 1.6; }
     code { background: var(--surface-2); border: 1px solid var(--border); border-radius: 5px; padding: 0.05rem 0.35rem; }
 
@@ -183,6 +206,7 @@
                     suivi du portefeuille réel : quelle trajectoire de capital attendre, avec quelle
                     incertitude.
                 </p>
+                <div class="live" id="live-projection" hidden aria-live="polite"></div>
                 <div class="meta">
                     <div class="status" id="status-projection"><span class="dot"></span><span class="label">Vérification…</span></div>
                     <span class="open">Ouvrir <span class="port">:8050</span> →</span>
@@ -215,6 +239,7 @@
                     Criblage (P/E sectoriel, PEG, score composite), DCF par scénarios et comparables :
                     une fois le montant à investir décidé, sur quels titres et à quel prix.
                 </p>
+                <div class="live" id="live-valuation" hidden aria-live="polite"></div>
                 <div class="meta">
                     <div class="status" id="status-valuation"><span class="dot"></span><span class="label">Vérification…</span></div>
                     <span class="open">Ouvrir <span class="port">:8051</span> →</span>
@@ -246,6 +271,7 @@
                     résultat en cash, BFR, scores d'alerte (Beneish, Altman, Piotroski), dette nette et
                     EBITDA ajusté, loi de Benford.
                 </p>
+                <div class="live" id="live-analysis" hidden aria-live="polite"></div>
                 <div class="meta">
                     <div class="status" id="status-analysis"><span class="dot"></span><span class="label">Vérification…</span></div>
                     <span class="open">Ouvrir <span class="port">:8052</span> →</span>
@@ -287,8 +313,150 @@ async function checkOne(target) {
 }
 
 function checkAll() {
-    targets.forEach(checkOne);
+    targets.forEach(async target => {
+        const up = await checkOne(target);
+        // Résumé relu au plus toutes les 30 s (il ne change qu'au fil des visites dans l'outil), et
+        // tout de suite quand l'outil vient de démarrer ou que la page reprend le focus.
+        if (up && (!target.lastSummary || Date.now() - target.lastSummary > 30000)) loadSummary(target);
+        if (!up) {
+            // Outil arrêté : ses derniers chiffres disparaissent avec lui plutôt que de rester affichés.
+            target.lastSummary = 0;
+            document.getElementById("live-" + target.id).hidden = true;
+        }
+    });
 }
+
+// ---- Chiffres en direct : /api/summary de chaque outil (lecture de ses fichiers locaux, aucun
+// appel réseau côté outil). Construits en DOM (textContent), jamais en HTML : les noms viennent
+// des données. Un outil qui ne répond pas, ou une version sans résumé, laisse la carte telle quelle.
+// Espace insécable ordinaire à la place de l'espace fine (U+202F) d'Intl en français : en petit
+// corps, l'espace fine disparaît presque (« 1500 € » au lieu de « 1 500 € »).
+const frFormat = options => {
+    const formatter = new Intl.NumberFormat("fr-FR", options);
+    return { format: value => formatter.format(value).replace(/ /g, " ") };
+};
+const eur = frFormat({ style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+const pct = frFormat({ maximumFractionDigits: 1, minimumFractionDigits: 1 });
+const signed = (value, format) => (value > 0 ? "+" : value < 0 ? "−" : "") + format(Math.abs(value));
+const dayFr = iso => new Date(iso + "T12:00:00").toLocaleDateString("fr-FR", { day: "2-digit", month: "2-digit" });
+const plural = (n, one, many) => (n > 1 ? many : one);
+
+function ago(epochSeconds) {
+    const s = Math.max(0, Date.now() / 1000 - epochSeconds);
+    if (s < 60) return "à l'instant";
+    if (s < 3600) return "il y a " + Math.floor(s / 60) + " min";
+    if (s < 86400) return "il y a " + Math.floor(s / 3600) + " h";
+    return "il y a " + Math.floor(s / 86400) + " j";
+}
+
+function el(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+}
+
+// Icônes au trait (16x16), en currentColor : elles prennent la couleur du texte qu'elles précèdent.
+const ICONS = {
+    up: "M3 11 8 5l5 6",
+    down: "M3 5l5 6 5-6",
+    book: "M3 2.5h7.5a2 2 0 0 1 2 2v9H5a2 2 0 0 1-2-2zM3 11.5a2 2 0 0 1 2-2h7.5",
+    alarm: "M8 4.5V8l2 1.5M8 14a5.5 5.5 0 1 0 0-11 5.5 5.5 0 0 0 0 11z",
+    target: "M8 14A6 6 0 1 0 8 2a6 6 0 0 0 0 12zm0-3a3 3 0 1 0 0-6 3 3 0 0 0 0 6z",
+};
+
+function icon(name) {
+    const ns = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("viewBox", "0 0 16 16");
+    svg.setAttribute("aria-hidden", "true");
+    const path = document.createElementNS(ns, "path");
+    for (const [key, value] of Object.entries({ d: ICONS[name], fill: "none", stroke: "currentColor",
+            "stroke-width": "1.8", "stroke-linecap": "round", "stroke-linejoin": "round" })) {
+        path.setAttribute(key, value);
+    }
+    svg.appendChild(path);
+    return svg;
+}
+
+function chip(iconName, count, text, tone, title) {
+    const node = el("span", tone ? "chip " + tone : "chip");
+    node.append(icon(iconName), el("strong", "", String(count)), document.createTextNode(" " + text));
+    if (title) node.title = title;
+    return node;
+}
+
+const RENDER = {
+    projection(data) {
+        if (data.status !== "ok") {
+            return [el("div", "live-sub", data.transactions
+                ? "Ouvre l'onglet « Mon portefeuille réel » pour enregistrer un premier relevé de valeur."
+                : "Aucun achat enregistré pour l'instant.")];
+        }
+        const kpi = el("div", "live-kpi");
+        kpi.append(el("span", "live-value", eur.format(data.value_eur)));
+        // Flèche, signe et couleur ensemble : jamais la couleur seule.
+        const up = data.gain_eur >= 0;
+        const pill = el("span", up ? "pill up" : "pill down");
+        const gainPct = data.gain_pct === null ? "" : " (" + signed(data.gain_pct, pct.format) + " %)";
+        pill.append(icon(up ? "up" : "down"), document.createTextNode(signed(data.gain_eur, eur.format) + gainPct));
+        kpi.append(pill);
+        let sub = "Plus-value au " + dayFr(data.day) + ", sur " + eur.format(data.invested_eur) + " investis.";
+        if (data.previous) {
+            sub += " " + signed(data.previous.value_delta_eur, eur.format) + " depuis le " + dayFr(data.previous.day)
+                + " (dont " + signed(data.previous.market_delta_eur, eur.format) + " de marché).";
+        }
+        return [el("div", "live-label", "Mon portefeuille réel"), kpi, el("div", "live-sub", sub)];
+    },
+    valuation(data) {
+        const chips = el("div", "chips");
+        chips.append(chip("book", data.journal_entries, plural(data.journal_entries, "fiche au journal", "fiches au journal")));
+        if (data.reviews_due.length) {
+            chips.append(chip("alarm", data.reviews_due.length,
+                              plural(data.reviews_due.length, "revue à faire", "revues à faire"), "warn",
+                              data.reviews_due.join(", ")));
+        }
+        if (data.below_target.length) {
+            chips.append(chip("target", data.below_target.length, "sous ton prix cible", "good",
+                              data.below_target.join(", ")));
+        }
+        const sub = [];
+        if (data.reviews_due.length) sub.push("Revue : " + data.reviews_due.join(", ") + ".");
+        if (data.below_target.length) sub.push("Sous la cible : " + data.below_target.join(", ") + ".");
+        sub.push(data.loaded_at
+            ? "Cours de " + data.loaded_stocks + " titres, chargés " + ago(data.loaded_at) + "."
+            : "Aucun chargement de cours enregistré.");
+        return [el("div", "live-label", "Journal et alertes"), chips, el("div", "live-sub", sub.join(" "))];
+    },
+    analysis(data) {
+        const last = data.last_analysis;
+        if (!last) return [el("div", "live-sub", "Aucune analyse pour l'instant.")];
+        const label = last.imported ? last.name + " (fichier importé)" : last.name + " (" + last.ticker + ")";
+        return [el("div", "live-label", "Dernière analyse"), el("div", "live-name", label),
+                el("div", "live-sub", "Demandée " + ago(last.at) + ".")];
+    },
+};
+
+async function loadSummary(target) {
+    target.lastSummary = Date.now();
+    const box = document.getElementById("live-" + target.id);
+    try {
+        const response = await fetch(target.url + "/api/summary", { cache: "no-store" });
+        if (!response.ok) throw new Error(String(response.status));
+        box.replaceChildren(...RENDER[target.id](await response.json()));
+        box.hidden = false;
+    } catch {
+        box.hidden = true;  // outil arrêté ou version sans résumé : rien plutôt qu'un chiffre faux
+    }
+}
+
+function refreshSummaries() {
+    targets.forEach(target => { target.lastSummary = 0; });
+    checkAll();
+}
+
+window.addEventListener("focus", refreshSummaries);
+document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshSummaries(); });
 
 checkAll();
 setInterval(checkAll, 2000);

@@ -68,7 +68,16 @@ http://localhost:8051 et http://localhost:8052) et ouvre la page d'accueil
 `index.html`, servie sur http://localhost:8049 (le serveur ne sert que ce
 fichier, jamais le reste du dossier) : une page statique avec un lien vers chacun, un aperçu dessiné de
 son écran principal et leur statut de démarrage en direct (thème clair ou
-sombre selon le système) ; Ctrl+C pour tout arrêter. `python run_all.py
+sombre selon le système) ; Ctrl+C pour tout arrêter.
+
+Chaque carte affiche aussi quelques chiffres en direct, lus par l'outil
+dans ses propres fichiers locaux (route `/api/summary` de chaque outil,
+`summary_api.py`, aucun appel réseau) : valeur du portefeuille réel au
+dernier relevé et plus-value, entrées du journal, revues à faire et titres
+sous leur prix cible, dernière société analysée. Seule la page d'accueil
+peut lire ces chiffres depuis le navigateur (en-tête CORS limité à son
+adresse). Un outil arrêté n'affiche rien plutôt qu'un chiffre périmé.
+`python run_all.py
 --no-browser` lance les outils sans ouvrir la page d'accueil (serveur sans
 écran). Pur confort de lancement : `run_all.py` et `index.html` ne créent
 aucun lien entre les projets, qui restent des process Dash indépendants,

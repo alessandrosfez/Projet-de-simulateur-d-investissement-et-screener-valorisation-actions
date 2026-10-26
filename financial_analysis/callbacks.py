@@ -5,6 +5,7 @@ données (market_data.py), les fait passer par le moteur pur (engine.py) et met 
 (layout.py).
 """
 import base64
+import time
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
@@ -13,6 +14,7 @@ import dash_bootstrap_components as dbc
 import pandas as pd
 from dash import Input, Output, State, dcc, html
 
+import last_analysis
 import layout
 from app_instance import app
 from databook import build_databook
@@ -157,10 +159,12 @@ def submit_analysis(n_clicks, n_submit, picked_ticker, typed_ticker):
     if trigger == "quick-pick-dropdown":
         if not picked_ticker:
             raise dash.exceptions.PreventUpdate
-        return {"ticker": picked_ticker}
+        return {"ticker": picked_ticker, "requested_at": time.time()}
     if (trigger == "analyze-btn" and not n_clicks) or (trigger == "ticker-input" and not n_submit):
         raise dash.exceptions.PreventUpdate
-    return {"ticker": (typed_ticker or "").strip().upper()}
+    # requested_at : heure de la demande, gardée comme heure de la « dernière analyse »
+    # (last_analysis.py), qu'un nouvel affichage de la même analyse ne rajeunit pas.
+    return {"ticker": (typed_ticker or "").strip().upper(), "requested_at": time.time()}
 
 
 # ============================================================
@@ -599,6 +603,9 @@ def render_analysis(store, lang, dark_mode, palette_code, saved_store):
     normalized, profile, regime, market = ctx.normalized, ctx.profile, ctx.regime, ctx.market
     if not normalized.years:
         return dbc.Alert(L(lang, "error_no_data", ticker=ctx.ticker), color="danger")
+    # Analyse affichée : retenue comme « dernière analyse » pour la page d'accueil (summary_api.py).
+    last_analysis.record_analysis(ctx.key, profile.get("name"), None if ctx.imported else ctx.ticker,
+                                  store.get("requested_at"))
 
     years_text = ", ".join(layout.format_year(year, lang) for year in normalized.years)
     reporting = profile["reporting_currency"] or L(lang, "na")
@@ -779,7 +786,8 @@ def import_statements(contents, filename, lang):
     feedback = layout.import_feedback(result, filename or "", lang)
     if result is None or result["errors"]:
         return dash.no_update, feedback
-    return {"source": "import", "filename": filename or "", "dataset": result["dataset"]}, feedback
+    return ({"source": "import", "filename": filename or "", "dataset": result["dataset"],
+             "requested_at": time.time()}, feedback)
 
 
 TEMPLATE_META_KEYS = {"fr": ("societe", "devise", "unite", "regime", "secteur", "industrie"),

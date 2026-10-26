@@ -6,6 +6,7 @@ selon l'ordre d'exécution.
 """
 import pytest
 
+import last_analysis
 import market_data
 
 
@@ -13,3 +14,10 @@ import market_data
 def isolate_market_data_cache(monkeypatch):
     monkeypatch.setattr(market_data, "_cache", {})
     monkeypatch.setattr(market_data, "_save_cache_to_disk", lambda: None)
+
+
+@pytest.fixture(autouse=True)
+def isolate_last_analysis(monkeypatch, tmp_path):
+    """Dernière analyse dans un fichier temporaire : aucun test ne lit ni ne remplace celle de
+    l'utilisateur (.financial_analysis_last.json)."""
+    monkeypatch.setattr(last_analysis, "LAST_ANALYSIS_FILE", tmp_path / "last_analysis.json")

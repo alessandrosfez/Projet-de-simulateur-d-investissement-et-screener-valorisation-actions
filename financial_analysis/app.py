@@ -18,8 +18,12 @@ from dash import Input, Output, dcc, html
 
 import callbacks  # noqa: F401 (l'import enregistre les callbacks sur `app`)
 import layout
+import summary_api
 from app_instance import app
 from i18n import L, PALETTE_CODES, PALETTE_NAMES
+
+# Résumé JSON lu par la page d'accueil de run_all.py (voir summary_api.py).
+summary_api.register(app.server)
 
 app.clientside_callback(
     """

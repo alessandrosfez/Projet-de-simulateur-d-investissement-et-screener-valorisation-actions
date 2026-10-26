@@ -6,7 +6,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app.py app_instance.py chart_theme.py charts.py constants.py engine.py i18n.py layout.py market_data.py \
-     portfolio_db.py portfolio_engine.py results.py ./
+     portfolio_db.py portfolio_engine.py results.py summary_api.py ./
 COPY callbacks/ ./callbacks/
 COPY assets/ ./assets/
 

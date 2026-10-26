@@ -5,7 +5,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY app.py app_instance.py chart_theme.py callbacks.py charts.py constants.py engine.py i18n.py journal_db.py last_load.py layout.py market_data.py ./
+COPY app.py app_instance.py chart_theme.py callbacks.py charts.py constants.py engine.py i18n.py journal_db.py last_load.py layout.py market_data.py summary_api.py ./
 COPY assets/ ./assets/
 
 EXPOSE 8051

@@ -6,6 +6,7 @@ __pycache__/
 # Journal d'investissement et dernier chargement de la valorisation : notes et données locales.
 .stock_valuation_journal.db
 .stock_valuation_last_load.pkl
+.financial_analysis_last.json
 venv/
 .venv/
 *.egg-info/
