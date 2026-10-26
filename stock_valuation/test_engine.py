@@ -377,11 +377,12 @@ def test_football_field_central_value_widens_a_too_narrow_range():
 
 # ---------- alertes de la liste de suivi ----------
 
-def test_watchlist_alerts_all_four_triggers_with_their_values():
+def test_watchlist_alerts_all_five_triggers_with_their_values():
     # Cours 50, P/E 10 contre une médiane de pairs à 15 -> valeur implicite 75, soit +50 %.
     alerts = m.watchlist_alerts(price=50.0, own_pe=10.0, pe_percentile=12.0, score=78.0,
-                                peer_pes=[14.0, 15.0, 16.0], dcf_fair_value=60.0)
+                                peer_pes=[14.0, 15.0, 16.0], dcf_fair_value=60.0, target_price=55.0)
     assert set(alerts) == set(m.WATCHLIST_ALERTS)
+    assert alerts["below_target"] == pytest.approx(10.0)
     assert alerts["pe_history_low"] == pytest.approx(12.0)
     assert alerts["below_comparables"] == pytest.approx(50.0)
     assert alerts["below_dcf"] == pytest.approx(20.0)
@@ -395,3 +396,26 @@ def test_watchlist_alerts_stay_silent_on_missing_or_unfavourable_data():
     assert m.watchlist_alerts(None, 10.0, np.nan, np.nan, [14.0, 15.0, 16.0], 60.0) == {}
     # P/E au-dessus de la médiane des pairs : pas de décote par comparables.
     assert "below_comparables" not in m.watchlist_alerts(50.0, 20.0, None, None, [14.0, 15.0, 16.0], None)
+
+
+def test_below_target_alert_fires_at_or_under_the_target_only():
+    assert m.watchlist_alerts(40.0, None, None, None, [], None, target_price=40.0) == {"below_target": 0.0}
+    assert "below_target" not in m.watchlist_alerts(41.0, None, None, None, [], None, target_price=40.0)
+    # Cible absente ou cours absent : aucun signal, jamais une cible prise pour 0.
+    assert m.watchlist_alerts(30.0, None, None, None, [], None, target_price=None) == {}
+    assert m.watchlist_alerts(None, None, None, None, [], None, target_price=40.0) == {}
+
+
+def test_reviews_due_keeps_past_and_today_oldest_first():
+    entries = [{"ticker": "AAA.PA", "review_date": "2026-11-02"}, {"ticker": "BBB.PA", "review_date": "2026-10-26"},
+               {"ticker": "CCC.PA", "review_date": None}, {"ticker": "DDD.PA", "review_date": "2026-09-30"}]
+    due = m.reviews_due(entries, "2026-10-26")
+    assert [e["ticker"] for e in due] == ["DDD.PA", "BBB.PA"]
+
+
+def test_gap_to_target_pct_signs_and_missing_values():
+    assert m.gap_to_target_pct(45.0, 50.0) == pytest.approx(-10.0)
+    assert m.gap_to_target_pct(60.0, 50.0) == pytest.approx(20.0)
+    assert m.gap_to_target_pct(None, 50.0) is None
+    assert m.gap_to_target_pct(45.0, None) is None
+    assert m.gap_to_target_pct(float("nan"), 50.0) is None

@@ -181,6 +181,43 @@ def gv(v, cid, default):
     return default
 
 
+def build_journal_panel(lang):
+    """Journal d'investissement (journal_db.py) : formulaire d'une entrée par titre, rappel des revues
+    dues et fiches des entrées (callbacks.render_journal). Volontairement hors de TAB_STATE_FIELDS :
+    le contenu vient de la base, relue à chaque reconstruction ; seul un brouillon non enregistré
+    serait perdu à un changement de langue."""
+    return html.Div([
+        html.Div([html.I(className="bi bi-journal-text me-2", **{"aria-hidden": "true"}), L(lang, "journal_title")]
+                 + info_tooltip("journal-info", L(lang, "journal_help")), className="watch-title"),
+        html.Div(id="journal-reviews-due"),
+        dbc.Row([
+            dbc.Col([
+                dbc.Label(L(lang, "journal_ticker_label"), html_for="journal-ticker", className="journal-label"),
+                dcc.Dropdown(id="journal-ticker", options=[], placeholder=L(lang, "journal_ticker_placeholder")),
+            ], xs=12, md=5),
+            dbc.Col([
+                dbc.Label(L(lang, "journal_target_label"), html_for="journal-target", className="journal-label"),
+                dcc.Input(id="journal-target", type="number", min=0, step="any", placeholder="—",
+                          className="form-control form-control-sm"),
+            ], xs=6, md=3),
+            dbc.Col([
+                dbc.Label(L(lang, "journal_review_label"), html_for="journal-review-date", className="journal-label"),
+                dcc.Input(id="journal-review-date", type="date", className="form-control form-control-sm"),
+            ], xs=6, md=4),
+        ], className="gx-3 gy-2 mb-2"),
+        dbc.Label(L(lang, "journal_thesis_label"), html_for="journal-thesis", className="journal-label"),
+        dcc.Textarea(id="journal-thesis", placeholder=L(lang, "journal_thesis_placeholder"),
+                     className="form-control form-control-sm journal-thesis-input"),
+        html.Div([
+            dbc.Button(icon_label("save", L(lang, "journal_save_btn")), id="btn-journal-save",
+                       color="primary", size="sm"),
+            html.Span(id="journal-save-feedback", className="journal-feedback"),
+        ], className="d-flex align-items-center gap-2 mt-2"),
+        html.Div(id="journal-entries", className="mt-2"),
+        dcc.Store(id="journal-refresh-trigger", data=0),
+    ], className="watch-panel journal-panel mb-3", id="anchor-journal")
+
+
 def build_tab3(lang, v=None):
     v = v or {}
     return html.Div([
@@ -305,6 +342,7 @@ def build_tab3(lang, v=None):
             ], className="mb-2"),
             # Alertes des titres suivis (engine.watchlist_alerts), indépendantes des filtres du tableau.
             dcc.Loading(**LOADING_PROPS, children=[html.Div(id="watchlist-alerts", className="mb-3")]),
+            build_journal_panel(lang),
 
             dcc.Loading(**LOADING_PROPS, children=[
                 html.Div(id="stocks-top-cards"),

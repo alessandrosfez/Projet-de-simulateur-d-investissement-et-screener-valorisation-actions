@@ -3,6 +3,9 @@ __pycache__/
 .pytest_cache/
 .pea_forecast_cache.pkl
 .pea_forecast_portfolio.db
+# Journal d'investissement et dernier chargement de la valorisation : notes et données locales.
+.stock_valuation_journal.db
+.stock_valuation_last_load.pkl
 venv/
 .venv/
 *.egg-info/

@@ -117,8 +117,9 @@ TRANSLATIONS = {
         "empty_stocks_title": "Aucune donnée chargée pour l'instant",
         "empty_stocks_text": "Coche un ou plusieurs marchés puis clique sur « Charger / actualiser les données » : comparatif sectoriel, tableau de criblage, DCF et alertes de ta liste de suivi apparaîtront ici.",
         "watch_alerts_title": "Alertes de ta liste de suivi",
-        "watch_alerts_help": "Quatre signaux, calculés sur tout l'univers chargé (indépendants des filtres du "
-                              "tableau) : P/E dans les 20 % les plus bas de sa propre histoire ; cours sous la "
+        "watch_alerts_help": "Titres de ta liste de suivi et de ton journal. Cinq signaux, calculés sur tout "
+                              "l'univers chargé (indépendants des filtres du tableau) : cours au niveau ou sous "
+                              "ton prix cible ; P/E dans les 20 % les plus bas de sa propre histoire ; cours sous la "
                               "valeur implicite au P/E médian d'au moins 3 pairs du secteur ; cours sous la valeur "
                               "intrinsèque DCF aux hypothèses par défaut (croissance {growth} %, actualisation "
                               "{discount} %, croissance terminale {terminal} %, {horizon} ans) ; score composite ≥ 70. Une donnée manquante ne "
@@ -128,6 +129,32 @@ TRANSLATIONS = {
         "watch_alert_below_dcf": "Sous le DCF par défaut (potentiel {value:+.0f} %)",
         "watch_alert_high_score": "Score {value:.0f}",
         "watch_alerts_quiet": "Rien à signaler pour l'instant : {names}.",
+        "watch_alert_below_target": "Sous ton prix cible de {target} (potentiel {value:+.0f} %)",
+        "journal_title": "Journal d'investissement",
+        "journal_help": "Pour chaque titre : pourquoi il t'intéresse, à quel prix tu l'achèterais et quand revoir "
+                        "ta position. Enregistré sur cet ordinateur seulement (fichier local, jamais envoyé). Le "
+                        "prix cible est dans la devise de cotation du titre, celle de la colonne « Prix ».",
+        "journal_ticker_label": "Titre",
+        "journal_ticker_placeholder": "Choisir un titre...",
+        "journal_target_label": "Prix cible",
+        "journal_review_label": "Date de revue",
+        "journal_thesis_label": "Thèse",
+        "journal_thesis_placeholder": "Pourquoi ce titre ? Ce qui te ferait changer d'avis...",
+        "journal_save_btn": "Enregistrer",
+        "journal_edit_btn": "Modifier",
+        "journal_delete_btn": "Supprimer",
+        "journal_need_ticker": "Choisis d'abord un titre.",
+        "journal_bad_target": "Le prix cible doit être positif (laisse vide pour ne pas en fixer).",
+        "journal_saved": "Entrée de {ticker} enregistrée.",
+        "journal_empty": "Aucune entrée pour l'instant : choisis un titre, note ta thèse, ton prix cible et une "
+                         "date pour y revenir.",
+        "journal_review_on": "Revue le {day}",
+        "journal_review_due": "Revue à faire, prévue le {day}",
+        "journal_target_chip": "Cible {target}",
+        "journal_gap_below": "Cours {price}, potentiel {gap:+.0f} % jusqu'à la cible",
+        "journal_gap_above": "Cours {price}, {gap:.1f} % au-dessus de la cible",
+        "journal_price_missing": "Cours non chargé",
+        "journal_reminder": "Revue à faire ({count}) : {names}.",
         "pe_ratio_by_stock_title": "P/E Ratio par valeur",
         "detail_title": "Détail",
         "detail_hint": "Clique sur une ligne pour voir l'évolution de son P/E historique ci-dessous.",
@@ -377,8 +404,9 @@ TRANSLATIONS = {
         "empty_stocks_title": "No data loaded yet",
         "empty_stocks_text": "Tick one or more markets then click “Load / refresh data”: sector comparison, screening table, DCF and watchlist alerts will appear here.",
         "watch_alerts_title": "Watchlist alerts",
-        "watch_alerts_help": "Four signals, computed over the whole loaded universe (independent of the table "
-                              "filters): P/E in the lowest 20% of its own history; price below the value implied by "
+        "watch_alerts_help": "Stocks from your watchlist and your journal. Five signals, computed over the whole "
+                              "loaded universe (independent of the table filters): price at or below your target "
+                              "price; P/E in the lowest 20% of its own history; price below the value implied by "
                               "the median P/E of at least 3 sector peers; price below the DCF intrinsic value at the "
                               "default assumptions (growth {growth}%, discount {discount}%, terminal growth {terminal}%, {horizon} years); composite "
                               "score ≥ 70. Missing data triggers nothing. Leads to dig into, not buy "
@@ -388,6 +416,32 @@ TRANSLATIONS = {
         "watch_alert_below_dcf": "Below default DCF (upside {value:+.0f}%)",
         "watch_alert_high_score": "Score {value:.0f}",
         "watch_alerts_quiet": "Nothing to report for now: {names}.",
+        "watch_alert_below_target": "Below your target price of {target} (upside {value:+.0f}%)",
+        "journal_title": "Investment journal",
+        "journal_help": "For each stock: why it interests you, the price you would buy at and when to review your "
+                        "position. Saved on this computer only (local file, never sent). The target price is in the "
+                        "stock's quote currency, the one of the “Price” column.",
+        "journal_ticker_label": "Stock",
+        "journal_ticker_placeholder": "Pick a stock...",
+        "journal_target_label": "Target price",
+        "journal_review_label": "Review date",
+        "journal_thesis_label": "Thesis",
+        "journal_thesis_placeholder": "Why this stock? What would change your mind...",
+        "journal_save_btn": "Save",
+        "journal_edit_btn": "Edit",
+        "journal_delete_btn": "Delete",
+        "journal_need_ticker": "Pick a stock first.",
+        "journal_bad_target": "The target price must be positive (leave it empty to set none).",
+        "journal_saved": "Entry for {ticker} saved.",
+        "journal_empty": "No entry yet: pick a stock, write down your thesis, your target price and a date to come "
+                         "back to it.",
+        "journal_review_on": "Review on {day}",
+        "journal_review_due": "Review due since {day}",
+        "journal_target_chip": "Target {target}",
+        "journal_gap_below": "Price {price}, upside {gap:+.0f}% to target",
+        "journal_gap_above": "Price {price}, {gap:.1f}% above target",
+        "journal_price_missing": "Price not loaded",
+        "journal_reminder": "Reviews due ({count}): {names}.",
         "pe_ratio_by_stock_title": "P/E Ratio by stock",
         "detail_title": "Detail",
         "detail_hint": "Click a row to see its historical P/E below.",

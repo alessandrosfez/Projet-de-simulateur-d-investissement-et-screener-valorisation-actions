@@ -7,6 +7,8 @@ erreurs-là n'apparaissent sinon qu'à l'écran. Recopié et adapté de portfoli
 d'import croisé entre outils). Aucun appel réseau, aucune donnée réelle.
 Usage : pip install -r requirements-dev.txt && pytest -v
 """
+import json
+
 import dash
 import numpy as np
 import pandas as pd
@@ -17,6 +19,7 @@ from dash.development.base_component import Component
 
 import app as app_module  # noqa: F401 - construit la mise en page (sans lancer le serveur)
 import callbacks
+import journal_db
 import market_data
 from app_instance import app
 
@@ -93,6 +96,11 @@ def _layout_values(component, values=None) -> dict:
     return values
 
 
+def _is_pattern(component_id) -> bool:
+    """Identifiant à motif (dict), que callback_map conserve sous forme de chaîne JSON."""
+    return isinstance(component_id, dict) or (isinstance(component_id, str) and component_id.startswith("{"))
+
+
 def _output_count(key: str) -> int:
     return len(key[2:-2].split("...")) if key.startswith("..") else 1
 
@@ -126,9 +134,10 @@ def _sweep(overrides: dict | None = None) -> set[str]:
         if func is None:
             continue  # callback côté navigateur
         deps = list(entry["inputs"]) + list(entry.get("state", []))
-        if any((dep["id"], dep["property"]) not in values for dep in deps if isinstance(dep["id"], str)):
+        if any((dep["id"], dep["property"]) not in values for dep in deps if not _is_pattern(dep["id"])):
             continue  # entrée créée plus tard par un autre callback
-        args = [values.get((dep["id"], dep["property"])) for dep in deps]
+        # Entrée à motif (boutons des fiches du journal, ALL) : liste vide, comme avant tout affichage.
+        args = [[] if _is_pattern(dep["id"]) else values.get((dep["id"], dep["property"])) for dep in deps]
         try:
             result = _call(func, entry, args)
         except dash.exceptions.PreventUpdate:
@@ -154,13 +163,19 @@ def test_every_callback_runs_with_a_loaded_universe_and_a_selected_row(offline):
         data["Entreprise"], data["Ticker"] = name, ticker
         rows.append(data)
     grid_rows = _sweep_render(rows)
+    # Journal (fichier temporaire, voir conftest) : une revue due avec cible, une sans cible ni date,
+    # un titre absent des données chargées.
+    journal_db.upsert_entry("AAA.PA", "Thèse de test", 1000.0, "2020-01-01")
+    journal_db.upsert_entry("BBB.PA", "", None, None)
+    journal_db.upsert_entry("ZZZ.PA", "Hors univers", 12.0, "2099-01-01")
     called = _sweep({
         ("stocks-raw-store", "data"): rows,
         ("stocks-table", "rowData"): grid_rows,
         ("stocks-table", "selectedRows"): [grid_rows[0]],
         ("watchlist-dropdown", "value"): ["AAA.PA", "CCC.PA"],
     })
-    assert {"render_stock_views", "update_dcf", "update_pe_history_chart", "update_watchlist_alerts"} <= called
+    assert {"render_stock_views", "update_dcf", "update_pe_history_chart", "update_watchlist_alerts",
+            "render_journal"} <= called
 
 
 def _sweep_render(rows) -> list[dict]:
@@ -175,3 +190,25 @@ def _sweep_render(rows) -> list[dict]:
             outputs = key[2:-2].split("...")
             return result[outputs.index("stocks-table.rowData")]
     raise AssertionError("render_stock_views introuvable")
+
+
+def test_journal_icon_buttons_act_on_the_clicked_entry_only():
+    """Corbeille et crayon d'une fiche : seul un clic réel agit, et sur la bonne entrée."""
+    journal_db.upsert_entry("AAA.PA", "", None, None)
+    journal_db.upsert_entry("BBB.PA", "", None, None)
+
+    def click(func, kind, ticker, n_clicks, *extra):
+        prop = json.dumps({"ticker": ticker, "type": f"journal-{kind}"}, separators=(",", ":")) + ".n_clicks"
+        token = context_value.set(AttributeDict(triggered_inputs=[{"prop_id": prop, "value": n_clicks}],
+                                                inputs_list=[], states_list=[], outputs_list=[], inputs={}, states={}))
+        try:
+            return func(n_clicks, *extra)
+        finally:
+            context_value.reset(token)
+
+    # Fiches qui viennent d'apparaître (aucun clic) : rien ne se passe.
+    with pytest.raises(dash.exceptions.PreventUpdate):
+        click(callbacks.delete_journal_entry, "delete", "AAA.PA", [0, 0], 3)
+    assert click(callbacks.edit_journal_entry, "edit", "BBB.PA", [0, 1]) == "BBB.PA"
+    assert click(callbacks.delete_journal_entry, "delete", "AAA.PA", [1, 0], 3) == 4
+    assert [e["ticker"] for e in journal_db.get_entries()] == ["BBB.PA"]

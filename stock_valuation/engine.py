@@ -173,18 +173,22 @@ def compute_comparables_ev_ebitda_fair_value(enterprise_value: float, ev_to_ebit
 WATCHLIST_PE_HISTORY_LOW_PCT = 20
 WATCHLIST_HIGH_SCORE = 70
 WATCHLIST_MIN_PEERS = 3
-WATCHLIST_ALERTS = ("pe_history_low", "below_comparables", "below_dcf", "high_score")
+WATCHLIST_ALERTS = ("below_target", "pe_history_low", "below_comparables", "below_dcf", "high_score")
 
 
 def watchlist_alerts(price: float | None, own_pe: float | None, pe_percentile: float | None,
-                     score: float | None, peer_pes: list, dcf_fair_value: float | None) -> dict[str, float]:
+                     score: float | None, peer_pes: list, dcf_fair_value: float | None,
+                     target_price: float | None = None) -> dict[str, float]:
     """Signaux d'achat potentiels d'un titre suivi, chacun avec la valeur qui l'a déclenché :
     - "pe_history_low" : P/E dans les 20 % les plus bas de sa propre histoire (valeur : percentile) ;
     - "below_comparables" : cours sous la valeur implicite au P/E médian d'au moins 3 pairs du
       secteur (valeur : potentiel en %, voir compute_comparables_fair_value) ;
     - "below_dcf" : cours sous la valeur intrinsèque DCF aux hypothèses par défaut (valeur :
       potentiel en %) ;
-    - "high_score" : score composite >= 70 (valeur : score).
+    - "high_score" : score composite >= 70 (valeur : score) ;
+    - "below_target" : cours au niveau ou sous le prix cible noté dans le journal (valeur : potentiel
+      en % jusqu'à la cible, 0 pile au niveau). Placé en tête : c'est le seul seuil choisi par
+      l'utilisateur lui-même.
     Une donnée manquante ne déclenche rien : l'absence d'alerte n'est pas un signal contraire.
     Ce sont des pistes à creuser, pas des recommandations."""
     alerts: dict[str, float] = {}
@@ -199,7 +203,25 @@ def watchlist_alerts(price: float | None, own_pe: float | None, pe_percentile: f
         alerts["below_dcf"] = (dcf_fair_value / price - 1) * 100
     if score is not None and not np.isnan(score) and score >= WATCHLIST_HIGH_SCORE:
         alerts["high_score"] = float(score)
+    if price and target_price is not None and target_price > 0 and price <= target_price:
+        alerts["below_target"] = (target_price / price - 1) * 100
     return alerts
+
+
+def reviews_due(entries: list[dict], today) -> list[dict]:
+    """Entrées du journal dont la date de revue (« review_date », AAAA-MM-JJ) est atteinte ou passée,
+    la plus ancienne d'abord. Une entrée sans date de revue n'est jamais due."""
+    today_str = pd.Timestamp(today).strftime("%Y-%m-%d")
+    due = [e for e in entries if e.get("review_date") and str(e["review_date"]) <= today_str]
+    return sorted(due, key=lambda e: str(e["review_date"]))
+
+
+def gap_to_target_pct(price: float | None, target_price: float | None) -> float | None:
+    """Écart du cours au prix cible, en % du prix cible : négatif sous la cible, positif au-dessus.
+    None si l'un des deux manque (jamais 0 à la place)."""
+    if price is None or target_price is None or target_price <= 0 or not np.isfinite(price):
+        return None
+    return (price / target_price - 1) * 100
 
 
 FOOTBALL_FIELD_METHODS = ("dcf_scenarios", "dcf_sensitivity", "comparables_pe", "comparables_ev_ebitda")

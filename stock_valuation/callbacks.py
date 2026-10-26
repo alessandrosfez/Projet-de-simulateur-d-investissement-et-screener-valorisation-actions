@@ -13,8 +13,9 @@ import dash_bootstrap_components as dbc
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-from dash import Input, Output, State, dcc, html
+from dash import ALL, Input, Output, State, ctx, dcc, html
 
+import journal_db
 import layout
 from app_instance import app
 from charts import empty_figure_with_message, make_football_field, make_pe_history_figure, make_sector_strip_figure
@@ -22,8 +23,9 @@ from constants import UNIVERSE_TICKERS
 from engine import (
     FOOTBALL_FIELD_METHODS, WATCHLIST_ALERTS, WATCHLIST_PE_HISTORY_LOW_PCT, annualized_return, annualized_volatility,
     compute_comparables_ev_ebitda_fair_value, compute_comparables_fair_value, compute_dcf_fair_value,
-    compute_dcf_sensitivity_grid, compute_scenario_dcf_fair_values, football_field_ranges, max_drawdown,
-    pe_signal_forward_returns, peer_quartile_multiples, sharpe_ratio, summarize_pe_signal_backtest, watchlist_alerts,
+    compute_dcf_sensitivity_grid, compute_scenario_dcf_fair_values, football_field_ranges, gap_to_target_pct,
+    max_drawdown, pe_signal_forward_returns, peer_quartile_multiples, reviews_due, sharpe_ratio,
+    summarize_pe_signal_backtest, watchlist_alerts,
 )
 import chart_theme
 from i18n import L, PALETTE_CODES, PALETTE_NAMES, num
@@ -96,6 +98,14 @@ def _format_abbreviated(value, lang="fr"):
 
 def _format_dcf_amount(value, currency, lang="fr"):
     return f"{_format_abbreviated(value, lang)} {currency}"
+
+
+def _format_price(value, currency, lang="fr"):
+    """Cours ou prix cible dans la devise de cotation (« 1 234,50 EUR ») ; « — » si absent."""
+    if value is None or (isinstance(value, float) and not np.isfinite(value)):
+        return "—"
+    unit = f" {currency}" if currency and currency != "N/A" else ""
+    return f"{num(value, ',.2f', lang)}{unit}"
 
 
 # État de progression du chargement en cours, partagé entre load_stock_valuations (qui l'écrit,
@@ -217,8 +227,8 @@ def update_watchlist_options(rows):
 
 
 # Icône de chaque alerte de la liste de suivi : l'icône et le libellé portent le sens ensemble.
-WATCHLIST_ALERT_ICONS = {"pe_history_low": "graph-down-arrow", "below_comparables": "people",
-                         "below_dcf": "calculator", "high_score": "star"}
+WATCHLIST_ALERT_ICONS = {"below_target": "bullseye", "pe_history_low": "graph-down-arrow",
+                         "below_comparables": "people", "below_dcf": "calculator", "high_score": "star"}
 
 
 def _default_dcf_fair_value(ticker: str):
@@ -240,18 +250,23 @@ def _default_dcf_fair_value(ticker: str):
     Output("watchlist-alerts", "children"),
     Input("stocks-raw-store", "data"),
     Input("watchlist-dropdown", "value"),
+    Input("journal-refresh-trigger", "data"),
     Input("lang-radio", "value"),
 )
-def update_watchlist_alerts(rows, watchlist, lang):
+def update_watchlist_alerts(rows, watchlist, _journal_trigger, lang):
     """Signaux des titres suivis (engine.watchlist_alerts), calculés sur tout l'univers chargé
-    (pairs du même secteur, score) et donc indépendants des filtres du tableau. Les titres sans
+    (pairs du même secteur, score) et donc indépendants des filtres du tableau. Les titres suivis
+    sont ceux de la liste de suivi plus ceux du journal (journal_db.py), qui eux survivent au
+    rechargement de la page ; le prix cible du journal ajoute son propre signal. Les titres sans
     signal sont regroupés en une ligne : l'absence d'alerte n'est pas un avis contraire."""
     lang = lang or "fr"
-    if not rows or not watchlist:
+    targets = {e["ticker"]: e["target_price"] for e in journal_db.get_entries()}
+    followed = list(dict.fromkeys(list(watchlist or []) + list(targets)))
+    if not rows or not followed:
         return ""
     df = _scored_frame(rows)
     cards, quiet = [], []
-    for ticker in watchlist:
+    for ticker in followed:
         match = df[df["Ticker"] == ticker]
         if match.empty:
             continue
@@ -263,7 +278,7 @@ def update_watchlist_alerts(rows, watchlist, lang):
 
         alerts = watchlist_alerts(value("Prix"), value("P/E (trailing)"),
                                   value("Position vs historique 5 ans (percentile)"), value("Score"), peers,
-                                  _default_dcf_fair_value(ticker))
+                                  _default_dcf_fair_value(ticker), targets.get(ticker))
         name = f"{row['Entreprise']} ({ticker})"
         if not alerts:
             quiet.append(name)
@@ -272,7 +287,8 @@ def update_watchlist_alerts(rows, watchlist, lang):
             html.Span([html.I(className=f"bi bi-{WATCHLIST_ALERT_ICONS[key]} me-1", **{"aria-hidden": "true"}),
                        # Percentile arrondi vers le bas : « 19,6 » affiché « 20 » contredirait la règle « sous 20 ».
                        L(lang, f"watch_alert_{key}",
-                         value=math.floor(alerts[key]) if key == "pe_history_low" else alerts[key])],
+                         value=math.floor(alerts[key]) if key == "pe_history_low" else alerts[key],
+                         target=_format_price(targets.get(ticker), row.get("Devise"), lang))],
                       className="watch-badge")
             for key in WATCHLIST_ALERTS if key in alerts
         ]
@@ -1076,3 +1092,188 @@ def download_stocks(n_clicks, csv_data):
     if not csv_data:
         raise dash.exceptions.PreventUpdate
     return dcc.send_string(csv_data, "valorisation_actions.csv")
+
+
+# ============================================================
+# CALLBACKS : journal d'investissement (journal_db.py)
+# ============================================================
+
+def _format_day(day: str | None, lang: str) -> str:
+    """AAAA-MM-JJ -> JJ/MM/AAAA en français, inchangé en anglais (format ISO, sans ambiguïté)."""
+    if not day:
+        return "—"
+    return pd.Timestamp(day).strftime("%d/%m/%Y") if lang == "fr" else str(day)
+
+
+@app.callback(
+    Output("journal-ticker", "options"),
+    Input("stocks-raw-store", "data"),
+    Input("journal-refresh-trigger", "data"),
+)
+def update_journal_ticker_options(rows, _trigger):
+    """Titres chargés, plus ceux déjà dans le journal : une entrée reste modifiable avant tout
+    chargement, ou quand son marché n'est pas coché."""
+    options = [{"label": f"{r['Entreprise']} ({r['Ticker']})", "value": r["Ticker"]} for r in rows or []]
+    known = {o["value"] for o in options}
+    options += [{"label": e["ticker"], "value": e["ticker"]} for e in journal_db.get_entries()
+                if e["ticker"] not in known]
+    return options
+
+
+@app.callback(
+    Output("journal-target", "value"),
+    Output("journal-review-date", "value"),
+    Output("journal-thesis", "value"),
+    Input("journal-ticker", "value"),
+)
+def prefill_journal_form(ticker):
+    """Choisir un titre déjà noté recharge son entrée pour la modifier ; un nouveau titre vide le
+    formulaire, pour ne pas enregistrer par mégarde la thèse d'un autre."""
+    entry = next((e for e in journal_db.get_entries() if e["ticker"] == ticker), None) if ticker else None
+    if entry is None:
+        return None, None, ""
+    return entry["target_price"], entry["review_date"], entry["thesis"]
+
+
+@app.callback(
+    Output("journal-refresh-trigger", "data"),
+    Output("journal-save-feedback", "children"),
+    Input("btn-journal-save", "n_clicks"),
+    State("journal-ticker", "value"),
+    State("journal-target", "value"),
+    State("journal-review-date", "value"),
+    State("journal-thesis", "value"),
+    State("journal-refresh-trigger", "data"),
+    State("lang-radio", "value"),
+    prevent_initial_call=True,
+)
+def save_journal_entry(n_clicks, ticker, target, review_date, thesis, trigger, lang):
+    """Enregistre l'entrée du titre choisi. Un prix cible vide reste vide (jamais 0) ; un prix cible
+    nul ou négatif est refusé plutôt qu'enregistré."""
+    lang = lang or "fr"
+    if not n_clicks:
+        raise dash.exceptions.PreventUpdate
+    if not ticker:
+        return dash.no_update, L(lang, "journal_need_ticker")
+    if target is not None and float(target) <= 0:
+        return dash.no_update, L(lang, "journal_bad_target")
+    journal_db.upsert_entry(ticker, (thesis or "").strip(), None if target is None else float(target),
+                            review_date or None)
+    return (trigger or 0) + 1, L(lang, "journal_saved", ticker=ticker)
+
+
+@app.callback(
+    Output("journal-refresh-trigger", "data", allow_duplicate=True),
+    Input({"type": "journal-delete", "ticker": ALL}, "n_clicks"),
+    State("journal-refresh-trigger", "data"),
+    prevent_initial_call=True,
+)
+def delete_journal_entry(n_clicks_list, trigger):
+    """Supprime l'entrée dont on a cliqué la corbeille. Les boutons naissent avec n_clicks vide à
+    chaque nouvel affichage des fiches : sans clic réel, rien ne se passe."""
+    clicked = ctx.triggered_id
+    if not isinstance(clicked, dict) or not any(n_clicks_list or []):
+        raise dash.exceptions.PreventUpdate
+    journal_db.delete_entry(clicked["ticker"])
+    return (trigger or 0) + 1
+
+
+@app.callback(
+    Output("journal-ticker", "value"),
+    Input({"type": "journal-edit", "ticker": ALL}, "n_clicks"),
+    prevent_initial_call=True,
+)
+def edit_journal_entry(n_clicks_list):
+    """Le crayon d'une fiche choisit ce titre dans le formulaire, ce qui recharge son entrée
+    (prefill_journal_form)."""
+    clicked = ctx.triggered_id
+    if not isinstance(clicked, dict) or not any(n_clicks_list or []):
+        raise dash.exceptions.PreventUpdate
+    return clicked["ticker"]
+
+
+def _icon(name: str):
+    return html.I(className=f"bi bi-{name} me-1", **{"aria-hidden": "true"})
+
+
+def _journal_chips(entry: dict, row: dict, is_due: bool, lang: str) -> list:
+    """Pastilles d'une fiche : date de revue, prix cible, cours et écart à la cible. Chaque pastille
+    porte une icône et un texte : la couleur seule ne dit jamais rien."""
+    currency, price, target = row.get("currency"), row.get("price"), entry["target_price"]
+    chips = []
+    if entry["review_date"]:
+        chips.append(html.Span(
+            [_icon("alarm" if is_due else "calendar-event"),
+             L(lang, "journal_review_due" if is_due else "journal_review_on",
+               day=_format_day(entry["review_date"], lang))],
+            className="journal-chip due" if is_due else "journal-chip"))
+    if target is not None:
+        chips.append(html.Span([_icon("bullseye"),
+                                L(lang, "journal_target_chip", target=_format_price(target, currency, lang))],
+                               className="journal-chip"))
+        gap = gap_to_target_pct(price, target)
+        if gap is None:
+            chips.append(html.Span(L(lang, "journal_price_missing"), className="journal-chip muted"))
+        else:
+            # Sous la cible : même chiffre que l'alerte « sous ton prix cible » (potentiel jusqu'à la
+            # cible, en % du cours), pour ne jamais lire deux pourcentages différents du même écart.
+            below = gap <= 0
+            chips.append(html.Span(
+                [_icon("arrow-down-right" if below else "arrow-up-right"),
+                 L(lang, "journal_gap_below" if below else "journal_gap_above",
+                   price=_format_price(price, currency, lang),
+                   gap=(target / price - 1) * 100 if below else gap)],
+                className="journal-chip good" if below else "journal-chip"))
+    return chips
+
+
+@app.callback(
+    Output("journal-entries", "children"),
+    Output("journal-reviews-due", "children"),
+    Input("journal-refresh-trigger", "data"),
+    Input("stocks-raw-store", "data"),
+    Input("lang-radio", "value"),
+)
+def render_journal(_trigger, rows, lang):
+    """Fiches du journal (thèse, prix cible et écart au cours, date de revue) et rappel des revues
+    dues. Le cours vient des données chargées : avant chargement, il est indiqué comme absent,
+    jamais remplacé par 0."""
+    lang = lang or "fr"
+    entries = journal_db.get_entries()
+    if not entries:
+        return html.Div(L(lang, "journal_empty"), className="journal-empty"), ""
+    loaded = {r["Ticker"]: r for r in rows or []}
+    due = reviews_due(entries, pd.Timestamp.today().normalize())
+    due_tickers = {e["ticker"] for e in due}
+
+    def display_name(ticker):
+        row = loaded.get(ticker)
+        return f"{row['Entreprise']} ({ticker})" if row and row.get("Entreprise") else ticker
+
+    cards = []
+    for entry in entries:
+        ticker = entry["ticker"]
+        actions = [
+            # html.Button plutôt que dbc.Button : seul le premier accepte aria-label, nécessaire à un
+            # bouton qui n'affiche qu'une icône.
+            html.Button(html.I(className=f"bi bi-{icon}", **{"aria-hidden": "true"}),
+                        id={"type": f"journal-{kind}", "ticker": ticker}, n_clicks=0, type="button",
+                        className=f"btn btn-link btn-sm journal-icon-btn {kind}", title=L(lang, f"journal_{kind}_btn"),
+                        **{"aria-label": f"{L(lang, f'journal_{kind}_btn')} {ticker}"})
+            for kind, icon in (("edit", "pencil"), ("delete", "trash"))
+        ]
+        cards.append(html.Div([
+            html.Div([html.Div(display_name(ticker), className="watch-name"),
+                      html.Div(actions, className="journal-actions")], className="journal-card-head"),
+            html.Div(_journal_chips(entry, loaded.get(ticker, {}), ticker in due_tickers, lang),
+                     className="watch-badges"),
+            html.Div(entry["thesis"], className="journal-thesis") if entry["thesis"] else None,
+        ], className="journal-card due" if ticker in due_tickers else "journal-card"))
+
+    reminder = ""
+    if due:
+        names = ", ".join(f"{display_name(e['ticker'])}, {_format_day(e['review_date'], lang)}" for e in due)
+        reminder = html.Div([html.I(className="bi bi-alarm me-2", **{"aria-hidden": "true"}),
+                             L(lang, "journal_reminder", count=len(due), names=names)],
+                            className="journal-due-banner", role="status")
+    return cards, reminder

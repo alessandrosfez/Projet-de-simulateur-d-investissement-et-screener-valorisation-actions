@@ -30,13 +30,21 @@ d'un plan d'épargne), indépendant de celui-ci.
   du même secteur, affiché en cross-check du DCF — les deux méthodes ne
   dépendent pas des mêmes données, un large écart entre elles est en
   lui-même un signal à creuser.
-- **Alertes de la liste de suivi** : pour chaque titre suivi, quatre signaux
-  calculés sur tout l'univers chargé (indépendants des filtres du
-  tableau) : P/E dans les 20 % les plus bas de sa propre histoire, cours
+- **Alertes de la liste de suivi** : pour chaque titre suivi (liste de suivi
+  et journal), cinq signaux calculés sur tout l'univers chargé (indépendants
+  des filtres du tableau) : cours au niveau ou sous ton prix cible, P/E dans les 20 % les plus bas de sa propre histoire, cours
   sous la valeur implicite au P/E médian d'au moins 3 pairs du secteur,
   cours sous le DCF aux hypothèses par défaut des curseurs, score
   composite ≥ 70. Une donnée manquante ne déclenche rien ; ce sont des
   pistes à creuser, pas des recommandations.
+- **Journal d'investissement** : pour chaque titre, une thèse, un prix cible
+  (dans la devise de cotation du titre) et une date de revue. Chaque fiche
+  montre l'écart du cours à la cible ; les revues dont la date est passée
+  sont rappelées en tête. Stocké dans un fichier SQLite local
+  (`.stock_valuation_journal.db`, ignoré par git, migrations versionnées).
+  C'est le seul stockage durable de l'outil : les titres du journal restent
+  suivis par les alertes même quand la liste de suivi, qui ne survit pas au
+  rechargement de la page, est vide.
 - **« Football field »** : une barre horizontale par méthode (DCF selon les
   scénarios bas/haut, DCF selon la grille de sensibilité, comparables P/E et
   VE/EBITDA du 1er au 3e quartile des pairs, médiane en valeur centrale),
@@ -151,6 +159,7 @@ L'application est servie sur [http://localhost:8051](http://localhost:8051)
 - `market_data.py` : appels yfinance (P/E, FCF, dette, trésorerie...) et cache disque.
 - `engine.py` : moteur de calcul pur (DCF, valorisation par comparables).
   Aucune dépendance Dash/réseau.
+- `journal_db.py` : journal d'investissement (SQLite local).
 - `charts.py` : constructeur de graphique Plotly (état "pas encore de données").
 - `layout.py` : construction de l'écran unique (pas de sidebar : un seul
   outil, tous ses contrôles sont dans le corps de la page) et colonnes du
@@ -165,7 +174,7 @@ pytest -v
 ```
 
 `test_callbacks_smoke.py` appelle chaque callback de l'écran avec les valeurs initiales de ses
-entrées, avant chargement puis avec un univers fictif chargé, une ligne sélectionnée et une liste de suivi, données de marché simulées (aucun appel réseau). Il échoue si un
+entrées, avant chargement puis avec un univers fictif chargé, une ligne sélectionnée, une liste de suivi et un journal (fichier temporaire, jamais le vrai), données de marché simulées (aucun appel réseau). Il échoue si un
 callback lève une erreur ou renvoie un nombre de valeurs différent de ses sorties déclarées,
 des erreurs qui n'apparaissaient sinon qu'à l'écran.
 
