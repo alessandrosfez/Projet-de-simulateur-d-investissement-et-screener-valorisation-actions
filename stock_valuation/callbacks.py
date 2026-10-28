@@ -167,7 +167,10 @@ def load_stock_valuations(n_clicks, auto_refresh, universes, lang):
 
     tickers = {}
     for code in universes:
-        tickers.update(UNIVERSE_TICKERS[code])
+        for name, ticker in UNIVERSE_TICKERS[code].items():
+            # Un titre présent dans deux paniers cochés (CAC 40 et SBF 120) n'est chargé qu'une fois.
+            if ticker not in tickers.values():
+                tickers[name] = ticker
 
     with _load_progress_lock:
         _load_progress["done"] = 0

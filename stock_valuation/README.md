@@ -14,6 +14,7 @@ d'un plan d'épargne), indépendant de celui-ci.
 
 - **Comparatif de P/E par secteur** (nuage de points : une action par point,
   médiane de chaque secteur, titres de la liste de suivi nommés) sur CAC 40,
+  SBF 120 (composition reconstituée au 21/09/2026, voir `constants.py`),
   DAX 40, FTSE 100 (sélection) et un échantillon de grandes capitalisations
   américaines, avec position de chaque titre vs son propre P/E historique
   sur 5 ans (un signal souvent plus parlant que la comparaison sectorielle).

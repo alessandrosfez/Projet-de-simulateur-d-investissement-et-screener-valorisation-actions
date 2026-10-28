@@ -14,7 +14,7 @@ troisième à *les comptes sont-ils fiables et solides ?*
   rééquilibrage, jalons fiscaux) et le confronte à ce que la simulation
   aurait prévu.
 - **[`stock_valuation/`](stock_valuation/)** : écran de valorisation
-  d'actions individuelles (P/E sectoriel, DCF, comparables) sur CAC 40,
+  d'actions individuelles (P/E sectoriel, DCF, comparables) sur CAC 40, SBF 120,
   DAX 40, FTSE 100 et un échantillon d'actions américaines : une fois le
   montant à investir décidé, sur quels titres, et à quel prix par rapport
   à leur valeur estimée.

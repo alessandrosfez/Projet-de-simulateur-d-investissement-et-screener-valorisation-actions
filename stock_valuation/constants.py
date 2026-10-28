@@ -49,6 +49,104 @@ CAC40_TICKERS = {
     "Worldline": "WLN.PA",
 }
 
+# SBF 120 : les 40 valeurs du CAC 40 ci-dessus plus les 80 suivantes (CAC Next 20 et CAC Mid 60). La
+# composition complète n'est publiée que pour les clients sous licence d'Euronext (24 lignes en accès
+# libre, 30 sur Yahoo) : reconstituée à partir de la liste publique du 23/12/2024, puis des révisions
+# trimestrielles d'Euronext depuis :
+# - mars 2025 : Neoen sort (rachat), Exosens entre ;
+# - juin 2025 : Eutelsat et OVHcloud entrent, Bénéteau et Maurel & Prom sortent ;
+# - septembre 2025 : Abivax et Exail Technologies entrent, Esso et OVHcloud sortent ;
+# - décembre 2025 : LISI et Nanobiotix entrent, Mersen et Planisware sortent ;
+# - mars 2026 : DBV Technologies entre, Robertet sort ;
+# - juin 2026 : Maurel & Prom et Mersen reviennent, Elior et Nexity sortent ;
+# - septembre 2026 (effet le 21/09) : Genfit et Inventiva entrent, Interparfums et Verallia sortent.
+# Les 120 tickers vérifiés sur Yahoo le 28/10/2026 (cours récent et nom de fiche cohérent). Solvay est
+# pris à Bruxelles (SOLB.BR) : sa ligne parisienne n'a plus de cours sur Yahoo. À revoir à chaque
+# révision trimestrielle (mars, juin, septembre, décembre).
+SBF120_OTHER_TICKERS = {
+    "Abivax": "ABVX.PA",
+    "Accor": "AC.PA",
+    "Air France-KLM": "AF.PA",
+    "Alstom": "ALO.PA",
+    "Alten": "ATE.PA",
+    "Amundi": "AMUN.PA",
+    "Aperam": "APAM.AS",
+    "Argan": "ARG.PA",
+    "Arkema": "AKE.PA",
+    "Atos": "ATO.PA",
+    "Ayvens": "AYV.PA",
+    "Aéroports de Paris": "ADP.PA",
+    "Bic": "BB.PA",
+    "bioMérieux": "BIM.PA",
+    "Bolloré": "BOL.PA",
+    "Bureau Veritas": "BVI.PA",
+    "Carmila": "CARM.PA",
+    "Clariane": "CLARI.PA",
+    "Coface": "COFA.PA",
+    "Covivio": "COV.PA",
+    "Dassault Aviation": "AM.PA",
+    "DBV Technologies": "DBV.PA",
+    "Derichebourg": "DBG.PA",
+    "Eiffage": "FGR.PA",
+    "Elis": "ELIS.PA",
+    "Emeis": "EMEIS.PA",
+    "Eramet": "ERA.PA",
+    "Eurazeo": "RF.PA",
+    "Euronext": "ENX.PA",
+    "Eutelsat": "ETL.PA",
+    "Exail Technologies": "EXA.PA",
+    "Exosens": "EXENS.PA",
+    "FDJ United": "FDJU.PA",
+    "Forvia": "FRVIA.PA",
+    "Gecina": "GFC.PA",
+    "Genfit": "GNFT.PA",
+    "Getlink": "GET.PA",
+    "GTT": "GTT.PA",
+    "Icade": "ICAD.PA",
+    "ID Logistics": "IDL.PA",
+    "Imerys": "NK.PA",
+    "Inventiva": "IVA.PA",
+    "Ipsen": "IPN.PA",
+    "Ipsos": "IPS.PA",
+    "JCDecaux": "DEC.PA",
+    "Klépierre": "LI.PA",
+    "LISI": "FII.PA",
+    "M6": "MMT.PA",
+    "Maurel & Prom": "MAU.PA",
+    "MedinCell": "MEDCL.PA",
+    "Mercialys": "MERY.PA",
+    "Mersen": "MRN.PA",
+    "Nanobiotix": "NANO.PA",
+    "Nexans": "NEX.PA",
+    "OPmobility": "OPM.PA",
+    "Pluxee": "PLX.PA",
+    "Rexel": "RXL.PA",
+    "Rubis": "RUI.PA",
+    "Rémy Cointreau": "RCO.PA",
+    "Sartorius Stedim Biotech": "DIM.PA",
+    "SCOR": "SCR.PA",
+    "SEB": "SK.PA",
+    "SES": "SESG.PA",
+    "Sodexo": "SW.PA",
+    "Soitec": "SOI.PA",
+    "Solvay": "SOLB.BR",
+    "Sopra Steria": "SOP.PA",
+    "Spie": "SPIE.PA",
+    "Technip Energies": "TE.PA",
+    "TF1": "TFI.PA",
+    "Trigano": "TRI.PA",
+    "Ubisoft": "UBI.PA",
+    "Valeo": "FR.PA",
+    "Vallourec": "VK.PA",
+    "Valneva": "VLA.PA",
+    "Vicat": "VCT.PA",
+    "Virbac": "VIRP.PA",
+    "Viridien": "VIRI.PA",
+    "Vusion": "VU.PA",
+    "Wendel": "MF.PA",
+}
+SBF120_TICKERS = {**CAC40_TICKERS, **SBF120_OTHER_TICKERS}
+
 # Sélection de grandes capitalisations allemandes (DAX 40, tickers Xetra ".DE").
 DAX40_TICKERS = {
     "Adidas": "ADS.DE",
@@ -364,9 +462,10 @@ SMI_TICKERS = {
     "Alcon": "ALC.SW",
 }
 
-UNIVERSE_CODES = ["cac40", "dax40", "ftse100", "us", "aex", "ibex35", "ftsemib", "smi"]
+UNIVERSE_CODES = ["cac40", "sbf120", "dax40", "ftse100", "us", "aex", "ibex35", "ftsemib", "smi"]
 UNIVERSE_TICKERS = {
     "cac40": CAC40_TICKERS,
+    "sbf120": SBF120_TICKERS,
     "dax40": DAX40_TICKERS,
     "ftse100": FTSE100_TICKERS,
     "us": US_TICKERS,
