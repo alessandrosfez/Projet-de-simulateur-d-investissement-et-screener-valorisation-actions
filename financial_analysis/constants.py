@@ -3,25 +3,31 @@ Constantes partagées : sélection rapide de sociétés, classement sectoriel, u
 Aucune dépendance sur les autres modules du projet.
 """
 
-# Composition approximative du CAC 40 (tickers Yahoo Finance), recopiée de stock_valuation plutôt
-# qu'importée : chaque outil du dépôt reste autonome (voir le README racine). Maintenue à la main,
-# la composition officielle change de temps en temps.
+# CAC 40 (tickers Yahoo Finance), recopié de stock_valuation plutôt qu'importé : chaque outil du dépôt
+# reste autonome (voir le README racine). Maintenu à la main.
+# Composition depuis le 22/12/2025, inchangée aux révisions de mars, juin et septembre 2026 (communiqués
+# d'Euronext). Derniers changements : Euronext remplace Teleperformance (22/09/2025), Eiffage remplace
+# Edenred (22/12/2025) ; auparavant Bureau Veritas remplace Vivendi (23/12/2024) et Accor remplace
+# Alstom (18/03/2024). À revoir à chaque révision trimestrielle (mars, juin, septembre, décembre).
 CAC40_TICKERS = {
+    "Accor": "AC.PA",
     "Air Liquide": "AI.PA",
     "Airbus": "AIR.PA",
     "ArcelorMittal": "MT.AS",
     "Axa": "CS.PA",
     "BNP Paribas": "BNP.PA",
     "Bouygues": "EN.PA",
+    "Bureau Veritas": "BVI.PA",
     "Capgemini": "CAP.PA",
     "Carrefour": "CA.PA",
     "Crédit Agricole": "ACA.PA",
     "Danone": "BN.PA",
     "Dassault Systèmes": "DSY.PA",
-    "Edenred": "EDEN.PA",
+    "Eiffage": "FGR.PA",
     "Engie": "ENGI.PA",
     "EssilorLuxottica": "EL.PA",
     "Eurofins Scientific": "ERF.PA",
+    "Euronext": "ENX.PA",
     "Hermès": "RMS.PA",
     "Kering": "KER.PA",
     "L'Oréal": "OR.PA",
@@ -39,14 +45,11 @@ CAC40_TICKERS = {
     "Société Générale": "GLE.PA",
     "Stellantis": "STLAP.PA",
     "STMicroelectronics": "STMPA.PA",
-    "Teleperformance": "TEP.PA",
     "Thales": "HO.PA",
     "TotalEnergies": "TTE.PA",
     "Unibail-Rodamco-Westfield": "URW.PA",
     "Veolia": "VIE.PA",
     "Vinci": "DG.PA",
-    "Vivendi": "VIV.PA",
-    "Worldline": "WLN.PA",
 }
 
 # Industries Yahoo Finance des sociétés dont le bilan est de nature différente (le passif est la

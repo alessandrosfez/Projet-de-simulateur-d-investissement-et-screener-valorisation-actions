@@ -3,25 +3,30 @@ Constantes partagées : paniers d'actions par marché. Aucune dépendance sur
 les autres modules du projet.
 """
 
-# Composition approximative du CAC 40 (tickers Yahoo Finance, suffixe .PA/.AS).
-# Maintenue à la main : la composition officielle change de temps en temps,
-# ajuster ce dict si besoin (ajout/retrait d'une valeur, ticker erroné...).
+# CAC 40 (tickers Yahoo Finance, suffixe .PA ; ArcelorMittal coté à Amsterdam, .AS). Maintenu à la main.
+# Composition depuis le 22/12/2025, inchangée aux révisions de mars, juin et septembre 2026 (communiqués
+# d'Euronext). Derniers changements : Euronext remplace Teleperformance (22/09/2025), Eiffage remplace
+# Edenred (22/12/2025) ; auparavant Bureau Veritas remplace Vivendi (23/12/2024) et Accor remplace
+# Alstom (18/03/2024). À revoir à chaque révision trimestrielle (mars, juin, septembre, décembre).
 CAC40_TICKERS = {
+    "Accor": "AC.PA",
     "Air Liquide": "AI.PA",
     "Airbus": "AIR.PA",
     "ArcelorMittal": "MT.AS",
     "Axa": "CS.PA",
     "BNP Paribas": "BNP.PA",
     "Bouygues": "EN.PA",
+    "Bureau Veritas": "BVI.PA",
     "Capgemini": "CAP.PA",
     "Carrefour": "CA.PA",
     "Crédit Agricole": "ACA.PA",
     "Danone": "BN.PA",
     "Dassault Systèmes": "DSY.PA",
-    "Edenred": "EDEN.PA",
+    "Eiffage": "FGR.PA",
     "Engie": "ENGI.PA",
     "EssilorLuxottica": "EL.PA",
     "Eurofins Scientific": "ERF.PA",
+    "Euronext": "ENX.PA",
     "Hermès": "RMS.PA",
     "Kering": "KER.PA",
     "L'Oréal": "OR.PA",
@@ -39,14 +44,11 @@ CAC40_TICKERS = {
     "Société Générale": "GLE.PA",
     "Stellantis": "STLAP.PA",
     "STMicroelectronics": "STMPA.PA",
-    "Teleperformance": "TEP.PA",
     "Thales": "HO.PA",
     "TotalEnergies": "TTE.PA",
     "Unibail-Rodamco-Westfield": "URW.PA",
     "Veolia": "VIE.PA",
     "Vinci": "DG.PA",
-    "Vivendi": "VIV.PA",
-    "Worldline": "WLN.PA",
 }
 
 # SBF 120 : les 40 valeurs du CAC 40 ci-dessus plus les 80 suivantes (CAC Next 20 et CAC Mid 60). La
@@ -65,7 +67,6 @@ CAC40_TICKERS = {
 # révision trimestrielle (mars, juin, septembre, décembre).
 SBF120_OTHER_TICKERS = {
     "Abivax": "ABVX.PA",
-    "Accor": "AC.PA",
     "Air France-KLM": "AF.PA",
     "Alstom": "ALO.PA",
     "Alten": "ATE.PA",
@@ -79,7 +80,6 @@ SBF120_OTHER_TICKERS = {
     "Bic": "BB.PA",
     "bioMérieux": "BIM.PA",
     "Bolloré": "BOL.PA",
-    "Bureau Veritas": "BVI.PA",
     "Carmila": "CARM.PA",
     "Clariane": "CLARI.PA",
     "Coface": "COFA.PA",
@@ -87,12 +87,11 @@ SBF120_OTHER_TICKERS = {
     "Dassault Aviation": "AM.PA",
     "DBV Technologies": "DBV.PA",
     "Derichebourg": "DBG.PA",
-    "Eiffage": "FGR.PA",
+    "Edenred": "EDEN.PA",
     "Elis": "ELIS.PA",
     "Emeis": "EMEIS.PA",
     "Eramet": "ERA.PA",
     "Eurazeo": "RF.PA",
-    "Euronext": "ENX.PA",
     "Eutelsat": "ETL.PA",
     "Exail Technologies": "EXA.PA",
     "Exosens": "EXENS.PA",
@@ -133,6 +132,7 @@ SBF120_OTHER_TICKERS = {
     "Sopra Steria": "SOP.PA",
     "Spie": "SPIE.PA",
     "Technip Energies": "TE.PA",
+    "Teleperformance": "TEP.PA",
     "TF1": "TFI.PA",
     "Trigano": "TRI.PA",
     "Ubisoft": "UBI.PA",
@@ -142,8 +142,10 @@ SBF120_OTHER_TICKERS = {
     "Vicat": "VCT.PA",
     "Virbac": "VIRP.PA",
     "Viridien": "VIRI.PA",
+    "Vivendi": "VIV.PA",
     "Vusion": "VU.PA",
     "Wendel": "MF.PA",
+    "Worldline": "WLN.PA",
 }
 SBF120_TICKERS = {**CAC40_TICKERS, **SBF120_OTHER_TICKERS}
 
