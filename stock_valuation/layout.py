@@ -143,7 +143,7 @@ def stocks_column_defs(labels: dict[str, str], help_texts: dict[str, str], lang:
 TAB_STATE_FIELDS = [
     ("universe-checklist", "value"), ("sector-filter", "value"),
     ("filter-pe-max", "value"), ("filter-peg-max", "value"), ("filter-div-min", "value"), ("filter-score-min", "value"),
-    ("watchlist-dropdown", "value"), ("watchlist-only-switch", "value"),
+    ("watchlist-dropdown", "value"), ("watchlist-only-switch", "value"), ("extra-tickers", "value"),
     ("dcf-growth-slider", "value"), ("dcf-discount-slider", "value"),
     ("dcf-terminal-growth-slider", "value"), ("dcf-horizon-slider", "value"),
     ("dcf-growth-offset-slider", "value"), ("dcf-discount-offset-slider", "value"),
@@ -236,6 +236,19 @@ def build_tab3(lang, v=None):
             options=[{"label": f" {L(lang, f'universe_{code}')}", "value": code} for code in UNIVERSE_CODES],
             value=gv(v, "universe-checklist", ["cac40"]), labelStyle={"display": "block"}, className="mb-2",
         ),
+        # Titres ajoutés à la main, chargés avec les marchés cochés (callbacks.apply_extra_tickers). Options
+        # posées en même temps que la valeur : la liste déroulante efface une valeur sans option.
+        dbc.Label(L(lang, "extra_tickers_label"), html_for="extra-tickers", className="mb-0 mt-1"),
+        html.Div(L(lang, "extra_tickers_help"), className="text-muted mb-1", style={"fontSize": "0.75rem"}),
+        dcc.Dropdown(
+            # search_order="original" : l'ordre de pertinence de Yahoo (place principale d'abord), pas un
+            # nouveau tri du navigateur sur le texte tapé.
+            id="extra-tickers", multi=True, searchable=True, search_order="original",
+            placeholder=L(lang, "extra_tickers_placeholder"),
+            value=gv(v, "extra-tickers", []), options=[{"label": t, "value": t} for t in gv(v, "extra-tickers", [])],
+            className="mb-2", style={"maxWidth": "680px"},
+        ),
+        html.Div(id="extra-tickers-status"),
         dbc.Button(icon_label("cloud-arrow-down", L(lang, "load_btn")), id="btn-load-stocks", color="primary", className="mb-2"),
         # Avance par petits pas pendant que load_stock_valuations tourne (voir callbacks.py) :
         # un chargement à froid de tout un gros panier (plusieurs centaines de titres jamais mis

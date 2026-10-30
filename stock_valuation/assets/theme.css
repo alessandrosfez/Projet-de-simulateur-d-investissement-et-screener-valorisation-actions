@@ -243,6 +243,16 @@ a { color: var(--accent); }
 /* Le « ⓘ » suit le titre dans un conteneur flex, où l'espace qui le précède disparaît. */
 .watch-title > span[id$="-info"] { margin-left: 0.35rem; }
 
+/* -------- Menus des listes déroulantes (Dash 4) -------- */
+/* Le menu ouvert est une couche fixe, enfant direct de .dash-dropdown-wrapper, posée à z-index 500 :
+   sous la barre d'ancres collante (1020), qui recouvrait le menu du champ « Ajouter des titres » ouvert
+   juste au-dessus d'elle et en interceptait les clics. Remonté au-dessus de la barre et des barres
+   d'outils Plotly (1001), sous les infobulles Bootstrap (1070). */
+.dash-dropdown-wrapper > div { z-index: 1060 !important; }
+/* Champ « Ajouter des titres » : sans les boutons « Select All / Deselect All » de Dash, qui ajouteraient
+   d'un clic toutes les places de cotation proposées pour une même société. */
+.dash-dropdown-wrapper:has(#extra-tickers) .dash-dropdown-actions { display: none; }
+
 /* -------- Âge des données affichées (callbacks.update_freshness) -------- */
 .freshness { display: inline-flex; align-items: center; font-size: 0.8rem; color: var(--Dash-Text-Weak, #6c757d); }
 .freshness.stale { color: #9a5b00; }

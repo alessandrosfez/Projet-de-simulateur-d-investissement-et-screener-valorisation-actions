@@ -505,3 +505,41 @@ def get_dcf_inputs(ticker: str) -> dict:
         "enterprise_value": enterprise_value,
         "ev_to_ebitda": info.get("enterpriseToEbitda"),
     }
+
+
+# ============================================================
+# RECHERCHE DE TITRES (champ « Ajouter des titres »)
+# ============================================================
+
+# Bourses écartées des résultats : marchés hors cote américains (PNK, OQB, OQX), certificats canadiens
+# (NEO) et lignes de réplication (DXE) d'un titre déjà coté sur son marché principal. Elles doublonnent
+# la cotation d'origine sans apporter de comptes ni d'historique propres.
+SEARCH_EXCLUDED_EXCHANGES = {"PNK", "OQB", "OQX", "NEO", "DXE"}
+SEARCH_MAX_RESULTS = 12
+
+
+@cached_ttl(STATEMENTS_TTL_SECONDS)
+def _search_quotes(query: str) -> list:
+    return yf.Search(query, max_results=SEARCH_MAX_RESULTS, news_count=0).quotes
+
+
+def search_equities(query: str | None) -> list[dict]:
+    """Actions cotées dont le nom ou le ticker correspond à query, selon la recherche de Yahoo :
+    [{"ticker", "name", "exchange"}], dans l'ordre de pertinence de Yahoo. Une même société cotée sur
+    plusieurs places apparaît une fois par place (Paris, Xetra, Londres...) : à l'utilisateur de choisir
+    la sienne, la place indiquée à côté. Liste vide sous deux caractères ou si Yahoo ne répond pas."""
+    query = (query or "").strip()
+    if len(query) < 2:
+        return []
+    try:
+        quotes = _search_quotes(query.lower())
+    except Exception:
+        return []
+    results = []
+    for quote in quotes:
+        symbol = quote.get("symbol")
+        if not symbol or quote.get("quoteType") != "EQUITY" or quote.get("exchange") in SEARCH_EXCLUDED_EXCHANGES:
+            continue
+        results.append({"ticker": symbol, "name": quote.get("longname") or quote.get("shortname") or symbol,
+                        "exchange": quote.get("exchDisp") or quote.get("exchange") or ""})
+    return results

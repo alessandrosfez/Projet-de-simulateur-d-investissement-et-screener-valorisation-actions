@@ -256,3 +256,22 @@ def test_watchlist_is_restored_together_with_its_options():
     assert {o["value"] for o in options} >= set(value)
     options, value = callbacks.restore_watchlist(0, None)
     assert {o["value"] for o in options} == {"AAA.PA", "ZZZ.PA"}
+
+
+
+def test_added_stock_joins_the_table_and_a_removed_one_leaves_it(offline):
+    """Un titre ajouté est chargé seul et rejoint les lignes affichées ; retiré, il en disparaît s'il
+    n'appartient à aucun marché chargé. Les lignes des marchés chargés ne bougent pas."""
+    cac = next(iter(callbacks.UNIVERSE_TICKERS["cac40"].items()))
+    rows = [{"Ticker": cac[1], "Entreprise": cac[0], "price": 10.0}]
+    loaded_at = {"at": 1_000.0, "universes": ["cac40"]}
+    options = [{"label": "Delta S.A. (DDD.PA · Paris)", "value": "DDD.PA"}]
+    new_rows, status = callbacks.apply_extra_tickers(["DDD.PA"], options, rows, loaded_at, "fr")
+    assert [r["Ticker"] for r in new_rows] == [cac[1], "DDD.PA"] and status == ""
+    assert new_rows[1]["Entreprise"] == "Delta S.A."
+    assert journal_db.get_extra_tickers() == [{"ticker": "DDD.PA", "name": "Delta S.A."}]
+    assert last_load.read_last_load()["saved_at"] == 1_000.0  # date d'origine gardée
+    after, _ = callbacks.apply_extra_tickers([], options, new_rows, loaded_at, "fr")
+    assert [r["Ticker"] for r in after] == [cac[1]]
+    # Rien d'affiché : enregistré seulement, chargé avec le prochain chargement.
+    assert callbacks.apply_extra_tickers(["DDD.PA"], options, None, None, "fr")[0] is dash.no_update

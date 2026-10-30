@@ -75,6 +75,12 @@ TRANSLATIONS = {
         "universe_ftsemib": "FTSE MIB (Italie, sélection)",
         "universe_smi": "SMI (Suisse, sélection)",
         "load_btn": "Charger / actualiser les données",
+        "extra_tickers_label": "Ajouter des titres (toutes bourses)",
+        "extra_tickers_help": "Tape un nom ou un ticker : Yahoo propose les sociétés cotées, en Europe et ailleurs, "
+                              "avec leur place de cotation. Les titres ajoutés sont gardés et chargés avec les "
+                              "marchés cochés ; un titre ajouté rejoint tout de suite le tableau affiché.",
+        "extra_tickers_placeholder": "Rechercher : Eutelsat, Novo Nordisk, ASML...",
+        "extra_tickers_failed": "Données indisponibles pour l'instant : {names}.",
         "load_progress_text": "{done} / {total} chargées...",
         "freshness_now": "Données chargées à l'instant ({when})",
         "freshness_minutes": "Données chargées il y a {count} min ({when})",
@@ -373,6 +379,12 @@ TRANSLATIONS = {
         "universe_ftsemib": "FTSE MIB (Italy, selection)",
         "universe_smi": "SMI (Switzerland, selection)",
         "load_btn": "Load / refresh data",
+        "extra_tickers_label": "Add stocks (any exchange)",
+        "extra_tickers_help": "Type a name or a ticker: Yahoo suggests listed companies, in Europe and elsewhere, "
+                              "with their exchange. Added stocks are kept and loaded with the ticked markets; an "
+                              "added stock joins the displayed table right away.",
+        "extra_tickers_placeholder": "Search: Eutelsat, Novo Nordisk, ASML...",
+        "extra_tickers_failed": "Data unavailable for now: {names}.",
         "load_progress_text": "{done} / {total} loaded...",
         "freshness_now": "Data loaded just now ({when})",
         "freshness_minutes": "Data loaded {count} min ago ({when})",

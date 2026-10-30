@@ -248,3 +248,26 @@ def test_missing_yahoo_sector_uses_the_documented_fallback(monkeypatch):
     monkeypatch.setattr(md, "get_stock_pe_history", lambda ticker: pd.Series(dtype=float))
     assert md.get_stock_valuation("ML.PA")["sector"] == "Consumer Cyclical"
     assert md.get_stock_valuation("XYZ.PA")["sector"] == "N/A"
+
+
+def test_search_equities_keeps_listed_stocks_only(monkeypatch):
+    quotes = [
+        {"symbol": "AAA.PA", "longname": "Alpha S.A.", "quoteType": "EQUITY", "exchange": "PAR", "exchDisp": "Paris"},
+        {"symbol": "AAAF", "shortname": "Alpha", "quoteType": "EQUITY", "exchange": "PNK", "exchDisp": "OTC Markets"},
+        {"symbol": "AAAX", "longname": "Alpha 2X ETF", "quoteType": "ETF", "exchange": "NGM", "exchDisp": "NASDAQ"},
+        {"symbol": "AAA.DE", "shortname": "Alpha AG", "quoteType": "EQUITY", "exchange": "GER", "exchDisp": "XETRA"},
+    ]
+    monkeypatch.setattr(md, "_search_quotes", lambda query: quotes)
+    assert md.search_equities("alpha") == [
+        {"ticker": "AAA.PA", "name": "Alpha S.A.", "exchange": "Paris"},
+        {"ticker": "AAA.DE", "name": "Alpha AG", "exchange": "XETRA"},
+    ]
+    assert md.search_equities("a") == [] and md.search_equities(None) == []
+
+
+def test_search_equities_is_empty_when_yahoo_fails(monkeypatch):
+    def down(query):
+        raise ConnectionError("Yahoo injoignable")
+
+    monkeypatch.setattr(md, "_search_quotes", down)
+    assert md.search_equities("alpha") == []

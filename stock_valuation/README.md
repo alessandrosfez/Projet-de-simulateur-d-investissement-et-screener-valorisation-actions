@@ -38,6 +38,13 @@ d'un plan d'épargne), indépendant de celui-ci.
   cours sous le DCF aux hypothèses par défaut des curseurs, score
   composite ≥ 70. Une donnée manquante ne déclenche rien ; ce sont des
   pistes à creuser, pas des recommandations.
+- **Ajouter des titres (toutes bourses)** : sous les marchés à cocher, un champ
+  de recherche interroge Yahoo (nom ou ticker : Eutelsat, Novo Nordisk,
+  ASML...) et propose les actions cotées avec leur place de cotation (marchés
+  hors cote américains, certificats canadiens et lignes de réplication
+  écartés). Un titre choisi est chargé seul et rejoint tout de suite le
+  tableau, ses comparaisons sectorielles et son score ; il est gardé dans le
+  fichier local du journal et chargé avec les marchés cochés à chaque fois.
 - **Chargement instantané** : chaque chargement réussi est gardé dans un
   fichier local (`.stock_valuation_last_load.pkl`, ignoré par git). À
   l'ouverture de la page, ou après un changement de langue qui vidait

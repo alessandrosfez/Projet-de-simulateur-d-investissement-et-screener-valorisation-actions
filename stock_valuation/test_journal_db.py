@@ -39,3 +39,11 @@ def test_watchlist_keeps_order_and_drops_duplicates():
     assert journal_db.get_watchlist() == ["BBB.PA", "AAA.PA"]
     journal_db.set_watchlist([])
     assert journal_db.get_watchlist() == []
+
+
+def test_extra_tickers_keep_order_names_and_drop_duplicates():
+    assert journal_db.get_extra_tickers() == []
+    journal_db.set_extra_tickers([{"ticker": "BBB.PA", "name": "Beta"}, {"ticker": "AAA.PA", "name": ""},
+                                  {"ticker": "BBB.PA", "name": "Autre"}])
+    assert journal_db.get_extra_tickers() == [{"ticker": "BBB.PA", "name": "Beta"},
+                                              {"ticker": "AAA.PA", "name": "AAA.PA"}]

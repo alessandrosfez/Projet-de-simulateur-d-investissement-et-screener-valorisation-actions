@@ -27,6 +27,10 @@ _MIGRATIONS = [
     "target_price REAL, review_date TEXT, updated_at TEXT NOT NULL);",
     # v2 : liste de suivi, dans l'ordre où les titres ont été ajoutés.
     "CREATE TABLE IF NOT EXISTS watchlist (ticker TEXT PRIMARY KEY, position INTEGER NOT NULL);",
+    # v3 : titres ajoutés à la main (champ « Ajouter des titres »), chargés avec les marchés cochés. Le
+    # nom est gardé tel que la recherche l'a donné, pour l'afficher avant tout chargement.
+    "CREATE TABLE IF NOT EXISTS extra_tickers (ticker TEXT PRIMARY KEY, name TEXT NOT NULL, "
+    "position INTEGER NOT NULL);",
 ]
 
 
@@ -105,6 +109,31 @@ def set_watchlist(tickers: list[str]):
         conn.execute("DELETE FROM watchlist")
         conn.executemany("INSERT INTO watchlist (ticker, position) VALUES (?, ?)",
                          [(t, i) for i, t in enumerate(unique)])
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def get_extra_tickers() -> list[dict]:
+    """Titres ajoutés à la main, [{"ticker", "name"}] dans l'ordre d'ajout."""
+    conn = _get_connection()
+    try:
+        return [{"ticker": t, "name": n} for t, n in conn.execute("SELECT ticker, name FROM extra_tickers ORDER BY position")]
+    finally:
+        conn.close()
+
+
+def set_extra_tickers(entries: list[dict]):
+    """Remplace la liste des titres ajoutés (doublons écartés, ordre gardé)."""
+    unique = {}
+    for entry in entries:
+        if entry.get("ticker") and entry["ticker"] not in unique:
+            unique[entry["ticker"]] = entry.get("name") or entry["ticker"]
+    conn = _get_connection()
+    try:
+        conn.execute("DELETE FROM extra_tickers")
+        conn.executemany("INSERT INTO extra_tickers (ticker, name, position) VALUES (?, ?, ?)",
+                         [(t, n, i) for i, (t, n) in enumerate(unique.items())])
         conn.commit()
     finally:
         conn.close()

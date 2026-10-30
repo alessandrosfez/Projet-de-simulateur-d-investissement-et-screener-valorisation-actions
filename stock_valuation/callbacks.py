@@ -35,7 +35,7 @@ import chart_theme
 from i18n import L, PALETTE_CODES, PALETTE_NAMES, num
 from market_data import (
     get_dcf_inputs, get_stock_pe_history, get_stock_price_history, get_stock_quality_metrics, get_stock_valuation,
-    major_currency,
+    major_currency, search_equities,
 )
 
 # Hauteur du tableau de criblage : en-tête (libellés sur deux ou trois lignes) puis lignes du thème
@@ -162,7 +162,9 @@ def load_stock_valuations(n_clicks, auto_refresh, universes, lang):
         if not auto_refresh:
             raise dash.exceptions.PreventUpdate
         universes = auto_refresh["universes"]
-    if not universes:
+    universes = list(universes or [])
+    extras = journal_db.get_extra_tickers()
+    if not universes and not extras:
         return [], dbc.Alert(L(lang, "select_market_warning"), color="warning"), dash.no_update
 
     tickers = {}
@@ -171,6 +173,12 @@ def load_stock_valuations(n_clicks, auto_refresh, universes, lang):
             # Un titre présent dans deux paniers cochés (CAC 40 et SBF 120) n'est chargé qu'une fois.
             if ticker not in tickers.values():
                 tickers[name] = ticker
+    # Titres ajoutés à la main (champ « Ajouter des titres »), chargés avec les marchés cochés. Un nom
+    # déjà pris par un autre ticker (Airbus à Paris et à Francfort) est suffixé de son ticker.
+    for entry in extras:
+        if entry["ticker"] not in tickers.values():
+            key = entry["name"] if entry["name"] not in tickers else f"{entry['name']} ({entry['ticker']})"
+            tickers[key] = entry["ticker"]
 
     with _load_progress_lock:
         _load_progress["done"] = 0
@@ -1442,3 +1450,102 @@ def render_journal(_trigger, rows, lang, palette_code=None, dark_mode=True):
                              L(lang, "journal_reminder", count=len(due), names=names)],
                             className="journal-due-banner", role="status")
     return cards, reminder
+
+
+
+# ============================================================
+# CALLBACKS : titres ajoutés à la main (recherche Yahoo)
+# ============================================================
+
+def _extra_option(entry: dict) -> dict:
+    return {"label": f"{entry['name']} ({entry['ticker']})", "value": entry["ticker"]}
+
+
+@app.callback(
+    Output("extra-tickers", "options", allow_duplicate=True),
+    Output("extra-tickers", "value"),
+    Input("stocks-restore", "data"),
+    prevent_initial_call="initial_duplicate",
+)
+def restore_extra_tickers(_restore):
+    """À chaque construction de l'écran : remet les titres ajoutés, valeur et options dans le même envoi
+    (même raison que restore_watchlist : une valeur sans option serait effacée)."""
+    saved = journal_db.get_extra_tickers()
+    return [_extra_option(e) for e in saved], [e["ticker"] for e in saved]
+
+
+@app.callback(
+    Output("extra-tickers", "options"),
+    Input("extra-tickers", "search_value"),
+    State("extra-tickers", "value"),
+    State("extra-tickers", "options"),
+    prevent_initial_call=True,
+)
+def search_extra_tickers(search, selected, options):
+    """Propose les actions trouvées par Yahoo pour le texte tapé (market_data.search_equities), avec
+    leur place de cotation. Les titres déjà choisis gardent leur option."""
+    if not search or len(search.strip()) < 2:
+        raise dash.exceptions.PreventUpdate
+    chosen = set(selected or [])
+    kept = [o for o in options or [] if o["value"] in chosen]
+    found = [{"label": f"{r['name']} ({r['ticker']} · {r['exchange']})", "value": r["ticker"]}
+             for r in search_equities(search) if r["ticker"] not in chosen]
+    return kept + found
+
+
+def _name_from_label(label: str | None, ticker: str) -> str:
+    """« Eutelsat Communications S.A. (ETL.PA · Paris) » -> « Eutelsat Communications S.A. »."""
+    if not label:
+        return ticker
+    return label.rsplit(" (", 1)[0] if label.endswith(")") and " (" in label else label
+
+
+@app.callback(
+    Output("stocks-raw-store", "data", allow_duplicate=True),
+    Output("extra-tickers-status", "children"),
+    Input("extra-tickers", "value"),
+    State("extra-tickers", "options"),
+    State("stocks-raw-store", "data"),
+    State("stocks-loaded-at", "data"),
+    State("lang-radio", "value"),
+    prevent_initial_call=True,
+)
+def apply_extra_tickers(selected, options, rows, loaded_at, lang):
+    """Enregistre les titres ajoutés (journal_db) et met le tableau à jour sans tout recharger : un titre
+    ajouté est chargé seul et rejoint les lignes affichées, un titre retiré en disparaît s'il
+    n'appartient à aucun marché chargé. Sans données affichées, rien n'est chargé : les titres partiront
+    avec le prochain chargement. Le dernier chargement enregistré (last_load) suit, à sa date d'origine."""
+    lang = lang or "fr"
+    selected = list(selected or [])
+    labels = {o["value"]: o["label"] for o in options or []}
+    previous = {e["ticker"]: e["name"] for e in journal_db.get_extra_tickers()}
+    entries = [{"ticker": t, "name": previous.get(t) or _name_from_label(labels.get(t), t)} for t in selected]
+    journal_db.set_extra_tickers(entries)
+    if not rows:
+        return dash.no_update, ""
+    universes = (loaded_at or {}).get("universes") or []
+    in_universes = {t for code in universes for t in UNIVERSE_TICKERS.get(code, {}).values()}
+    present = {r["Ticker"] for r in rows}
+    kept = [r for r in rows if r["Ticker"] in in_universes or r["Ticker"] in selected]
+    to_fetch = [e for e in entries if e["ticker"] not in present]
+    if not to_fetch and len(kept) == len(rows):
+        return dash.no_update, ""
+
+    fetched, failures = [], []
+    with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+        futures = {executor.submit(_load_full_stock_data, e["ticker"]): e for e in to_fetch}
+        for future in concurrent.futures.as_completed(futures):
+            entry = futures[future]
+            try:
+                data = future.result()
+            except Exception:
+                failures.append(entry["name"])
+                continue
+            data["Entreprise"], data["Ticker"] = entry["name"], entry["ticker"]
+            fetched.append(data)
+    new_rows = kept + fetched
+    if loaded_at:
+        last_load.save_last_load(new_rows, universes, saved_at=loaded_at.get("at"))
+    status = dbc.Alert(L(lang, "extra_tickers_failed", names=", ".join(sorted(failures))), color="warning",
+                       className="py-2") if failures else ""
+    return new_rows, status
