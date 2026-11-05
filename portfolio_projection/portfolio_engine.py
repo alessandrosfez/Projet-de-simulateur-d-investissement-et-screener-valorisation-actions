@@ -7,6 +7,7 @@ récupérées (market_data.get_daily_price_history()) -- aucun accès disque ou 
 """
 import datetime as dt
 import math
+from collections import Counter
 from collections.abc import Sequence
 from typing import cast
 
@@ -692,6 +693,49 @@ def extract_trade_republic_buys(df: pd.DataFrame) -> tuple[list[dict], list[tupl
             "amount_eur": shares * price, "price": price, "fee_eur": fee,
         })
     return rows, errors
+
+
+# Champs qui identifient une ligne déjà enregistrée lors d'un import (voir rows_not_yet_recorded), et
+# précision de comparaison de chacun : montants et frais au centime, cours à 4 décimales. Un montant
+# Trade Republic est recalculé (parts x cours, ex. 237,307) : comparer les flottants bruts ferait
+# rater une ligne pourtant identique.
+TRANSACTION_IMPORT_KEY = ("ticker", "date", "amount_eur", "price", "fee_eur")
+DIVIDEND_IMPORT_KEY = ("ticker", "date", "amount_eur")
+_IMPORT_KEY_DECIMALS = {"amount_eur": 2, "fee_eur": 2, "price": 4}
+
+
+def _import_key(row: dict, fields: Sequence[str]) -> tuple:
+    key: list = []
+    for field in fields:
+        value = row.get(field)
+        if field == "ticker":
+            key.append(str(value).strip().upper())
+        elif field == "date":
+            key.append(str(value)[:10])
+        else:
+            number = 0.0 if value is None or (isinstance(value, float) and math.isnan(value)) else float(value)
+            key.append(round(number, _IMPORT_KEY_DECIMALS.get(field, 2)))
+    return tuple(key)
+
+
+def rows_not_yet_recorded(new_rows: list[dict], existing: pd.DataFrame,
+                          fields: Sequence[str]) -> tuple[list[dict], int]:
+    """Lignes d'un import à ajouter réellement, et nombre de lignes écartées car déjà enregistrées.
+    Comparaison par occurrences, pas par simple présence : si la base contient une fois une ligne et
+    le fichier deux fois (deux achats identiques le même jour), la seconde est ajoutée. Réimporter un
+    export complet n'ajoute donc que les nouvelles lignes, sans jamais perdre un vrai doublon."""
+    available: Counter = Counter()
+    if not existing.empty:
+        available.update(_import_key(row, fields) for row in existing.to_dict("records"))
+    kept, skipped = [], 0
+    for row in new_rows:
+        key = _import_key(row, fields)
+        if available[key] > 0:
+            available[key] -= 1
+            skipped += 1
+        else:
+            kept.append(row)
+    return kept, skipped
 
 
 def validate_transactions_rows(df: pd.DataFrame) -> tuple[list[dict], list[tuple[int, str]]]:

@@ -389,7 +389,18 @@ def import_csv(contents, lang):
     insertable_rows = [row for row in valid_rows if row["ticker"] not in invalid_tickers]
     skipped_for_ticker = len(valid_rows) - len(insertable_rows)
 
+    # Lignes déjà enregistrées (import précédent du même export, saisie à la main identique) : écartées,
+    # pour qu'un export complet puisse être réimporté sans doubler l'historique.
+    if kind == "transactions":
+        existing, key_fields = portfolio_db.get_transactions(), portfolio_engine.TRANSACTION_IMPORT_KEY
+    else:
+        existing, key_fields = portfolio_db.get_dividends(), portfolio_engine.DIVIDEND_IMPORT_KEY
+    candidate_rows = len(insertable_rows)
+    insertable_rows, n_already = portfolio_engine.rows_not_yet_recorded(insertable_rows, existing, key_fields)
+
     if not insertable_rows:
+        if n_already:
+            return dash.no_update, L(lang, "csv_import_nothing_new", n=n_already)
         return dash.no_update, L(lang, "csv_import_no_valid_rows")
 
     if kind == "transactions":
@@ -402,6 +413,8 @@ def import_csv(contents, lang):
         )
 
     messages = [html.Div(L(lang, "csv_import_success", n=n_inserted))]
+    if n_already:
+        messages.append(html.Div(L(lang, "csv_import_already_present", n=n_already, total=candidate_rows)))
     details = [L(lang, f"csv_error_{code}", line=line) for line, code in errors]
     details += [f"{t} ({L(lang, 'csv_import_invalid_ticker_reason')})" for t in invalid_tickers]
     details += [f"{isin} ({L(lang, 'csv_import_unresolved_isin_reason')})" for isin in unresolved_isins]

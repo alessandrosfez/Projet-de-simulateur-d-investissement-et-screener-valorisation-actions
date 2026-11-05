@@ -852,3 +852,31 @@ def test_drift_bar_scale_fits_the_largest_gap_or_the_threshold():
     # Écarts tous sous le seuil (ne devrait pas arriver, mais la zone tolérée doit rester visible).
     assert m.drift_bar_scale([2.0], 5.0) == pytest.approx(5.0 * 1.08)
     assert m.drift_bar_scale([], 0.0) == pytest.approx(1.08)
+
+
+def test_rows_not_yet_recorded_skips_recorded_rows_by_occurrence():
+    existing = pd.DataFrame([
+        {"id": 1, "ticker": "SPA.PA", "date": "2026-01-05", "amount_eur": 100.0, "price": 10.0, "fee_eur": 1.0},
+    ])
+    same = {"ticker": "spa.pa", "date": "2026-01-05", "amount_eur": 100.001, "price": 10.00001, "fee_eur": 1.0}
+    new = {"ticker": "SPB.PA", "date": "2026-02-02", "amount_eur": 50.0, "price": 5.0, "fee_eur": 0.0}
+    # Deux achats identiques dans le fichier, un seul en base : le second est bien ajouté.
+    kept, skipped = m.rows_not_yet_recorded([same, dict(same), new], existing, m.TRANSACTION_IMPORT_KEY)
+    assert skipped == 1
+    assert [r["ticker"] for r in kept] == ["spa.pa", "SPB.PA"]
+
+
+def test_rows_not_yet_recorded_compares_trade_republic_amounts_to_the_cent():
+    # Montant recalculé parts x cours (7 x 33,901 = 237,307) contre le même achat déjà stocké.
+    existing = pd.DataFrame([{"ticker": "SPA.PA", "date": "2026-03-02", "amount_eur": 7 * 33.901,
+                              "price": 33.901, "fee_eur": 1.0}])
+    row = {"ticker": "SPA.PA", "date": "2026-03-02", "amount_eur": 7 * 33.901, "price": 33.901, "fee_eur": 1.0}
+    assert m.rows_not_yet_recorded([row], existing, m.TRANSACTION_IMPORT_KEY) == ([], 1)
+    # Frais différents : ce n'est pas la même ligne.
+    other = dict(row, fee_eur=0.0)
+    assert m.rows_not_yet_recorded([other], existing, m.TRANSACTION_IMPORT_KEY) == ([other], 0)
+
+
+def test_rows_not_yet_recorded_with_an_empty_base_keeps_everything():
+    rows = [{"ticker": "SPA.PA", "date": "2026-01-05", "amount_eur": 3.0}]
+    assert m.rows_not_yet_recorded(rows, pd.DataFrame(), m.DIVIDEND_IMPORT_KEY) == (rows, 0)
