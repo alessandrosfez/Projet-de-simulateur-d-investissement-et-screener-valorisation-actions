@@ -271,16 +271,22 @@ def _fetch_current_price_eur(ticker: str) -> float:
     """Lève une exception plutôt que de renvoyer None : un « pas de prix » passager ne doit jamais
     être mis en cache à la place du dernier prix connu (voir _get_ticker_info)."""
     info = _get_ticker_info(ticker)
-    price = (
-        info.get("currentPrice") or info.get("regularMarketPrice")
-        or info.get("previousClose") or info.get("regularMarketPreviousClose")
-    )
+    price = info.get("currentPrice") or info.get("regularMarketPrice")
     if price is None:
-        # Fiche sans cours (fréquent pour les ETF hors séance) : dernière clôture brute connue.
-        closes = yf.Ticker(ticker).history(period="10d", interval="1d", auto_adjust=False)["Close"].dropna()
-        if closes.empty:
+        # Fiche sans cours du jour (fréquent pour les ETF) : dernière clôture de l'historique quotidien,
+        # qui contient la séance du jour une fois close. previousClose n'est qu'un dernier recours : c'est
+        # la clôture de la VEILLE (constaté : un ETF valorisé au cours de la veille, la valeur du
+        # portefeuille décalée d'autant par rapport au courtier).
+        try:
+            closes = yf.Ticker(ticker).history(period="10d", interval="1d", auto_adjust=False)["Close"].dropna()
+        except Exception:
+            closes = pd.Series(dtype=float)
+        if not closes.empty:
+            price = float(closes.iloc[-1])
+        else:
+            price = info.get("previousClose") or info.get("regularMarketPreviousClose")
+        if price is None:
             raise ValueError(f"Pas de cours pour {ticker}")
-        price = float(closes.iloc[-1])
     today = pd.Timestamp.today().normalize()
     start = (today - pd.Timedelta(days=10)).strftime("%Y-%m-%d")
     converted = _to_portfolio_currency(pd.Series([float(price)], index=pd.DatetimeIndex([today])), info, start)

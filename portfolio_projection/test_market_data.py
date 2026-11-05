@@ -354,6 +354,28 @@ def test_price_missing_from_info_falls_back_on_last_close(monkeypatch):
     assert md.get_current_price("ABC.PA") == pytest.approx(34.1)
 
 
+def test_without_a_live_price_the_day_close_wins_over_the_previous_close(monkeypatch):
+    """Régression : fiche Yahoo sans cours du jour mais avec previousClose (la clôture de la VEILLE) ;
+    l'ETF était valorisé au cours de la veille. La dernière clôture de l'historique (celle du jour) doit
+    passer avant ; previousClose ne sert que si l'historique est vide."""
+    closes = [pd.DataFrame({"Close": [40.0, 39.0]}, index=pd.to_datetime(["2026-03-04", "2026-03-05"]))]
+
+    class Ticker:
+        def __init__(self, symbol):
+            pass
+
+        def get_info(self):
+            return {"currency": "EUR", "shortName": "ETF", "previousClose": 40.0}
+
+        def history(self, **_kwargs):
+            return closes[0]
+    monkeypatch.setattr(md.yf, "Ticker", Ticker)
+    assert md.get_current_price("ABC.PA") == pytest.approx(39.0)
+    md._cache.clear()
+    closes[0] = pd.DataFrame({"Close": []})
+    assert md.get_current_price("ABC.PA") == pytest.approx(40.0)
+
+
 def test_no_price_at_all_returns_none_without_caching_it(monkeypatch):
     class Ticker:
         def __init__(self, symbol):
