@@ -116,21 +116,24 @@ def _allocation_view(current_values: pd.Series, total: float, unpriced: list, in
             # visiblement de la même famille.
             shade = chart_theme.blend(base, surface, 0.18 + 0.22 * rank / max(len(members), 1))
             line_color[ticker] = shade
-            # L'indice est déjà écrit dans l'anneau intérieur : l'anneau extérieur nomme l'émetteur
-            # (« Amundi », « BNP ») pour un ETF, la société pour une action, plutôt qu'un ticker.
-            ring_label = (portfolio_engine.fund_issuer(get_ticker_name(ticker)) if key in UNDERLYING_INDICES
-                          else None) or readable.get(ticker, ticker.split(".")[0])
+            # L'indice est déjà écrit dans l'anneau intérieur : pour un ETF, l'anneau extérieur ne montre
+            # que sa part (le gestionnaire, Amundi ou BNP, n'apporte rien à la répartition) ; pour une
+            # action, le nom de la société. Le nom complet du fonds reste au survol.
+            ring_label = "" if key in UNDERLYING_INDICES else readable.get(ticker, ticker.split(".")[0])
             ids.append(f"line:{ticker}"), labels.append(ring_label), parents.append(f"index:{key}")
             values.append(float(current_values[ticker])), colors.append(shade), hover.append(_ticker_display_label(ticker))
     fig = make_allocation_sunburst(ids, labels, parents, values, colors, hover, L(lang, "allocation_chart_title"), "€",
                                    dark=dark, separators=L(lang, "plotly_separators"))
-    return fig, _allocation_ranking(current_values, total, index_of, line_color, lang), notes
+    return fig, _allocation_ranking(current_values, total, index_of, line_color, readable, lang), notes
 
 
-def _allocation_ranking(current_values: pd.Series, total: float, index_of: dict, line_color: dict, lang: str):
+def _allocation_ranking(current_values: pd.Series, total: float, index_of: dict, line_color: dict,
+                        readable: dict, lang: str):
     """Classement des lignes, de la plus grosse à la plus petite : pastille de couleur (celle du
-    graphique soleil), nom du fonds, indice suivi, part en barre et en %, montant. Remplace la légende,
-    illisible dès que les noms de fonds sont longs."""
+    graphique soleil), indice suivi pour un ETF ou nom de la société pour une action, part en barre et
+    en %, puis ticker et montant. Le gestionnaire du fonds (Amundi, BNP...) n'est pas repris : deux ETF
+    d'un même indice se distinguent par leur ticker. Remplace la légende, illisible avec les noms
+    complets des fonds."""
     values = current_values.dropna()
     values = values[values > 0].sort_values(ascending=False)
     largest = float(values.iloc[0]) if not values.empty else 1.0
@@ -140,14 +143,14 @@ def _allocation_ranking(current_values: pd.Series, total: float, index_of: dict,
         rows.append(html.Div([
             html.Div([
                 html.Span(className="alloc-dot", style={"backgroundColor": line_color.get(ticker, OTHER_SLICE_COLOR)}),
-                html.Span(_ticker_display_label(ticker), className="alloc-name"),
+                html.Span(_index_label(index_of[ticker], lang) if index_of.get(ticker) in UNDERLYING_INDICES
+                          else readable.get(ticker, ticker), className="alloc-name"),
                 html.Span(f"{share * 100:.1f} %".replace(".", "," if lang == "fr" else "."), className="alloc-share"),
             ], className="alloc-head"),
             html.Div(html.Div(className="alloc-bar-fill", style={"width": f"{float(value) / largest * 100:.1f}%",
                                                                   "backgroundColor": line_color.get(ticker, OTHER_SLICE_COLOR)}),
                      className="alloc-bar"),
-            html.Small(f"{_index_label(index_of.get(ticker, UNKNOWN_INDEX_KEY), lang)} · "
-                       f"{float(value):,.0f} €".replace(",", " "), className="alloc-sub"),
+            html.Small(f"{ticker} · {float(value):,.0f} €".replace(",", " "), className="alloc-sub"),
         ], className="alloc-row"))
     return html.Div(rows, className="alloc-ranking")
 
@@ -207,9 +210,8 @@ def _index_view(current_values: pd.Series, held_tickers: list, lang: str):
     alerts = []
     for _, dup in portfolio_engine.duplicate_index_exposures(exposure).iterrows():
         share = f"{dup['share'] * 100:.0f}"
-        # « Amundi (XXX.PA) » plutôt que le ticker seul : l'émetteur dit de quel fonds il s'agit.
-        names = [f"{issuer} ({t})" if (issuer := portfolio_engine.fund_issuer(get_ticker_name(t))) else t
-                 for t in dup["tickers"]]
+        # Tickers seuls : ils suffisent à repérer les lignes, le gestionnaire du fonds n'apporte rien ici.
+        names = list(dup["tickers"])
         tickers_text = f"{', '.join(names[:-1])} {L(lang, 'and_word')} {names[-1]}"
         alerts.append(dbc.Alert(L(lang, "index_duplicate_alert", tickers=tickers_text,
                                   index=_index_label(dup["key"], lang), share=share),

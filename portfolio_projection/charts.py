@@ -154,8 +154,10 @@ def make_allocation_sunburst(ids: list, labels: list, parents: list, values: lis
         ids=ids, labels=labels, parents=parents, values=values, customdata=hover_names,
         branchvalues="total", sort=False, insidetextorientation="horizontal",
         marker=dict(colors=colors, line=dict(color=surface, width=2)),
-        # Centre : le total seul (son « 100 % » n'apprend rien) ; parts : libellé et part du total.
-        texttemplate=["%{label}"] + ["%{label}<br>%{percentRoot:.0%}"] * (len(ids) - 1),
+        # Centre : le total seul (son « 100 % » n'apprend rien) ; parts : libellé et part du total, ou la
+        # part seule pour une tranche sans libellé (ETF, dont l'indice est déjà écrit dans l'anneau parent).
+        texttemplate=["%{label}"] + ["%{label}<br>%{percentRoot:.0%}" if label else "%{percentRoot:.0%}"
+                                     for label in labels[1:]],
         hovertemplate=f"%{{customdata}}<br>%{{value:,.0f}} {value_suffix}<br>%{{percentRoot:.1%}}<extra></extra>",
     ))
     fig.update_layout(
