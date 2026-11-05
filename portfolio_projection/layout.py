@@ -848,7 +848,8 @@ def build_tab3(lang):
     weights_df = portfolio_db.get_target_weights()
     tx_data = transactions_df.to_dict("records")
     div_data = dividends_df.to_dict("records")
-    weights_data = weights_df.to_dict("records")
+    # Ticker seul en attendant la description, posée par refresh_tab3 (appel réseau évité ici).
+    weights_data = [{**row, "label": row["ticker"]} for row in weights_df.to_dict("records")]
     ticker_options = [
         {"label": portfolio_engine.ticker_display_label(t), "value": t}
         for t in portfolio_engine.known_tickers(transactions_df, dividends_df, weights_df)
@@ -1104,7 +1105,8 @@ def build_tab3(lang):
                 id="tab3-weights-table", row_deletable=True, style_cell=TABLE_BASE_CELL_STYLE,
                 data=weights_data,
                 columns=[
-                    {"name": L(lang, "weight_ticker_label"), "id": "ticker"},
+                    # « label » : ticker et description (callbacks/portefeuille_reel.refresh_tab3).
+                    {"name": L(lang, "weight_ticker_label"), "id": "label"},
                     _numeric_column(L(lang, "weight_pct_label"), "weight_pct", lang, 2, trim=True),
                 ],
             ),

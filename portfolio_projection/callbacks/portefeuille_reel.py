@@ -75,6 +75,15 @@ def _line_indices(tickers) -> dict:
     return portfolio_engine.resolve_underlying_indices(detected, portfolio_db.get_index_overrides())
 
 
+def _ticker_description(ticker: str, index_of: dict) -> str:
+    """Description courte d'une ligne : l'indice suivi pour un ETF (« S&P 500 »), sinon le nom de la
+    société ou du fonds donné par Yahoo, à défaut le ticker seul."""
+    key = index_of.get(ticker)
+    if key in UNDERLYING_INDICES:
+        return _index_label(key, "fr")
+    return get_ticker_name(ticker) or ticker
+
+
 def _evening_estimate(current_values: pd.Series, paris_time: pd.Timestamp) -> dict | None:
     """Estimation de la valeur après la clôture de Paris (portfolio_engine.evening_estimate) : chaque
     ligne suit depuis paris_time l'ETF new-yorkais de son indice, converti en euros. None tant que New
@@ -721,7 +730,11 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
                 xaxis_title=L(lang, "date_axis"), yaxis_title=L(lang, "value_axis"), margin=dict(t=60),
             )
 
-    weights_data = target_weights.to_dict("records")
+    # Libellé « ticker (description) » affiché ; la colonne ticker reste dans les données, invisible,
+    # parce que la suppression d'une ligne (delete_removed_weights) s'appuie dessus.
+    target_indices = _line_indices(target_weights["ticker"]) if not target_weights.empty else {}
+    weights_data = [{**row, "label": f"{row['ticker']} ({_ticker_description(row['ticker'], target_indices)})"}
+                    for row in target_weights.to_dict("records")]
     tx_data = transactions.to_dict("records")
     div_data = dividends.to_dict("records")
     ticker_options = [
