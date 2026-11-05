@@ -30,7 +30,7 @@ import chart_theme
 from i18n import L
 from market_data import (
     get_aligned_returns_for_tickers, get_current_price, get_dividends_per_share_eur, get_instrument_profile,
-    get_daily_price_history, get_daily_total_return_history, get_price_time, get_ticker_name,
+    get_daily_price_history, get_daily_total_return_history, get_intraday_closes, get_price_time, get_ticker_name,
     resolve_isin_to_ticker,
 )
 from results import (
@@ -66,6 +66,38 @@ def _ticker_display_label(ticker: str) -> str:
         return curated
     name = get_ticker_name(ticker)
     return f"{ticker} ({name})" if name else ticker
+
+
+def _line_indices(tickers) -> dict:
+    """Indice suivi par chaque ligne : détection automatique, corrections faites à la main appliquées."""
+    tickers = list(tickers)
+    detected = {t: portfolio_engine.detect_underlying_index(t, **get_instrument_profile(t)) for t in tickers}
+    return portfolio_engine.resolve_underlying_indices(detected, portfolio_db.get_index_overrides())
+
+
+def _evening_estimate(current_values: pd.Series, paris_time: pd.Timestamp) -> dict | None:
+    """Estimation de la valeur après la clôture de Paris (portfolio_engine.evening_estimate) : chaque
+    ligne suit depuis paris_time l'ETF new-yorkais de son indice, converti en euros. None tant que New
+    York n'a pas coté au-delà de la clôture de Paris (en séance parisienne, le matin, ou faute de
+    données) : la valeur officielle se suffit alors."""
+    index_of = _line_indices(current_values.index)
+    proxies = {portfolio_engine.EVENING_PROXIES[k] for k in index_of.values() if k in portfolio_engine.EVENING_PROXIES}
+    if not proxies:
+        return None
+    fx = portfolio_engine.price_move_since(get_intraday_closes(portfolio_engine.EVENING_FX), paris_time)
+    if fx is None:
+        return None
+    moves, last_times = {}, []
+    for proxy in proxies:
+        result = portfolio_engine.price_move_since(get_intraday_closes(proxy), paris_time)
+        if result is not None:
+            moves[proxy] = portfolio_engine.move_in_euros(result[0], fx[0])
+            last_times.append(result[1])
+    if not moves or max(last_times) - paris_time < portfolio_engine.EVENING_MIN_GAP:
+        return None
+    leverage = {t: portfolio_engine.leverage_from_name(get_ticker_name(t)) for t in current_values.index}
+    value, covered = portfolio_engine.evening_estimate(current_values.to_dict(), index_of, leverage, moves)
+    return {"value": value, "time": max(last_times), "covered": covered}
 
 
 def _readable_names(tickers) -> dict:
@@ -579,9 +611,11 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
         since = portfolio_engine.since_last_visit(portfolio_db.get_value_snapshots(), today, current_value_total, cost)
         portfolio_db.record_value_snapshot(today.strftime("%Y-%m-%d"), current_value_total, cost)
     price_times = [t for t in (get_price_time(ticker) for ticker in current_values.index) if t is not None]
+    price_time = max(price_times) if price_times else None
+    evening = _evening_estimate(current_values, price_time) if price_time is not None and not unpriced else None
     totals_cards = build_portfolio_totals_cards(totals, lang, real_series=real_series, dark=dark,
                                                palette=chart_theme.palette_for(None, dark), since=since,
-                                               price_time=max(price_times) if price_times else None)
+                                               price_time=price_time, evening=evening)
     if transactions.empty:
         # Portefeuille vide : état illustré qui mène au formulaire d'achat, plutôt que des tuiles à 0 €.
         totals_cards = layout.empty_state("portfolio", L(lang, "empty_portfolio_title"), L(lang, "empty_portfolio_text"),

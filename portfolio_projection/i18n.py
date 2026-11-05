@@ -383,6 +383,13 @@ TRANSLATIONS = {
         "csv_import_no_valid_rows": "Aucune ligne valide dans le fichier.",
         "csv_import_success": "{n} ligne(s) importée(s).",
         "price_time_sub": "Cours du {day} à {time}",
+        "evening_estimate_sub": "≈ {value} estimés à {time} avec les marchés américains",
+        "evening_estimate_help": "Estimation, pas un cours : après la clôture de Paris, chaque ligne suit l'ETF "
+                                 "coté à New York de son indice (SPY pour le S&P 500, QQQ pour le Nasdaq-100, "
+                                 "URTH pour le MSCI World...), converti en euros et multiplié par son levier. "
+                                 "{covered} % de la valeur suit ainsi un équivalent, le reste garde son cours de "
+                                 "clôture. Proche de ce qu'affiche un courtier le soir ; la valeur officielle, "
+                                 "les relevés et les performances restent calculés sur les cours de Paris.",
         "price_time_help": "Dernier cours Yahoo utilisé (clôture d'Euronext vers 17 h 35, cours gardés une heure). "
                            "Trade Republic valorise avec Lang & Schwarz jusqu'à 23 h : le soir, l'écart vient "
                            "de ce qu'ont fait les marchés depuis.",
@@ -1010,6 +1017,13 @@ TRANSLATIONS = {
         "csv_import_no_valid_rows": "No valid row found in the file.",
         "csv_import_success": "{n} row(s) imported.",
         "price_time_sub": "Prices as of {day} {time}",
+        "evening_estimate_sub": "≈ {value} estimated at {time} from US markets",
+        "evening_estimate_help": "An estimate, not a price: after the Paris close, each line follows the New "
+                                 "York-listed ETF of its index (SPY for the S&P 500, QQQ for the Nasdaq-100, URTH "
+                                 "for the MSCI World...), converted to euros and multiplied by its leverage. "
+                                 "{covered}% of the value follows such an equivalent, the rest keeps its closing "
+                                 "price. Close to what a broker shows in the evening; the official value, "
+                                 "snapshots and performance still use Paris prices.",
         "price_time_help": "Latest Yahoo price used (Euronext close around 5:35 pm, prices kept for an hour). "
                            "Trade Republic values with Lang & Schwarz until 11 pm: in the evening, the gap comes "
                            "from what markets did since.",

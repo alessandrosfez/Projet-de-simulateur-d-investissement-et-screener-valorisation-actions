@@ -473,3 +473,4 @@ a { color: var(--accent); }
 
 /* Heure du cours sous la valeur actuelle (results.build_portfolio_totals_cards). */
 .kpi-time { font-size: 0.75rem; color: var(--Dash-Text-Weak, #6c757d); margin-top: 0.15rem; cursor: help; }
+.kpi-evening { font-style: italic; }

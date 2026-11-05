@@ -419,14 +419,15 @@ SPARKLINE_DAYS = 365
 
 
 def build_portfolio_totals_cards(totals: dict, lang: str, real_series=None, dark: bool = False, palette=None,
-                                 since: dict | None = None, price_time=None):
+                                 since: dict | None = None, price_time=None, evening: dict | None = None):
     """Tuiles de chiffres clés du portefeuille réel (totals : voir portfolio_engine.compute_totals) :
     valeur actuelle en grand avec la mini-courbe des 12 derniers mois, plus-value avec une pastille
     ▲/▼ (couleur ET flèche ET signe : jamais la couleur seule), capital investi, dividendes et frais.
     since : évolution depuis la dernière visite (portfolio_engine.since_last_visit), écrite sous la
     valeur actuelle quand elle est connue. price_time : heure du cours le plus récent utilisé, écrite en
     dessous : un courtier qui valorise en continu (Trade Republic jusqu'à 23 h) peut afficher autre chose
-    le soir, sans erreur de part ni d'autre."""
+    le soir, sans erreur de part ni d'autre. evening : estimation après la clôture de Paris
+    (callbacks._evening_estimate), écrite en dernier, clairement marquée comme approximation."""
     palette = palette or PALETTE
 
     def money(value, signed=False):
@@ -462,6 +463,12 @@ def build_portfolio_totals_cards(totals: dict, lang: str, real_series=None, dark
                                    L(lang, "price_time_sub", day=price_time.strftime(L(lang, "date_format")),
                                      time=price_time.strftime("%H:%M"))],
                                   className="kpi-time", title=L(lang, "price_time_help")))
+    if evening is not None:
+        value_sub.append(html.Div([html.I(className="bi bi-moon-stars me-1", **{"aria-hidden": "true"}),
+                                   L(lang, "evening_estimate_sub", value=money(evening["value"]),
+                                     time=evening["time"].strftime("%H:%M"))],
+                                  className="kpi-time kpi-evening",
+                                  title=L(lang, "evening_estimate_help", covered=round(evening["covered"] * 100))))
     tiles = [
         tile("metric_current_value", money(totals["current_value"]), extra=sparkline, sub=value_sub or None),
         tile("metric_pnl", money(pnl, signed=True), L(lang, "kpi_pnl_sub", invested=money(totals["total_invested"])),

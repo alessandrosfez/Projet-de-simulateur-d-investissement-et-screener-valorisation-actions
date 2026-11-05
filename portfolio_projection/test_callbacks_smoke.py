@@ -47,6 +47,10 @@ FAKES = {
     "get_instrument_profile": lambda ticker: {"name": f"Amundi fonds {ticker}", "quote_type": "ETF"},
     "get_ticker_name": lambda ticker: f"Fonds {ticker}",
     "resolve_isin_to_ticker": lambda isin: None,
+    "get_price_time": lambda ticker: pd.Timestamp("2026-01-05 17:35"),
+    # Séance new-yorkaise fictive après la clôture de Paris : l'estimation de soirée est calculée.
+    "get_intraday_closes": lambda symbol: pd.Series(
+        [100.0, 100.0, 99.0], index=pd.to_datetime(["2026-01-05 17:00", "2026-01-05 17:35", "2026-01-05 20:10"])),
 }
 
 

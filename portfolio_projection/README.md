@@ -31,6 +31,14 @@ qu'une simulation aurait donné.
   plus-value une pastille ▲/▼ (flèche, signe et couleur : jamais la couleur
   seule). Sur la courbe de valeur, un point marque chaque jour d'achat,
   proportionnel au montant, et le capital investi est tracé en escalier.
+- **Heure des cours et estimation de soirée** : sous la valeur actuelle,
+  l'heure du dernier cours utilisé (clôture d'Euronext vers 17 h 35). Après
+  la clôture de Paris, une estimation suit les marchés américains : chaque
+  ligne suit l'ETF coté à New York de son indice (SPY, QQQ, URTH, VGK, EWJ,
+  AAXJ...), converti en euros et multiplié par son levier, jusqu'à 22 h puis
+  figée jusqu'à l'ouverture de Paris. C'est ce que fait un courtier qui
+  valorise le soir (Trade Republic jusqu'à 23 h) ; la valeur officielle, les
+  relevés et les performances restent sur les cours de Paris.
 - **Depuis ta dernière visite** : chaque ouverture de l'onglet enregistre la
   valeur et le capital investi du jour (table `value_snapshots`, migration
   v3, une ligne par jour). Sous la valeur actuelle, l'écart avec le dernier

@@ -7,6 +7,7 @@ récupérées (market_data.get_daily_price_history()) -- aucun accès disque ou 
 """
 import datetime as dt
 import math
+import re
 from collections import Counter
 from collections.abc import Sequence
 from typing import cast
@@ -1025,3 +1026,73 @@ def latent_withdrawal_tax(current_value: float, total_dividends: float, cost_bas
         "net_value": gross_value - tax,
         "is_loss": gain < 0,
     }
+
+
+
+# ============================================================
+# Estimation de soirée : après la clôture de Paris, suivre les marchés américains
+# ============================================================
+
+# Indice suivi -> ETF coté à New York qui le réplique, et qui continue de coter jusqu'à 22 h (heure de
+# Paris) quand les ETF parisiens sont arrêtés. Un courtier qui valorise le soir (Trade Republic, avec
+# Lang & Schwarz jusqu'à 23 h) suit ces mêmes mouvements. Une action individuelle ou un indice sans
+# équivalent garde son cours de clôture.
+EVENING_PROXIES = {
+    "S&P 500": "SPY", "Nasdaq-100": "QQQ", "MSCI World": "URTH", "FTSE All-World": "VT", "MSCI ACWI": "ACWI",
+    "Stoxx Europe 600": "VGK", "Euro Stoxx 50": "FEZ", "MSCI Europe": "VGK", "CAC 40": "EWQ",
+    "MSCI Emerging Markets": "EEM", "MSCI EM Asie": "AAXJ", "TOPIX": "EWJ", "MSCI Japan": "EWJ",
+}
+EVENING_FX = "EURUSD=X"
+# Écart minimal entre la clôture de Paris et le dernier cours new-yorkais pour afficher une estimation :
+# en séance parisienne, les deux sont à jour et l'estimation n'apprendrait rien.
+EVENING_MIN_GAP = pd.Timedelta(minutes=5)
+
+
+def leverage_from_name(name: str | None) -> float:
+    """Effet de levier quotidien d'un ETF d'après son nom : « Daily (2x) Leveraged », « 2x Lev » -> 2 ;
+    un ETF « Short » ou « Inverse » -> signe négatif (« Bx4 » : -4). 1 par défaut."""
+    if not name:
+        return 1.0
+    upper = name.upper()
+    factor = 1.0
+    match = re.search(r"\(?\b[BX]?\s*(\d)\s*X\b\)?|\bX\s*(\d)\b|\bBX(\d)\b", upper)
+    if match:
+        factor = float(next(g for g in match.groups() if g))
+    if any(word in upper for word in ("SHORT", "INVERSE", "BEAR")) or re.search(r"\bBX\d\b", upper):
+        factor = -factor
+    return factor
+
+
+def price_move_since(closes: pd.Series, since: pd.Timestamp) -> tuple[float, pd.Timestamp] | None:
+    """Variation entre le dernier cours connu à `since` (inclus) et le dernier cours de la série, et
+    l'heure de ce dernier cours. None si la série ne commence qu'après `since` ou est vide."""
+    closes = closes.dropna()
+    before = closes[closes.index <= since]
+    if before.empty or float(before.iloc[-1]) == 0:
+        return None
+    return float(closes.iloc[-1]) / float(before.iloc[-1]) - 1, pd.Timestamp(closes.index[-1])
+
+
+def move_in_euros(move_usd: float, eurusd_move: float) -> float:
+    """Variation en euros d'un actif coté en dollars : un euro qui monte de 1 % face au dollar retire
+    environ 1 % à sa valeur en euros (EURUSD = dollars pour un euro)."""
+    return (1 + move_usd) / (1 + eurusd_move) - 1
+
+
+def evening_estimate(values: dict[str, float], index_of: dict[str, str], leverage: dict[str, float],
+                     moves_eur: dict[str, float]) -> tuple[float, float]:
+    """Valeur estimée du portefeuille : chaque ligne part de sa valeur à la clôture de Paris et suit le
+    mouvement en euros de l'ETF new-yorkais de son indice (EVENING_PROXIES), multiplié par son levier.
+    Les lignes sans équivalent restent à leur valeur. Renvoie (valeur estimée, part de la valeur
+    couverte par un équivalent, entre 0 et 1)."""
+    total = sum(values.values())
+    estimated, covered = 0.0, 0.0
+    for ticker, value in values.items():
+        proxy = EVENING_PROXIES.get(index_of.get(ticker, ""))
+        move = moves_eur.get(proxy) if proxy else None
+        if move is None:
+            estimated += value
+            continue
+        estimated += value * (1 + leverage.get(ticker, 1.0) * move)
+        covered += value
+    return estimated, (covered / total if total else 0.0)

@@ -880,3 +880,30 @@ def test_rows_not_yet_recorded_compares_trade_republic_amounts_to_the_cent():
 def test_rows_not_yet_recorded_with_an_empty_base_keeps_everything():
     rows = [{"ticker": "SPA.PA", "date": "2026-01-05", "amount_eur": 3.0}]
     assert m.rows_not_yet_recorded(rows, pd.DataFrame(), m.DIVIDEND_IMPORT_KEY) == (rows, 0)
+
+
+def test_leverage_from_name():
+    assert m.leverage_from_name("Amundi Nasdaq-100 Daily (2x) Leveraged UCITS ETF Acc") == 2.0
+    assert m.leverage_from_name("Nasdaq 100 2x Lev EUR (Acc)") == 2.0
+    assert m.leverage_from_name("Amundi PEA S&P 500 UCITS ETF") == 1.0
+    assert m.leverage_from_name("Amundi Short CAC 40 Daily (-1x) Inverse") == -1.0
+    assert m.leverage_from_name(None) == 1.0
+
+
+def test_price_move_since_uses_the_last_price_at_the_reference_time():
+    closes = pd.Series([100.0, 102.0, 99.0], index=pd.to_datetime(["2026-01-05 17:00", "2026-01-05 17:35",
+                                                                   "2026-01-05 21:59"]))
+    move, last = m.price_move_since(closes, pd.Timestamp("2026-01-05 17:35"))
+    assert move == pytest.approx(99.0 / 102.0 - 1) and last == pd.Timestamp("2026-01-05 21:59")
+    assert m.price_move_since(closes, pd.Timestamp("2026-01-05 09:00")) is None
+
+
+def test_evening_estimate_follows_each_index_with_leverage_and_euro():
+    values = {"SPA.PA": 1000.0, "SPB.PA": 100.0, "ACC.PA": 50.0}
+    index_of = {"SPA.PA": "S&P 500", "SPB.PA": "Nasdaq-100", "ACC.PA": "Action individuelle"}
+    moves = {"SPY": m.move_in_euros(-0.01, 0.0), "QQQ": -0.02}
+    value, covered = m.evening_estimate(values, index_of, {"SPB.PA": 2.0}, moves)
+    assert value == pytest.approx(1000 * 0.99 + 100 * (1 - 0.04) + 50)
+    assert covered == pytest.approx(1100 / 1150)
+    # Un euro qui monte de 1 % face au dollar retire environ 1 % à un actif en dollars.
+    assert m.move_in_euros(0.0, 0.01) == pytest.approx(1 / 1.01 - 1)

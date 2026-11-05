@@ -557,8 +557,13 @@ def resolve_isin_to_ticker(isin: str) -> str | None:
     return _resolve_isin_home_listing(isin)
 
 
+# Heure affichée et comparée partout : celle de Paris, sans fuseau (les places suivies sont européennes,
+# et l'estimation de soirée compare ces heures aux cours new-yorkais convertis dans ce même fuseau).
+DISPLAY_TZ = "Europe/Paris"
+
+
 def get_price_time(ticker: str) -> pd.Timestamp | None:
-    """Heure locale du dernier cours Yahoo d'un ticker (regularMarketTime de sa fiche en cache), pour
+    """Heure (Paris) du dernier cours Yahoo d'un ticker (regularMarketTime de sa fiche en cache), pour
     dire de quand date la valorisation affichée. None si inconnue."""
     try:
         stamp = _get_ticker_info(ticker).get("regularMarketTime")
@@ -566,4 +571,22 @@ def get_price_time(ticker: str) -> pd.Timestamp | None:
         return None
     if not stamp:
         return None
-    return pd.Timestamp(datetime.fromtimestamp(int(stamp)))
+    return pd.Timestamp(int(stamp), unit="s", tz="UTC").tz_convert(DISPLAY_TZ).tz_localize(None)
+
+
+@cached_ttl(300)
+def _fetch_intraday_closes(symbol: str) -> pd.Series:
+    closes = yf.Ticker(symbol).history(period="5d", interval="1m", auto_adjust=False)["Close"].dropna()
+    if closes.empty:
+        raise ValueError(f"Pas de cours en séance pour {symbol}")
+    closes.index = pd.DatetimeIndex(closes.index).tz_convert(DISPLAY_TZ).tz_localize(None)
+    return closes
+
+
+def get_intraday_closes(symbol: str) -> pd.Series:
+    """Cours minute par minute des 5 dernières séances (heure de Paris), gardés 5 minutes : base de
+    l'estimation de soirée (voir portfolio_engine.evening_estimate). Série vide si indisponible."""
+    try:
+        return _fetch_intraday_closes(symbol)
+    except Exception:
+        return pd.Series(dtype=float)
