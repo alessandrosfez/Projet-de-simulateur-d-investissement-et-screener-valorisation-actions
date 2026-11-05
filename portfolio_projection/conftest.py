@@ -18,6 +18,13 @@ def isolate_market_data_cache(monkeypatch):
     monkeypatch.setattr(market_data, "_served_download_times", {})
     monkeypatch.setattr(market_data, "_save_cache_to_disk", lambda: None)
 
+    # Aucune recherche Euronext réelle pendant les tests (résolution des ISIN) : un test qui en a besoin
+    # remplace cette fonction par une réponse fictive.
+    def euronext_offline(isin):
+        raise ConnectionError("Euronext non consulté pendant les tests")
+
+    monkeypatch.setattr(market_data, "_fetch_euronext_search", euronext_offline)
+
 
 class _PersistentMemoryConnection(sqlite3.Connection):
     """Sous-classe de sqlite3.Connection dont .close() ne fait rien : une base ':memory:' est

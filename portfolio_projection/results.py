@@ -419,12 +419,14 @@ SPARKLINE_DAYS = 365
 
 
 def build_portfolio_totals_cards(totals: dict, lang: str, real_series=None, dark: bool = False, palette=None,
-                                 since: dict | None = None):
+                                 since: dict | None = None, price_time=None):
     """Tuiles de chiffres clés du portefeuille réel (totals : voir portfolio_engine.compute_totals) :
     valeur actuelle en grand avec la mini-courbe des 12 derniers mois, plus-value avec une pastille
     ▲/▼ (couleur ET flèche ET signe : jamais la couleur seule), capital investi, dividendes et frais.
     since : évolution depuis la dernière visite (portfolio_engine.since_last_visit), écrite sous la
-    valeur actuelle quand elle est connue."""
+    valeur actuelle quand elle est connue. price_time : heure du cours le plus récent utilisé, écrite en
+    dessous : un courtier qui valorise en continu (Trade Republic jusqu'à 23 h) peut afficher autre chose
+    le soir, sans erreur de part ni d'autre."""
     palette = palette or PALETTE
 
     def money(value, signed=False):
@@ -450,11 +452,18 @@ def build_portfolio_totals_cards(totals: dict, lang: str, real_series=None, dark
     if lang != "fr":
         pct_text = pct_text.replace(",", ".")
     delta = html.Span([html.Span("▲" if pnl >= 0 else "▼"), html.Span(pct_text)], className=f"kpi-delta {direction}")
+    value_sub = []
+    if since:
+        value_sub.append(html.Div(L(lang, "since_last_visit_sub", delta=money(since["value_delta"], signed=True),
+                                    market=money(since["market_delta"], signed=True),
+                                    day=since["day"].strftime(L(lang, "date_format")))))
+    if price_time is not None:
+        value_sub.append(html.Div([html.I(className="bi bi-clock me-1", **{"aria-hidden": "true"}),
+                                   L(lang, "price_time_sub", day=price_time.strftime(L(lang, "date_format")),
+                                     time=price_time.strftime("%H:%M"))],
+                                  className="kpi-time", title=L(lang, "price_time_help")))
     tiles = [
-        tile("metric_current_value", money(totals["current_value"]), extra=sparkline,
-             sub=L(lang, "since_last_visit_sub", delta=money(since["value_delta"], signed=True),
-                   market=money(since["market_delta"], signed=True),
-                   day=since["day"].strftime(L(lang, "date_format"))) if since else None),
+        tile("metric_current_value", money(totals["current_value"]), extra=sparkline, sub=value_sub or None),
         tile("metric_pnl", money(pnl, signed=True), L(lang, "kpi_pnl_sub", invested=money(totals["total_invested"])),
              extra=delta),
         tile("metric_total_invested", money(totals["total_invested"]),

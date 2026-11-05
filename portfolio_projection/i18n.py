@@ -382,6 +382,10 @@ TRANSLATIONS = {
                                       "(transactions) ou ticker,date,amount_eur (dividendes).",
         "csv_import_no_valid_rows": "Aucune ligne valide dans le fichier.",
         "csv_import_success": "{n} ligne(s) importée(s).",
+        "price_time_sub": "Cours du {day} à {time}",
+        "price_time_help": "Dernier cours Yahoo utilisé (clôture d'Euronext vers 17 h 35, cours gardés une heure). "
+                           "Trade Republic valorise avec Lang & Schwarz jusqu'à 23 h : le soir, l'écart vient "
+                           "de ce qu'ont fait les marchés depuis.",
         "csv_import_already_present": "{n} ligne(s) sur {total} déjà enregistrée(s), non réimportée(s).",
         "csv_import_nothing_new": "Rien de nouveau : les {n} ligne(s) du fichier sont déjà enregistrées.",
         "csv_import_skipped": "{n} ligne(s) ignorée(s) : {details}",
@@ -1005,6 +1009,10 @@ TRANSLATIONS = {
                                       "(transactions) or ticker,date,amount_eur (dividends).",
         "csv_import_no_valid_rows": "No valid row found in the file.",
         "csv_import_success": "{n} row(s) imported.",
+        "price_time_sub": "Prices as of {day} {time}",
+        "price_time_help": "Latest Yahoo price used (Euronext close around 5:35 pm, prices kept for an hour). "
+                           "Trade Republic values with Lang & Schwarz until 11 pm: in the evening, the gap comes "
+                           "from what markets did since.",
         "csv_import_already_present": "{n} of {total} row(s) already recorded, not imported again.",
         "csv_import_nothing_new": "Nothing new: all {n} row(s) of the file are already recorded.",
         "csv_import_skipped": "{n} row(s) skipped: {details}",

@@ -470,3 +470,6 @@ a { color: var(--accent); }
 [data-bs-theme="dark"] .dash-input-container.form-control {
     background-color: var(--surface-2); border-color: var(--border-soft); color: var(--Dash-Text-Primary, #e9ecef);
 }
+
+/* Heure du cours sous la valeur actuelle (results.build_portfolio_totals_cards). */
+.kpi-time { font-size: 0.75rem; color: var(--Dash-Text-Weak, #6c757d); margin-top: 0.15rem; cursor: help; }

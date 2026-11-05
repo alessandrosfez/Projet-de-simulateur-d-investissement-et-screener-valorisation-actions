@@ -30,7 +30,8 @@ import chart_theme
 from i18n import L
 from market_data import (
     get_aligned_returns_for_tickers, get_current_price, get_dividends_per_share_eur, get_instrument_profile,
-    get_daily_price_history, get_daily_total_return_history, get_ticker_name, resolve_isin_to_ticker,
+    get_daily_price_history, get_daily_total_return_history, get_price_time, get_ticker_name,
+    resolve_isin_to_ticker,
 )
 from results import (
     build_pea_milestone_cards, build_performance_cards, build_portfolio_totals_cards,
@@ -577,8 +578,10 @@ def refresh_tab3(_trigger, lang, dark_mode, lookback_years, method, n_sims, seed
         cost = portfolio_engine.invested_cost(transactions)
         since = portfolio_engine.since_last_visit(portfolio_db.get_value_snapshots(), today, current_value_total, cost)
         portfolio_db.record_value_snapshot(today.strftime("%Y-%m-%d"), current_value_total, cost)
+    price_times = [t for t in (get_price_time(ticker) for ticker in current_values.index) if t is not None]
     totals_cards = build_portfolio_totals_cards(totals, lang, real_series=real_series, dark=dark,
-                                               palette=chart_theme.palette_for(None, dark), since=since)
+                                               palette=chart_theme.palette_for(None, dark), since=since,
+                                               price_time=max(price_times) if price_times else None)
     if transactions.empty:
         # Portefeuille vide : état illustré qui mène au formulaire d'achat, plutôt que des tuiles à 0 €.
         totals_cards = layout.empty_state("portfolio", L(lang, "empty_portfolio_title"), L(lang, "empty_portfolio_text"),

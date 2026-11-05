@@ -4,6 +4,8 @@ minimal de st.cache_data(ttl=...)) pour éviter de retélécharger à chaque
 redémarrage tant que les données ont moins d'1h.
 """
 import functools
+import json
+import re
 import pickle
 import threading
 import time
@@ -469,6 +471,66 @@ def _resolve_isin_euro_listing(isin: str) -> str | None:
     return _find_euro_listing(symbol, info.get("longName")) or symbol
 
 
+# Recherche par ISIN d'Euronext : renvoie chaque cotation du titre sur ses places (MIC) avec son code
+# mnémonique. Yahoo, lui, résout parfois un ISIN vers une cotation secondaire peu échangée (carnet
+# international de Londres pour un ETF parisien) : le code Euronext donne la place d'origine.
+EURONEXT_SEARCH_URL = "https://live.euronext.com/en/instrumentSearch/searchJSON?q={isin}"
+# Place Euronext -> suffixe Yahoo, dans l'ordre de préférence : Paris d'abord (compte PEA en France ;
+# Trade Republic exécute ces titres au prix de leur place d'origine), puis les autres places Euronext.
+EURONEXT_MIC_SUFFIX = {"XPAR": ".PA", "XAMS": ".AS", "XBRU": ".BR", "XLIS": ".LS", "XMIL": ".MI",
+                       "ETFP": ".MI", "XMSM": ".IR", "XDUB": ".IR", "XOSL": ".OL"}
+_EURONEXT_SYMBOL = re.compile(r"class=['\"]symbol['\"]>([^<]+)<")
+
+
+def parse_euronext_listings(entries: list, isin: str) -> list[str]:
+    """Tickers Yahoo des cotations Euronext d'un ISIN (réponse de EURONEXT_SEARCH_URL), dans l'ordre de
+    EURONEXT_MIC_SUFFIX. Les entrées d'un autre ISIN ou d'une place sans équivalent Yahoo sont écartées."""
+    ranked = []
+    for entry in entries if isinstance(entries, list) else []:
+        if not isinstance(entry, dict) or entry.get("isin") != isin or entry.get("mic") not in EURONEXT_MIC_SUFFIX:
+            continue
+        match = _EURONEXT_SYMBOL.search(entry.get("label") or "")
+        if match:
+            rank = list(EURONEXT_MIC_SUFFIX).index(entry["mic"])
+            ranked.append((rank, match.group(1).strip() + EURONEXT_MIC_SUFFIX[entry["mic"]]))
+    return list(dict.fromkeys(symbol for _, symbol in sorted(ranked)))
+
+
+def _fetch_euronext_search(isin: str) -> list:
+    from curl_cffi import requests as http  # dépendance de yfinance, déjà installée
+    return json.loads(http.get(EURONEXT_SEARCH_URL.format(isin=isin), impersonate="chrome", timeout=15).text)
+
+
+def _euronext_home_listing(isin: str) -> str | None:
+    """Cotation d'origine d'un ISIN coté sur Euronext (Paris d'abord), vérifiée sur Yahoo : elle doit
+    y exister et être en euros. None si Euronext ne répond pas ou ne connaît pas l'ISIN."""
+    try:
+        candidates = parse_euronext_listings(_fetch_euronext_search(isin), isin)
+    except Exception:
+        return None
+    for symbol in candidates:
+        try:
+            info = _get_ticker_info(symbol)
+        except Exception:
+            continue
+        if info.get("currency") == PORTFOLIO_CURRENCY:
+            return symbol
+    return None
+
+
+@cached_ttl(86400)
+def _resolve_isin_home_listing(isin: str) -> str | None:
+    """Cotation retenue pour un ISIN. Euronext n'est consulté que dans deux cas : un ISIN français
+    (place d'origine Paris), ou une résolution Yahoo tombée sur le carnet international de Londres
+    (suffixe .IL, cotation secondaire peu échangée). Ailleurs, la résolution existante est gardée telle
+    quelle : changer de cotation pour un titre déjà importé empêcherait de reconnaître ses lignes déjà
+    enregistrées au prochain import (voir portfolio_engine.rows_not_yet_recorded)."""
+    fallback = _resolve_isin_euro_listing(isin)
+    if isin.upper().startswith("FR") or (fallback or "").upper().endswith(".IL"):
+        return _euronext_home_listing(isin) or fallback
+    return fallback
+
+
 def resolve_isin_to_ticker(isin: str) -> str | None:
     """Résout un code ISIN (ex: FR0011550193) en ticker Yahoo Finance (ex: ETZ.PA). Les exports de
     courtiers européens (ex: Trade Republic) identifient les instruments par ISIN, pas par ticker
@@ -481,5 +543,21 @@ def resolve_isin_to_ticker(isin: str) -> str | None:
     _find_euro_listing) : Trade Republic exécute en euros, c'est donc l'historique le plus proche des
     prix d'achat de l'export, sans dépendre du change. Sans cotation en euros trouvée, on garde
     celle de Yahoo, valorisée en euros par conversion (voir _to_portfolio_currency). Cache sous un
-    nouveau nom : les résolutions faites avant ce choix (en dollars) ne sont jamais resservies."""
-    return _resolve_isin_euro_listing(isin)
+    nouveau nom : les résolutions faites avant ce choix (en dollars) ne sont jamais resservies.
+
+    Pour un titre coté sur Euronext, la cotation d'origine passe avant tout (voir _euronext_home_listing) :
+    Yahoo résolvait par exemple l'ETF parisien LQQ vers 0W9J.IL, carnet international de Londres peu
+    échangé. Nouveau nom de cache, là encore, pour ne pas resservir les anciennes résolutions."""
+    return _resolve_isin_home_listing(isin)
+
+
+def get_price_time(ticker: str) -> pd.Timestamp | None:
+    """Heure locale du dernier cours Yahoo d'un ticker (regularMarketTime de sa fiche en cache), pour
+    dire de quand date la valorisation affichée. None si inconnue."""
+    try:
+        stamp = _get_ticker_info(ticker).get("regularMarketTime")
+    except Exception:
+        return None
+    if not stamp:
+        return None
+    return pd.Timestamp(datetime.fromtimestamp(int(stamp)))

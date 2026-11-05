@@ -374,3 +374,42 @@ def test_euro_listing_is_unchanged(monkeypatch):
     monkeypatch.setattr(md.yf, "Ticker", _MarketTicker)
     assert list(md.get_daily_price_history("CW8.PA", "2024-03-01")) == [490.0, 495.0, 500.0]
     assert md.get_current_price("CW8.PA") == 500.0
+
+
+EURONEXT_SAMPLE = [
+    {"isin": "FR0000000001", "mic": "ETFP", "label": "<span class='name'>Fonds</span><span class='symbol'>AAAM</span>"},
+    {"isin": "FR0000000001", "mic": "XPAR", "label": "<span class='name'>Fonds</span><span class='symbol'>AAA</span>"},
+    {"isin": "FR0000000001", "mic": "XXXX", "label": "<span class='symbol'>ZZZ</span>"},
+    {"isin": "FR0000000002", "mic": "XPAR", "label": "<span class='symbol'>BBB</span>"},
+]
+
+
+def test_parse_euronext_listings_paris_first_and_same_isin_only():
+    assert md.parse_euronext_listings(EURONEXT_SAMPLE, "FR0000000001") == ["AAA.PA", "AAAM.MI"]
+    assert md.parse_euronext_listings("pas une liste", "FR0000000001") == []
+
+
+def test_isin_resolution_prefers_the_euronext_home_listing(monkeypatch):
+    monkeypatch.setattr(md, "_fetch_euronext_search", lambda isin: EURONEXT_SAMPLE)
+    monkeypatch.setattr(md, "_get_ticker_info", lambda t: {"currency": "EUR"})
+    monkeypatch.setattr(md, "_resolve_isin_euro_listing", lambda isin: "AAA.IL")
+    assert md.resolve_isin_to_ticker("FR0000000001") == "AAA.PA"
+    # ISIN non français, résolution Yahoo sur une place principale : gardée telle quelle.
+    monkeypatch.setattr(md, "_resolve_isin_euro_listing", lambda isin: "AAA.DE")
+    assert md.resolve_isin_to_ticker("IE0000000001") == "AAA.DE"
+
+
+def test_isin_resolution_falls_back_when_euronext_is_unavailable(monkeypatch):
+    def down(isin):
+        raise ConnectionError("Euronext injoignable")
+
+    monkeypatch.setattr(md, "_fetch_euronext_search", down)
+    monkeypatch.setattr(md, "_resolve_isin_euro_listing", lambda isin: "AAA.DE")
+    assert md.resolve_isin_to_ticker("DE0000000001") == "AAA.DE"
+
+
+def test_get_price_time_reads_the_cached_quote_time(monkeypatch):
+    monkeypatch.setattr(md, "_get_ticker_info", lambda t: {"regularMarketTime": 1_800_000_000})
+    assert md.get_price_time("AAA.PA") is not None
+    monkeypatch.setattr(md, "_get_ticker_info", lambda t: {})
+    assert md.get_price_time("AAA.PA") is None
